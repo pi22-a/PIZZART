@@ -25,7 +25,7 @@ describe('clipHalfPlane', () => {
   });
 
   it('경계를 두 번 넘나드는 선은 두 조각이 된다', () => {
-    // 위 → 아래 → 위
+    // 남는 쪽 → 잘리는 쪽 → 남는 쪽
     const out = clipHalfPlane([[0, 10], [10, -10], [20, 10]], O, RIGHT);
     expect(out.length).toBe(2);
   });
@@ -33,6 +33,16 @@ describe('clipHalfPlane', () => {
   it('경계 위에 딱 놓인 선은 남긴다', () => {
     const out = clipHalfPlane([[0, 0], [10, 0]], O, RIGHT);
     expect(out).toEqual([[[0, 0], [10, 0]]]);
+  });
+
+  it('경계 위 점에서 바깥으로 나가는 선은 조각을 남기지 않는다', () => {
+    const out = clipHalfPlane([[0, 0], [0, -10]], O, RIGHT);
+    expect(out).toEqual([]);
+  });
+
+  it('바깥에서 경계 위 점으로 들어오는 선은 조각을 남기지 않는다', () => {
+    const out = clipHalfPlane([[0, -10], [0, 0]], O, RIGHT);
+    expect(out).toEqual([]);
   });
 
   it('점이 하나뿐인 선은 그릴 것이 없으므로 사라진다', () => {

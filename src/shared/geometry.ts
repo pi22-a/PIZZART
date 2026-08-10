@@ -16,7 +16,11 @@ export function clipHalfPlane(points: Point[], origin: Point, dir: Point): Point
   const pieces: Point[][] = [];
   let cur: Point[] = [];
   const flush = () => {
-    if (cur.length >= 2) pieces.push(cur);
+    // 경계 위 점에서 나가거나 들어오는 경우, 교점이 시작점(또는 끝점)과 같아져
+    // 점이 두 개라도 실제로는 같은 좌표만 있는 퇴화 조각이 생길 수 있다.
+    // 서로 다른 좌표가 하나라도 있어야 실제 조각으로 친다.
+    const hasDistinctPoint = cur.some((p) => p[0] !== cur[0][0] || p[1] !== cur[0][1]);
+    if (cur.length >= 2 && hasDistinctPoint) pieces.push(cur);
     cur = [];
   };
 
