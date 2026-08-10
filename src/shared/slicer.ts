@@ -11,17 +11,23 @@ export interface Slice {
   strokes: Point[][];
 }
 
-/** 항상 1인 1조각을 보장한다. 사람이 최솟값보다 많으면 조각을 그만큼 늘린다. */
+/**
+ * 항상 1인 1조각을 보장한다. 사람이 최솟값보다 많으면 조각을 그만큼 늘린다.
+ * 3 미만으로는 절대 내려가지 않는다 — slice()의 반평면 두 개 교집합 방식은
+ * 섹터 각도가 180° 미만이어야 성립하는데, count가 3 미만이면 그 조건이 깨진다.
+ */
 export function sliceCount(guesserCount: number, min: number): number {
-  return Math.max(min, guesserCount);
+  return Math.max(3, min, guesserCount);
 }
 
 /**
  * 원형 그림을 부채꼴 count개로 자르고, 각 조각을 둥근 쪽이 위로 오게 돌린다.
  *
  * 섹터 i는 각도 [2πi/count, 2π(i+1)/count).
- * 부채꼴 = 중심을 지나는 반평면 두 개의 교집합이며, 섹터 각도가 180° 미만이어야 성립한다.
- * count는 항상 8 이상이므로(sliceCount 참조) 걱정할 일이 없다.
+ * 부채꼴 = 중심을 지나는 반평면 두 개의 교집합이며, 섹터 각도가 180° 미만이어야,
+ * 즉 count >= 3이어야 성립한다. 최소 인원이 4명이라 맞히는 사람은 항상 3명 이상이고,
+ * sliceCount가 3 미만으로 내려가지 않게 바닥을 깔아두므로(sliceCount 참조) 이 함수에
+ * 넘어오는 count는 min이 아무리 낮게 설정돼도 항상 3 이상이다.
  *
  * 경계에 정확히 놓인 잉크는 양쪽 조각에 다 들어간다. 머리카락 한 올 너비의
  * 중복이라 눈에 띄지 않고, 빠뜨리는 것보다 낫다.
