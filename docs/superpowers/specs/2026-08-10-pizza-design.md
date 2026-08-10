@@ -155,7 +155,8 @@ S ≥ 3이면 언제나 성립한다. 기존 `clipSegment`의 Liang-Barsky를 �
 이 게임의 핵심 장치가 그 자리에서 무너진다. 조각 id는 방향과 무관한 불투명 값을 쓴다.
 
 힌트로 공개하는 숨은 조각도 **회전된 상태로** 공개한다. 원래 각도로 주면 방향 기준점이 생겨
-조립이 한 번에 풀린다. 힌트 세기를 조절하는 손잡이로 남긴다(`revealHiddenRotated`).
+조립이 한 번에 풀린다. 원래 각도로 주는 변형은 나중 후보로 남긴다 — 조각 payload에 각도를 싣고
+클라이언트에 별도 렌더 경로를 만들어야 해서 설정 하나로 끝나지 않는다.
 
 ---
 
@@ -181,7 +182,7 @@ TAKBON은 한 줄도 건드리지 않는다.
 | 모듈 | 하는 일 | 의존 |
 |---|---|---|
 | `shared/geometry.ts` | 반평면 클리핑, 회전 | 없음 (순수) |
-| `server/slicer.ts` | 원 → 섹터 조각 + 회전 적용 | geometry (순수) |
+| `shared/slicer.ts` | 원 → 섹터 조각 + 회전 적용 | geometry (순수) |
 | `server/judge.ts` | 답 판정. 모드 전략이 꽂히는 자리 | 없음 (순수) |
 | `server/scorer.ts` | 시도 회차·인원으로 점수 계산 | 없음 (순수) |
 | `server/words.ts` | 주제·단어 로드. 출제자 직접 출제가 꽂히는 자리 | 파일 |
@@ -282,8 +283,7 @@ TAKBON의 `net.ts`가 이미 이렇게 되어 있다.
   "guessSeconds": 90,
   "maxAttempts": 3,
   "attemptPoints": [3, 2, 1],
-  "drawerPointPerCorrect": 1,
-  "revealHiddenRotated": true
+  "drawerPointPerCorrect": 1
 }
 ```
 
@@ -351,8 +351,8 @@ TAKBON의 테스트를 그대로 옮겨온다. **이걸 제일 먼저 쓴다.**
 | 판정 모드 3종 — 합의제 / 개인 선착순 / 대표 1인 | `server/judge.ts` |
 | 출제자가 제시어를 직접 타이핑 | `server/words.ts` |
 | Dixit식 출제자 점수 | `server/scorer.ts` |
-| 힌트 조각을 원래 각도로 공개 | `rules.json`의 `revealHiddenRotated` |
-| 불규칙 직소 조각 | `server/slicer.ts` |
+| 힌트 조각을 원래 각도로 공개 | `session.sendSlices` + 조각 payload에 각도 추가 |
+| 불규칙 직소 조각 | `shared/slicer.ts` |
 | 사운드, 모바일 최적화 | — |
 
 ### 판정 모드 후보 (기록용)
