@@ -1,0 +1,28 @@
+{
+  "name": "pizza",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently --names 서버,화면 --prefix-colors cyan,magenta --kill-others \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:watch": "concurrently --names 서버,화면 --prefix-colors cyan,magenta --kill-others \"npm:dev:server:watch\" \"npm:dev:client\"",
+    "dev:server": "tsx src/server/index.ts",
+    "dev:server:watch": "tsx watch src/server/index.ts",
+    "dev:client": "vite",
+    "tunnel": "cloudflared tunnel --url http://localhost:5173",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ws": "^8.21.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "tsx": "^4.23.10",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
