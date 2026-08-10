@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { clipHalfPlane } from '../src/shared/geometry';
-import type { Point } from '../src/shared/drawing';
+import { clipHalfPlane, rotate } from '../src/shared/geometry';
+import { CENTER, type Point } from '../src/shared/drawing';
 
 const O: Point = [0, 0];
 /** +x 방향 직선. 남는 쪽은 cross(dir, p-origin) >= 0 이므로 y > 0 쪽이다. */
@@ -53,5 +53,28 @@ describe('clipHalfPlane', () => {
     const out = clipHalfPlane([[0, 110], [0, 90]], [0, 100], RIGHT);
     expect(out.length).toBe(1);
     expect(out[0][1][1]).toBeCloseTo(100);
+  });
+});
+
+describe('rotate', () => {
+  it('중심에 있는 점은 움직이지 않는다', () => {
+    const out = rotate([CENTER], CENTER, Math.PI / 3);
+    expect(out[0][0]).toBeCloseTo(500);
+    expect(out[0][1]).toBeCloseTo(500);
+  });
+
+  it('90도 돌리면 오른쪽이 아래로 간다 (y가 아래로 자라는 화면 좌표계)', () => {
+    const out = rotate([[600, 500]], CENTER, Math.PI / 2);
+    expect(out[0][0]).toBeCloseTo(500);
+    expect(out[0][1]).toBeCloseTo(600);
+  });
+
+  it('역회전하면 원본으로 돌아온다', () => {
+    const src: Point[] = [[123, 456], [789, 111], [500, 999]];
+    const back = rotate(rotate(src, CENTER, 1.234), CENTER, -1.234);
+    back.forEach((p, i) => {
+      expect(p[0]).toBeCloseTo(src[i][0]);
+      expect(p[1]).toBeCloseTo(src[i][1]);
+    });
   });
 });
