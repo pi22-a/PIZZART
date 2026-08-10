@@ -115,4 +115,26 @@ describe('slice', () => {
     const out = slice([], 8);
     expect(out.every((s) => s.strokes.length === 0)).toBe(true);
   });
+
+  it('경계에 놓인 잉크는 사라지지 않는다', () => {
+    // 모든 섹터 경계를 테스트한다. 각 경계를 지나는 선을 그어 슬라이싱하면,
+    // 해당 경계의 인접한 두 섹터 중 적어도 하나에 잉크가 남아야 한다.
+    // 부동소수점 오차로 정확히 어느 섹터에 들어갈지는 예측 불가능하지만,
+    // 절대 사라지지 않는다는 것이 핵심 불변식이다.
+    const count = 8;
+    const step = (Math.PI * 2) / count;
+
+    for (let i = 0; i < count; i++) {
+      const boundaryAngle = (i + 1) * step;
+      const out = slice([ray(boundaryAngle)], count);
+
+      // 경계 각도의 양쪽 섹터
+      const sector1 = i;
+      const sector2 = (i + 1) % count;
+
+      // 둘 중 적어도 하나에 잉크가 있어야 함
+      const totalInk = out[sector1].strokes.length + out[sector2].strokes.length;
+      expect(totalInk).toBeGreaterThan(0);
+    }
+  });
 });

@@ -29,8 +29,9 @@ export function sliceCount(guesserCount: number, min: number): number {
  * sliceCount가 3 미만으로 내려가지 않게 바닥을 깔아두므로(sliceCount 참조) 이 함수에
  * 넘어오는 count는 min이 아무리 낮게 설정돼도 항상 3 이상이다.
  *
- * 경계에 정확히 놓인 잉크는 양쪽 조각에 다 들어간다. 머리카락 한 올 너비의
- * 중복이라 눈에 띄지 않고, 빠뜨리는 것보다 낫다.
+ * 경계에 정확히 놓인 잉크는 인접한 두 조각 중 적어도 하나에 들어가고, 절대
+ * 사라지지 않는다. Math.cos/Math.sin의 부동소수점 오차로 정확히 어느 조각에
+ * 들어갈지는 예측 불가능하지만, 항상 한쪽 이상에는 남는다.
  */
 export function slice(drawing: Drawing, count: number): Slice[] {
   const step = (Math.PI * 2) / count;
