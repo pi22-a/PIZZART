@@ -5,6 +5,10 @@ import { slice, sliceCount, type Slice } from '../shared/slicer';
 import type { ClientMsg, Phase, PlayerInfo, ServerMsg } from '../shared/protocol';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
+import { judge } from './judge';
+import { planHint } from './hint';
+import { guesserPoints, drawerPoints } from './scorer';
+import type { AnswerRow } from '../shared/protocol';
 
 interface Player {
   id: string;
@@ -196,7 +200,7 @@ export class Session {
     this.publicSlices = [];
     this.phase = 'guessing';
 
-    // 추론 시간 타이머는 Task 10에서 붙인다. 지금은 조각을 나눠주는 데까지만 한다.
+    this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
     this.broadcastRoom();
     for (const g of guessers) this.sendSlices(g.id);
   }
@@ -207,16 +211,108 @@ export class Session {
   protected publicSlices: number[] = [];
   protected seen = new Map<string, Set<number>>();
 
-  protected endRound(_correct: string[]): void {
+  answer(playerId: string, text: string): void {
+    if (this.phase !== 'guessing') return;
+    if (!this.seen.has(playerId)) return; // 출제자와 관전자는 못 적는다
+    this.answers.set(playerId, String(text).slice(0, 40));
+    this.broadcastRoom();
+  }
+
+  skip(playerId: string): void {
+    if (this.phase !== 'guessing') return;
+    if (!this.seen.has(playerId)) return; // 답을 아는 출제자는 속도를 정할 수 없다
+    this.skips.add(playerId);
+    this.broadcastRoom();
+
+    const live = this.guessers();
+    if (live.length > 0 && live.every((g) => this.skips.has(g.id))) this.endAttempt();
+  }
+
+  endAttempt(): void {
+    if (this.phase !== 'guessing') return;
+    this.clearTimer();
+
+    const rows: AnswerRow[] = [...this.seen.keys()].map((id) => {
+      const text = this.answers.get(id) ?? '';
+      return { playerId: id, text, correct: judge(text, this.word) };
+    });
+    this.broadcast({ t: 'attemptResult', attempt: this.attempt, answers: rows });
+
+    const correct = rows.filter((r) => r.correct).map((r) => r.playerId);
+    if (correct.length > 0) return this.endRound(correct);
+    if (this.attempt >= this.rules.maxAttempts) return this.endRound([]);
+
+    this.applyHint();
+    this.attempt++;
+    this.answers.clear();
+    this.skips.clear();
+
+    this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
+    this.broadcastRoom();
+    for (const id of this.seen.keys()) this.sendSlices(id);
+  }
+
+  /** 시도에 실패할 때마다 조각을 하나 더 푼다. 자세한 규칙은 hint.ts에 있다. */
+  private applyHint(): void {
+    const all = this.slices.map((s) => s.index);
+    const taken = new Set<number>();
+    for (const seen of this.seen.values()) for (const i of seen) taken.add(i);
+    const hidden = all.filter((i) => !taken.has(i));
+
+    const plan = planHint(hidden, this.seen, all, this.pick);
+
+    if (plan.publicSlice !== null) {
+      this.publicSlices.push(plan.publicSlice);
+      for (const seen of this.seen.values()) seen.add(plan.publicSlice);
+      return;
+    }
+    for (const { playerId, sliceIndex } of plan.perPlayer) {
+      this.seen.get(playerId)?.add(sliceIndex);
+    }
+  }
+
+  protected endRound(correct: string[]): void {
     this.clearTimer();
     this.phase = 'roundEnd';
+
+    const delta = new Map<string, number>();
+    for (const id of correct) delta.set(id, guesserPoints(this.attempt, this.rules.attemptPoints));
+    if (this.drawerId) {
+      delta.set(this.drawerId, drawerPoints(correct.length, this.rules.drawerPointPerCorrect));
+    }
+    for (const p of this.players) p.score += delta.get(p.id) ?? 0;
+
+    // 화면 전환을 먼저 보낸다
     this.broadcastRoom();
+    this.broadcast({
+      t: 'roundEnd',
+      word: this.word,
+      drawing: this.strokes,
+      sliceCount: this.slices.length,
+      owners: this.slices.map((s) => ({ sliceIndex: s.index, playerId: this.owner.get(s.index) ?? null })),
+      scores: this.players.map((p) => ({ playerId: p.id, delta: delta.get(p.id) ?? 0, total: p.score })),
+      correct,
+    });
+  }
+
+  next(playerId: string): void {
+    if (playerId !== this.hostId) return;
+    if (this.phase !== 'roundEnd') return;
+    this.round++;
+    if (this.round >= this.order.length) return this.finishGame();
+    this.beginRound();
   }
 
   protected finishGame(): void {
     this.clearTimer();
     this.phase = 'final';
     this.broadcastRoom();
+    this.broadcast({
+      t: 'final',
+      ranking: this.players
+        .map((p) => ({ playerId: p.id, name: p.name, score: p.score }))
+        .sort((a, b) => b.score - a.score),
+    });
   }
 
   // ---------- 이탈 ----------
@@ -243,7 +339,9 @@ export class Session {
       case 'stroke': return this.addStroke(playerId, msg.points);
       case 'undo': return this.undo(playerId);
       case 'drawDone': return this.drawDone(playerId);
-      // answer / skip / next 는 Task 10, 12에서 붙인다
+      case 'answer': return this.answer(playerId, msg.text);
+      case 'skip': return this.skip(playerId);
+      case 'next': return this.next(playerId);
       default: return;
     }
   }

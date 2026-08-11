@@ -199,3 +199,145 @@ describe('정보 은닉', () => {
     }
   });
 });
+
+describe('추론 루프', () => {
+  let word: string;
+
+  beforeEach(() => {
+    s.start('p1');
+    word = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    drawStar('p1');
+    s.drawDone('p1');
+    sent = [];
+  });
+
+  it('시간이 다 되면 답이 동시에 공개된다', () => {
+    s.answer('p2', '엉뚱한답');
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    clock.fire();
+    const res = msgsOfType('attemptResult');
+    expect(res.length).toBe(4);
+    expect(res[0].answers.find((a) => a.playerId === 'p2')!.text).toBe('엉뚱한답');
+  });
+
+  it('맞히는 사람 전원이 넘기기를 누르면 바로 공개된다', () => {
+    s.skip('p2');
+    s.skip('p3');
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    s.skip('p4');
+    expect(msgsOfType('attemptResult').length).toBe(4);
+  });
+
+  it('출제자의 넘기기는 세지 않는다 — 답을 아는 사람이 속도를 정하면 안 된다', () => {
+    s.skip('p1');
+    s.skip('p2');
+    s.skip('p3');
+    expect(msgsOfType('attemptResult').length).toBe(0);
+  });
+
+  it('아무도 못 맞히면 힌트를 주고 다음 시도로 간다', () => {
+    clock.fire();
+    expect(s.phase).toBe('guessing');
+    const room = msgsOfType('room').at(-1)!;
+    expect(room.attempt).toBe(2);
+    // 조각이 하나 늘어난다
+    const slices = msgsTo('p2').filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
+    expect(slices.slices.length).toBe(2);
+  });
+
+  it('힌트로 나온 조각은 전원이 같은 것을 받는다', () => {
+    clock.fire();
+    const shared = ['p2', 'p3', 'p4'].map((g) => {
+      const m = msgsTo(g).filter((x) => x.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
+      return m.slices.find((x) => x.shared)!.id;
+    });
+    expect(new Set(shared).size).toBe(1);
+  });
+
+  it('한 명이라도 맞히면 라운드가 끝난다', () => {
+    s.answer('p3', word);
+    clock.fire();
+    expect(s.phase).toBe('roundEnd');
+    const end = msgsOfType('roundEnd')[0];
+    expect(end.word).toBe(word);
+    expect(end.correct).toEqual(['p3']);
+  });
+
+  it('맞힌 사람은 시도 회차에 따라 점수를 받는다', () => {
+    s.answer('p3', word);
+    clock.fire();
+    const end = msgsOfType('roundEnd')[0];
+    expect(end.scores.find((x) => x.playerId === 'p3')!.delta).toBe(3);
+  });
+
+  it('늦게 맞힐수록 점수가 낮다', () => {
+    clock.fire();               // 1차 실패
+    s.answer('p3', word);
+    clock.fire();               // 2차에서 맞힘
+    const end = msgsOfType('roundEnd')[0];
+    expect(end.scores.find((x) => x.playerId === 'p3')!.delta).toBe(2);
+  });
+
+  it('출제자는 맞힌 사람 수만큼 받는다', () => {
+    s.answer('p2', word);
+    s.answer('p3', word);
+    clock.fire();
+    const end = msgsOfType('roundEnd')[0];
+    expect(end.scores.find((x) => x.playerId === 'p1')!.delta).toBe(2);
+  });
+
+  it('세 번 다 실패하면 전원 0점으로 끝난다', () => {
+    clock.fire();
+    clock.fire();
+    clock.fire();
+    expect(s.phase).toBe('roundEnd');
+    const end = msgsOfType('roundEnd')[0];
+    expect(end.correct).toEqual([]);
+    expect(end.scores.every((x) => x.delta === 0)).toBe(true);
+  });
+
+  it('라운드가 끝나야 원본과 섹터 번호가 내려간다', () => {
+    s.answer('p2', word);
+    clock.fire();
+    const end = msgsOfType('roundEnd')[0];
+    expect(end.drawing.length).toBeGreaterThan(0);
+    expect(end.owners.length).toBe(end.sliceCount);
+    expect(end.owners.filter((o) => o.playerId !== null).length).toBe(3);
+  });
+
+  it('방장이 다음을 누르면 다음 라운드로 간다', () => {
+    s.answer('p2', word);
+    clock.fire();
+    s.next('p1');
+    expect(s.phase).toBe('drawing');
+    expect(msgsOfType('room').at(-1)!.round).toBe(1);
+  });
+
+  it('마지막 라운드가 끝나면 최종 결과가 나온다', () => {
+    for (let i = 0; i < 4; i++) {
+      if (s.phase === 'lobby') break;
+      if (s.phase === 'drawing') { drawStar(s.drawerId); s.drawDone(s.drawerId); }
+      clock.fire(); clock.fire(); clock.fire();
+      s.next('p1');
+    }
+    expect(s.phase).toBe('final');
+    expect(msgsOfType('final').at(-1)!.ranking.length).toBe(4);
+  });
+});
+
+describe('힌트 폴백 — 숨은 조각이 없을 때', () => {
+  it('9명이면 처음부터 전원이 조각을 하나씩 갖고, 힌트는 남의 조각 재배포다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9']);
+    s.start('p1');
+    drawStar('p1');
+    s.drawDone('p1');
+    sent = [];
+
+    clock.fire(); // 1차 실패 → 힌트
+
+    const m = msgsTo('p2').filter((x) => x.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
+    expect(m.slices.length).toBe(2);
+    // 전원 공개가 아니라 개인 배포다
+    expect(m.slices.every((x) => x.shared === false)).toBe(true);
+  });
+});
