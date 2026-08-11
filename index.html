@@ -1,12 +1,116 @@
 <!doctype html>
 <html lang="ko">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>TAKBON</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/client/main.ts"></script>
-  </body>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PIZZA</title>
+<style>
+  :root { --ink:#2b2118; --dough:#f6efe2; --crust:#d9c9a8; --sauce:#e0803a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
+         background:#1c1712; color:var(--dough); display:flex; justify-content:center; }
+  #app { width:min(920px, 100vw); padding:16px; }
+  .screen { display:none; }
+  .screen.on { display:block; }
+  h1 { font-size:20px; margin:0 0 12px; letter-spacing:.2em; }
+  .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:14px; }
+  .pill { background:#2b2118; border:1px solid #3d3227; border-radius:999px; padding:4px 12px; }
+  .pill.big { font-size:20px; padding:8px 18px; }
+  .pill.word { background:var(--sauce); color:#1c1712; font-weight:700; }
+  button { font:inherit; padding:10px 18px; border-radius:10px; border:0;
+           background:var(--sauce); color:#1c1712; font-weight:700; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  input { font:inherit; padding:10px 14px; border-radius:10px; border:1px solid #3d3227;
+          background:#241d16; color:var(--dough); }
+  canvas { width:100%; aspect-ratio:1; touch-action:none; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+  .col { flex:1 1 320px; min-width:280px; }
+  .hint { width:88px; height:88px; }
+  .players { display:flex; gap:8px; flex-wrap:wrap; font-size:13px; }
+  .players .p { background:#2b2118; border-radius:8px; padding:6px 10px; }
+  .players .p.off { opacity:.4; }
+  .players .p.drawer { outline:2px solid var(--sauce); }
+  .answers { list-style:none; padding:0; margin:8px 0; }
+  .answers li { padding:6px 10px; background:#2b2118; border-radius:8px; margin-bottom:6px; }
+  .answers li.ok { background:#2f4a2a; }
+  .muted { opacity:.6; font-size:13px; }
+  .shared { outline:2px dashed var(--crust); }
+  .slices { display:flex; gap:10px; flex-wrap:wrap; }
+  .slices canvas { width:150px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <span class="pill" id="roomTag"></span>
+    <span class="pill" id="roundTag"></span>
+    <span class="pill" id="topicTag"></span>
+    <span class="pill" id="timeTag"></span>
+    <span class="pill" id="netTag">연결 중</span>
+  </div>
+  <div class="players" id="players"></div>
+
+  <section class="screen on" id="s-lobby">
+    <h1>P I Z Z A</h1>
+    <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
+      자기 조각이 어디였는지 아무도 모릅니다. 통화를 켜고 서로에게 설명하세요.</p>
+    <div class="bar">
+      <input id="nameInput" placeholder="이름" maxlength="12" />
+      <button id="startBtn">시작</button>
+    </div>
+    <p class="muted" id="lobbyNote"></p>
+  </section>
+
+  <section class="screen" id="s-draw">
+    <div class="bar">
+      <span class="pill big word" id="wordTag"></span>
+      <button id="doneBtn">다 그렸다</button>
+      <button id="undoBtn">되돌리기</button>
+    </div>
+    <div style="max-width:520px"><canvas id="drawCanvas"></canvas></div>
+  </section>
+
+  <section class="screen" id="s-wait">
+    <h1 id="waitTopic"></h1>
+    <p class="muted" id="waitWho"></p>
+  </section>
+
+  <section class="screen" id="s-guess">
+    <div class="row">
+      <div class="col">
+        <div class="slices" id="sliceBox"></div>
+        <div class="bar" style="margin-top:12px">
+          <canvas class="hint" id="spinHint"></canvas>
+          <span class="muted">조각은 전부 위를 향하게 돌려져 있습니다.<br />원본에서 어느 방향이었는지는 알 수 없습니다.</span>
+        </div>
+      </div>
+      <div class="col">
+        <div class="bar">
+          <input id="answerInput" placeholder="무엇을 그린 걸까요" maxlength="40" />
+          <button id="skipBtn">넘기기</button>
+        </div>
+        <p class="muted" id="guessNote"></p>
+        <ul class="answers" id="lastAnswers"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="s-round">
+    <div class="row">
+      <div class="col" style="max-width:420px"><canvas id="revealCanvas"></canvas></div>
+      <div class="col">
+        <h1 id="revealWord"></h1>
+        <ul class="answers" id="revealAnswers"></ul>
+        <button id="nextBtn">다음</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="s-final">
+    <h1>최종 결과</h1>
+    <ul class="answers" id="ranking"></ul>
+  </section>
+</div>
+<script type="module" src="/src/client/main.ts"></script>
+</body>
 </html>
