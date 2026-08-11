@@ -59,6 +59,10 @@ export class Session {
   private cancelTimer: (() => void) | null = null;
   private deadline: number | null = null;
 
+  /** 마지막으로 보낸 결과·최종 메시지. 돌아온 사람에게 그대로 돌려준다. */
+  private lastRoundEnd: ServerMsg | null = null;
+  private lastFinal: ServerMsg | null = null;
+
   private readonly scheduler: Scheduler;
   private readonly pick: (n: number) => number;
   private readonly shuffle: <T>(xs: T[]) => T[];
@@ -114,6 +118,12 @@ export class Session {
     if (this.phase === 'guessing' && this.seen.has(id)) {
       this.sendSlices(id);
     }
+    if (this.phase === 'roundEnd' && this.lastRoundEnd) {
+      this.send(id, this.lastRoundEnd);
+    }
+    if (this.phase === 'final' && this.lastFinal) {
+      this.send(id, this.lastFinal);
+    }
   }
 
   start(playerId: string): void {
@@ -146,6 +156,7 @@ export class Session {
     this.owner.clear();
     this.sliceId.clear();
     this.seen.clear();
+    this.lastRoundEnd = null;
     this.phase = 'drawing';
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
@@ -170,6 +181,7 @@ export class Session {
   }
 
   drawDone(playerId: string): void {
+    if (this.phase !== 'drawing') return;
     if (playerId !== this.drawerId) return;
     this.endDrawing();
   }
@@ -284,7 +296,7 @@ export class Session {
 
     // 화면 전환을 먼저 보낸다
     this.broadcastRoom();
-    this.broadcast({
+    const msg: ServerMsg = {
       t: 'roundEnd',
       word: this.word,
       drawing: this.strokes,
@@ -292,12 +304,27 @@ export class Session {
       owners: this.slices.map((s) => ({ sliceIndex: s.index, playerId: this.owner.get(s.index) ?? null })),
       scores: this.players.map((p) => ({ playerId: p.id, delta: delta.get(p.id) ?? 0, total: p.score })),
       correct,
-    });
+    };
+    this.lastRoundEnd = msg;
+    this.broadcast(msg);
   }
 
   next(playerId: string): void {
     if (playerId !== this.hostId) return;
     if (this.phase !== 'roundEnd') return;
+
+    // 사람이 빠져 최소 인원을 밑돌면 로비로 돌아가 기다린다. 점수는 그대로 둔다.
+    // 시작하려면 minPlayers명이 필요하지만, 진행 중에는 한 명 빠지는 것까지는 버틴다 —
+    // 그 정도로 로비로 튕기면 흔한 이탈 한 번에도 판이 깨진다.
+    if (this.players.filter((p) => p.connected).length < this.rules.minPlayers - 1) {
+      this.clearTimer();
+      this.order = [];
+      this.round = 0;
+      this.phase = 'lobby';
+      this.broadcastRoom();
+      return;
+    }
+
     this.round++;
     if (this.round >= this.order.length) return this.finishGame();
     this.beginRound();
@@ -307,12 +334,14 @@ export class Session {
     this.clearTimer();
     this.phase = 'final';
     this.broadcastRoom();
-    this.broadcast({
+    const msg: ServerMsg = {
       t: 'final',
       ranking: this.players
         .map((p) => ({ playerId: p.id, name: p.name, score: p.score }))
         .sort((a, b) => b.score - a.score),
-    });
+    };
+    this.lastFinal = msg;
+    this.broadcast(msg);
   }
 
   // ---------- 이탈 ----------

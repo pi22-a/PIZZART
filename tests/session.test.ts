@@ -341,3 +341,130 @@ describe('힌트 폴백 — 숨은 조각이 없을 때', () => {
     expect(m.slices.every((x) => x.shared === false)).toBe(true);
   });
 });
+
+describe('이탈과 재입장', () => {
+  beforeEach(() => { s.start('p1'); });
+
+  it('출제자가 그리다 나가면 그때까지 그린 것으로 진행한다', () => {
+    drawStar('p1');
+    s.disconnect('p1');
+    clock.fire();
+    expect(s.phase).toBe('guessing');
+  });
+
+  it('출제자가 아무것도 안 그리고 나가면 라운드를 건너뛴다', () => {
+    s.disconnect('p1');
+    clock.fire();
+    expect(s.phase).toBe('roundEnd');
+  });
+
+  it('출제자가 돌아오면 제시어와 자기 그림을 되찾는다', () => {
+    drawStar('p1');
+    s.disconnect('p1');
+    sent = [];
+    s.join('p1', 'p1');
+    const mine = msgsTo('p1');
+    expect(mine.filter((m) => m.t === 'word').length).toBe(1);
+    const canvas = mine.find((m) => m.t === 'canvas') as Extract<ServerMsg, { t: 'canvas' }>;
+    expect(canvas.strokes.length).toBe(12);
+  });
+
+  // 체크포인트 A에서 실제로 걸린 버그다. restore()가 drawing/guessing만 복구해서,
+  // 결과 화면에서 새로고침하면 정답도 답 목록도 그림도 없는 빈 화면에 갇혔다.
+  // 방장이 아니면 넘길 수도 없다.
+  it('결과 화면에서 돌아오면 결과를 다시 받는다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    clock.fire(); clock.fire(); clock.fire();
+    expect(s.phase).toBe('roundEnd');
+    sent = [];
+    s.join('p2', 'p2');
+    const again = msgsTo('p2').filter((m) => m.t === 'roundEnd');
+    expect(again.length).toBe(1);
+    expect((again[0] as Extract<ServerMsg, { t: 'roundEnd' }>).word.length).toBeGreaterThan(0);
+  });
+
+  it('최종 화면에서 돌아오면 순위를 다시 받는다', () => {
+    for (let i = 0; i < 4; i++) {
+      if (s.phase === 'drawing') { drawStar(s.drawerId); s.drawDone(s.drawerId); }
+      clock.fire(); clock.fire(); clock.fire();
+      s.next('p1');
+    }
+    expect(s.phase).toBe('final');
+    sent = [];
+    s.join('p3', 'p3');
+    expect(msgsTo('p3').filter((m) => m.t === 'final').length).toBe(1);
+  });
+
+  it('맞히는 사람이 돌아오면 받았던 조각을 그대로 다시 받는다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    const before = (msgsTo('p2').filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>).slices;
+    s.disconnect('p2');
+    sent = [];
+    s.join('p2', 'p2');
+    const after = (msgsTo('p2').filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>).slices;
+    expect(after).toEqual(before);
+  });
+
+  it('끊긴 사람이 넘기기 판정을 막지 않는다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    s.disconnect('p4');
+    sent = [];
+    s.skip('p2');
+    s.skip('p3');
+    expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
+  });
+
+  it('라운드 도중 합류자는 조각을 받지 않는다 (관전)', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    sent = [];
+    s.join('p9', '늦둥이');
+    expect(msgsTo('p9').filter((m) => m.t === 'slices').length).toBe(0);
+  });
+
+  it('라운드 도중 합류자는 출제 순번에 들어가지 않는다', () => {
+    s.join('p9', '늦둥이');
+    expect(msgsOfType('room').at(-1)!.totalRounds).toBe(4);
+  });
+
+  it('출제 차례인 사람이 없으면 건너뛴다', () => {
+    drawStar('p1'); s.drawDone('p1'); clock.fire(); clock.fire(); clock.fire();
+    s.disconnect('p2'); // 다음 출제자
+    s.next('p1');
+    expect(s.drawerId).toBe('p3');
+  });
+
+  it('로비 이탈이 쌓여도 방이 막히지 않는다', () => {
+    const fresh = new Session(() => {}, { scheduler: new ManualScheduler() });
+    for (const id of ['a', 'b', 'c']) fresh.join(id, id);
+    for (const id of ['a', 'b', 'c']) fresh.disconnect(id);
+    for (let i = 0; i < 9; i++) fresh.join(`n${i}`, `n${i}`);
+    fresh.start('n0');
+    expect(fresh.phase).toBe('drawing');
+  });
+
+  it('인원이 최소 미만이 되면 진행 중 라운드는 마치고 로비로 돌아간다', () => {
+    drawStar('p1'); s.drawDone('p1');
+    s.disconnect('p3');
+    s.disconnect('p4');
+    // 남은 사람은 p1, p2 — 진행 중인 라운드는 끝까지 간다
+    clock.fire(); clock.fire(); clock.fire();
+    expect(s.phase).toBe('roundEnd');
+    s.next('p1');
+    expect(s.phase).toBe('lobby');
+  });
+
+  it('로비로 돌아가도 점수는 남는다', () => {
+    const word = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    drawStar('p1'); s.drawDone('p1');
+    s.answer('p2', word);
+    clock.fire();
+    s.disconnect('p3'); s.disconnect('p4');
+    s.next('p1');
+    expect(s.phase).toBe('lobby');
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.score).toBe(3);
+  });
+});
