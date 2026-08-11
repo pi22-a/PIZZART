@@ -21,6 +21,8 @@ const ws = new WebSocket(`ws://localhost:${PORT}/?room=${encodeURIComponent(room
 let youId = '';
 let drewThisRound = -1;
 let answeredThisAttempt = -1;
+let nextSentForRound = -1;
+let startSent = false;
 
 const log = (...a) => { if (!has('--quiet')) console.log(`[${name}]`, ...a); };
 const send = (m) => ws.send(JSON.stringify(m));
@@ -54,10 +56,18 @@ ws.on('message', (raw) => {
       if (text) setTimeout(() => { send({ t: 'answer', text }); log(`답: ${text}`); }, 200);
       if (has('--skip')) setTimeout(() => send({ t: 'skip' }), 500);
     }
-    if (m.phase === 'lobby' && has('--host') && youId === m.hostId && m.players.length >= 4) {
+
+    // startSent 리셋 (로비 떠날 때)
+    if (m.phase !== 'lobby') {
+      startSent = false;
+    }
+
+    if (m.phase === 'lobby' && has('--host') && youId === m.hostId && m.players.length >= 4 && !startSent) {
+      startSent = true;
       setTimeout(() => send({ t: 'start' }), 500);
     }
-    if (m.phase === 'roundEnd' && has('--next') && youId === m.hostId) {
+    if (m.phase === 'roundEnd' && has('--next') && youId === m.hostId && nextSentForRound !== m.round) {
+      nextSentForRound = m.round;
       setTimeout(() => send({ t: 'next' }), 1500);
     }
     return;
