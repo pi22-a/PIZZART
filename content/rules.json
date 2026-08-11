@@ -1,0 +1,10 @@
+{
+  "minPlayers": 4,
+  "maxPlayers": 9,
+  "sliceCountMin": 8,
+  "drawSeconds": 60,
+  "guessSeconds": 90,
+  "maxAttempts": 3,
+  "attemptPoints": [3, 2, 1],
+  "drawerPointPerCorrect": 1
+}
