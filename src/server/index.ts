@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 import { Session } from './session';
 import type { ClientMsg } from '../shared/protocol';
-import type { Point } from '../shared/glyph';
+import type { Point } from '../shared/drawing';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STROKES_PER_SECOND = 40;
@@ -82,7 +82,7 @@ wss.on('connection', (socket, req) => {
       if (!Array.isArray(msg.points)) return;
       const clean = msg.points
         .filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
-        .map(([x, y]) => [clamp(Math.round(x), 0, 1000), clamp(Math.round(y), 0, 600)] as Point);
+        .map(([x, y]) => [clamp(Math.round(x), 0, 1000), clamp(Math.round(y), 0, 1000)] as Point);
       if (clean.length === 0) return;
       session.addStroke(id, clean);
       return;
@@ -105,4 +105,4 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-console.log(`TAKBON 서버가 ws://localhost:${PORT} 에서 대기 중`);
+console.log(`PIZZA 서버가 ws://localhost:${PORT} 에서 대기 중`);
