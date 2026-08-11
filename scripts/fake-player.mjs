@@ -1,70 +1,109 @@
-/**
- * 가짜 플레이어 하나를 방에 붙인다. 브라우저 창을 여러 개 띄우지 않고
- * 인원 수를 채우거나 다른 사람의 선이 보이는지 확인할 때 쓴다.
- *
- *   node scripts/fake-player.mjs <방코드> [이름] [--draw] [--ready]
- *
- * --draw   구간마다 물결선을 한 번 그린다
- * --ready  구간마다 "완성"을 누른다
- * 살아 있는 동안 방에 남아 있으므로, 끝내려면 Ctrl+C.
- */
-import WebSocket from 'ws';
-import { randomUUID } from 'node:crypto';
+// 가짜 플레이어. 인원을 채우고 자동으로 한 판을 돌린다.
+//
+//   node scripts/fake-player.mjs 방코드 봇1 --draw --answer=호랑이
+//
+//   --draw          출제자가 되면 원 안에 아무 그림이나 그리고 끝낸다
+//   --answer=말     추론 단계에서 이 답을 적는다 (없으면 안 적는다)
+//   --skip          답을 적은 뒤 넘기기를 누른다
+//   --host          방장이면 인원이 차는 대로 게임을 시작한다
+//   --next          결과 화면에서 다음으로 넘긴다 (방장만 효과가 있다)
+//   --quiet         받은 메시지를 찍지 않는다
+import { WebSocket } from 'ws';
 
-const [, , roomArg, nameArg, ...flags] = process.argv;
-const room = (roomArg ?? 'TEST').toUpperCase();
-const name = nameArg && !nameArg.startsWith('--') ? nameArg : '가짜';
-const all = [nameArg, ...flags];
-const wantDraw = all.includes('--draw');
-const wantReady = all.includes('--ready');
+const [room = 'TEST', name = '봇'] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
+const has = (f) => flags.includes(f);
+const val = (f) => flags.find((a) => a.startsWith(`${f}=`))?.split('=')[1];
 
-// 기본은 게임 서버에 직접 붙는다. 터널·배포로 붙일 때는 페이지 주소를 넣는다:
-//   TAKBON_WS=wss://xxx.trycloudflare.com node scripts/fake-player.mjs ...
-const base = (process.env.TAKBON_WS ?? 'ws://localhost:8080').replace(/\/+$/, '');
-const ws = new WebSocket(`${base}/ws?room=${encodeURIComponent(room)}`);
+const PORT = process.env.PORT ?? 8080;
+const ws = new WebSocket(`ws://localhost:${PORT}/?room=${encodeURIComponent(room)}`);
+
+let youId = '';
+let drewThisRound = -1;
+let answeredThisAttempt = -1;
+
+const log = (...a) => { if (!has('--quiet')) console.log(`[${name}]`, ...a); };
+const send = (m) => ws.send(JSON.stringify(m));
 
 ws.on('open', () => {
-  console.log(`[${name}] ${room} 방에 접속`);
-  ws.send(JSON.stringify({ t: 'join', name, cid: randomUUID() }));
+  send({ t: 'join', name, cid: `fake-${name}` });
+  log('접속');
 });
-
-/** 조각을 받을 때마다(= 구간이 시작될 때마다) 그리고/또는 완성을 누른다. */
-function playSegment(zone) {
-  if (wantDraw) {
-    const [x0, x1] = zone;
-    const points = Array.from({ length: 20 }, (_, i) => {
-      const t = i / 19;
-      return [Math.round(x0 + (x1 - x0) * t), Math.round(300 + Math.sin(t * 5) * 120)];
-    });
-    ws.send(JSON.stringify({ t: 'stroke', points }));
-    console.log(`[${name}] 내 구역에 물결선`);
-  }
-  if (wantReady) {
-    setTimeout(() => {
-      ws.send(JSON.stringify({ t: 'ready' }));
-      console.log(`[${name}] 완성`);
-    }, 300);
-  }
-}
 
 ws.on('message', (raw) => {
   const m = JSON.parse(String(raw));
-  if (m.t === 'error') console.log(`[${name}] 에러: ${m.msg}`);
-  if (m.t === 'room') console.log(`[${name}] ${m.phase} · 인원 ${m.players.length} · 구간 ${m.segmentIndex + 1}/${m.segments}`);
-  if (m.t === 'fragment') {
-    console.log(`[${name}] 조각 수신 — 구역 ${JSON.stringify(m.zone)}, 선 ${m.strokes.length}개`);
-    playSegment(m.zone);
+
+  if (m.t === 'joined') {
+    youId = m.youId;
+    return;
   }
-  if (m.t === 'result') console.log(`[${name}] 정확도 ${Math.round(m.accuracy * 100)}%`);
-  if (m.t === 'final') console.log(`[${name}] 최종 ${m.grade} (평균 ${Math.round(m.average * 100)}%)`);
+
+  if (m.t === 'room') {
+    const me = m.players.find((p) => p.id === youId);
+    if (!me) return;
+    log(`${m.phase} 라운드 ${m.round + 1}/${m.totalRounds} 주제:${m.topic} 시도:${m.attempt}` +
+        (me.isDrawer ? ' (내가 출제자)' : ''));
+
+    if (m.phase === 'drawing' && me.isDrawer && has('--draw') && drewThisRound !== m.round) {
+      drewThisRound = m.round;
+      setTimeout(() => scribble(), 300);
+    }
+    if (m.phase === 'guessing' && !me.isDrawer && answeredThisAttempt !== m.attempt) {
+      answeredThisAttempt = m.attempt;
+      const text = val('--answer');
+      if (text) setTimeout(() => { send({ t: 'answer', text }); log(`답: ${text}`); }, 200);
+      if (has('--skip')) setTimeout(() => send({ t: 'skip' }), 500);
+    }
+    if (m.phase === 'lobby' && has('--host') && youId === m.hostId && m.players.length >= 4) {
+      setTimeout(() => send({ t: 'start' }), 500);
+    }
+    if (m.phase === 'roundEnd' && has('--next') && youId === m.hostId) {
+      setTimeout(() => send({ t: 'next' }), 1500);
+    }
+    return;
+  }
+
+  if (m.t === 'slices') {
+    const ink = m.slices.reduce((n, s) => n + s.strokes.length, 0);
+    log(`조각 ${m.slices.length}개, 선 ${ink}개`);
+    return;
+  }
+
+  if (m.t === 'attemptResult') {
+    log(`시도 ${m.attempt}:`, m.answers.map((a) => `${a.text || '(무응답)'}${a.correct ? ' O' : ''}`).join(', '));
+    return;
+  }
+
+  if (m.t === 'roundEnd') {
+    log(`정답은 "${m.word}" — 맞힌 사람 ${m.correct.length}명`);
+    return;
+  }
+
+  if (m.t === 'final') {
+    log('최종:', m.ranking.map((r) => `${r.name} ${r.score}`).join(', '));
+    return;
+  }
+
+  if (m.t === 'error') log('오류:', m.msg);
 });
 
-ws.on('error', (e) => {
-  console.error(`[${name}] 연결 실패: ${e.message}`);
-  process.exit(1);
-});
+ws.on('close', () => log('끊김'));
 
-process.on('SIGINT', () => {
-  ws.close();
-  process.exit(0);
-});
+/** 원 안에 아무렇게나 몇 획 긋고 끝낸다 */
+function scribble() {
+  for (let i = 0; i < 8; i++) {
+    const a0 = Math.random() * Math.PI * 2;
+    const a1 = a0 + (Math.random() - 0.5) * 2;
+    const r0 = Math.random() * 380;
+    const r1 = Math.random() * 380;
+    send({
+      t: 'stroke',
+      points: [
+        [Math.round(500 + Math.cos(a0) * r0), Math.round(500 + Math.sin(a0) * r0)],
+        [Math.round(500 + Math.cos(a1) * r1), Math.round(500 + Math.sin(a1) * r1)],
+      ],
+    });
+  }
+  send({ t: 'drawDone' });
+  log('그리기 끝');
+}
