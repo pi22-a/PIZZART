@@ -5,8 +5,8 @@
 //   --draw          출제자가 되면 원 안에 아무 그림이나 그리고 끝낸다
 //   --answer=말     추론 단계에서 이 답을 적는다 (없으면 안 적는다)
 //   --skip          답을 적은 뒤 넘기기를 누른다
-//   --host          방장이면 인원이 차는 대로 게임을 시작한다
-//   --next          결과 화면에서 다음으로 넘긴다 (방장만 효과가 있다)
+//   --host          방장이 누구든 인원이 차는 대로 게임을 시작한다 (모든 봇에 전달해도 안전)
+//   --next          방장이 누구든 결과 화면에서 다음으로 넘긴다 (모든 봇에 전달해도 안전)
 //   --quiet         받은 메시지를 찍지 않는다
 import { WebSocket } from 'ws';
 
@@ -20,7 +20,7 @@ const ws = new WebSocket(`ws://localhost:${PORT}/?room=${encodeURIComponent(room
 
 let youId = '';
 let drewThisRound = -1;
-let answeredThisAttempt = -1;
+let answeredKey = '';
 let nextSentForRound = -1;
 let startSent = false;
 
@@ -46,12 +46,19 @@ ws.on('message', (raw) => {
     log(`${m.phase} 라운드 ${m.round + 1}/${m.totalRounds} 주제:${m.topic} 시도:${m.attempt}` +
         (me.isDrawer ? ' (내가 출제자)' : ''));
 
+    // 새 게임 시작 시 래치 리셋 (로비에 돌아올 때)
+    if (m.phase === 'lobby') {
+      drewThisRound = -1;
+      answeredKey = '';
+      nextSentForRound = -1;
+    }
+
     if (m.phase === 'drawing' && me.isDrawer && has('--draw') && drewThisRound !== m.round) {
       drewThisRound = m.round;
       setTimeout(() => scribble(), 300);
     }
-    if (m.phase === 'guessing' && !me.isDrawer && answeredThisAttempt !== m.attempt) {
-      answeredThisAttempt = m.attempt;
+    if (m.phase === 'guessing' && !me.isDrawer && answeredKey !== `${m.round}:${m.attempt}`) {
+      answeredKey = `${m.round}:${m.attempt}`;
       const text = val('--answer');
       if (text) setTimeout(() => { send({ t: 'answer', text }); log(`답: ${text}`); }, 200);
       if (has('--skip')) setTimeout(() => send({ t: 'skip' }), 500);
