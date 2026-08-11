@@ -63,6 +63,9 @@ export class Session {
   private lastRoundEnd: ServerMsg | null = null;
   private lastFinal: ServerMsg | null = null;
 
+  /** 이번 게임에 이미 나온 제시어. 같은 판에서 두 번 나오면 정답을 흘리는 셈이다. */
+  private usedWords = new Set<string>();
+
   private readonly scheduler: Scheduler;
   private readonly pick: (n: number) => number;
   private readonly shuffle: <T>(xs: T[]) => T[];
@@ -95,8 +98,13 @@ export class Session {
     const existing = this.players.find((p) => p.id === id);
     if (existing) {
       existing.connected = true;
+      // 이름을 새로 보냈으면 갱신한다. 버리면 이름칸에 뭘 치든 계속 '손님'이고,
+      // 이 게임의 하이라이트인 결과 화면이 '손님 — 코끼리' 다섯 줄이 된다.
+      if (name) existing.name = name;
     } else {
-      if (this.players.length >= this.rules.maxPlayers) {
+      // 끊긴 사람은 정원에 세지 않는다. 유령까지 세면 세 명 있는 방이
+      // 진짜 사람에게 "방이 가득 찼습니다"를 돌려준다.
+      if (this.connectedCount >= this.rules.maxPlayers) {
         this.send(id, { t: 'error', msg: '방이 가득 찼습니다' });
         return;
       }
@@ -129,12 +137,16 @@ export class Session {
   start(playerId: string): void {
     if (playerId !== this.hostId) return;
     if (this.phase !== 'lobby') return;
-    if (this.players.length < this.rules.minPlayers) {
+    // 살아있는 사람만 센다. 유령을 세면 "4인 게임"이 실제로는 두 명이 돌게 되고,
+    // 순번에 유령이 끼면 beginRound가 건너뛰어 라운드 번호가 껑충 뛴다.
+    const live = this.players.filter((p) => p.connected);
+    if (live.length < this.rules.minPlayers) {
       this.send(playerId, { t: 'error', msg: `${this.rules.minPlayers}명 이상이어야 시작할 수 있습니다` });
       return;
     }
-    this.order = this.players.map((p) => p.id);
+    this.order = live.map((p) => p.id);
     this.round = 0;
+    this.usedWords.clear();
     for (const p of this.players) p.score = 0;
     this.beginRound();
   }
@@ -148,7 +160,7 @@ export class Session {
     }
     if (this.round >= this.order.length) return this.finishGame();
 
-    const chosen = pickWord(this.topics, this.pick);
+    const chosen = this.nextWord();
     this.topic = chosen.topic;
     this.word = chosen.word;
     this.strokes = [];
@@ -157,6 +169,12 @@ export class Session {
     this.sliceId.clear();
     this.seen.clear();
     this.lastRoundEnd = null;
+    // 시도 상태는 여기서도 반드시 지운다. endAttempt는 이어가는 길에서만 지우고
+    // endRound로 빠지는 두 길에서는 안 지우기 때문에, 안 지우면 다음 라운드 내내
+    // 지난 라운드의 ✎ 표시가 남고 room.attempt가 3으로 나간다.
+    this.attempt = 1;
+    this.answers.clear();
+    this.skips.clear();
     this.phase = 'drawing';
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
@@ -196,6 +214,12 @@ export class Session {
     }
 
     const guessers = this.guessers();
+    if (guessers.length === 0) {
+      // 맞힐 사람이 아무도 안 남았다. 조각을 나눠봐야 seen이 비어 skip()이 영영
+      // 못 터지고, 출제자 혼자 4분 30초짜리 대기 화면을 본다.
+      return this.endRound([]);
+    }
+
     const count = sliceCount(guessers.length, this.rules.sliceCountMin);
     this.slices = slice(this.strokes, count);
     for (const s of this.slices) this.sliceId.set(s.index, randomUUID());
@@ -235,24 +259,41 @@ export class Session {
     if (!this.seen.has(playerId)) return; // 답을 아는 출제자는 속도를 정할 수 없다
     this.skips.add(playerId);
     this.broadcastRoom();
+    this.checkSkipQuorum();
+  }
 
+  /**
+   * 넘기기 정족수를 다시 센다. skip()과 disconnect() 양쪽에서 부른다.
+   *
+   * skip() 안에서만 세면, 셋 중 둘이 누른 뒤 나머지 한 명이 끊겼을 때
+   * 그 버튼을 다시 눌러줄 사람이 없어 90초짜리 시도를 세 번 다 기다린다.
+   */
+  private checkSkipQuorum(): void {
+    if (this.phase !== 'guessing') return;
     const live = this.guessers();
-    if (live.length > 0 && live.every((g) => this.skips.has(g.id))) this.endAttempt();
+    // 맞히는 사람이 전부 사라졌다. 시도를 더 돌릴 이유가 없으니 라운드를 접는다.
+    if (live.length === 0) return this.endRound([], this.answerRows());
+    if (live.every((g) => this.skips.has(g.id))) this.endAttempt();
+  }
+
+  /** 지금 시도의 답안 줄. 조각을 받은 사람만 들어간다. */
+  private answerRows(): AnswerRow[] {
+    return [...this.seen.keys()].map((id) => {
+      const text = this.answers.get(id) ?? '';
+      return { playerId: id, text, correct: judge(text, this.word) };
+    });
   }
 
   endAttempt(): void {
     if (this.phase !== 'guessing') return;
     this.clearTimer();
 
-    const rows: AnswerRow[] = [...this.seen.keys()].map((id) => {
-      const text = this.answers.get(id) ?? '';
-      return { playerId: id, text, correct: judge(text, this.word) };
-    });
+    const rows = this.answerRows();
     this.broadcast({ t: 'attemptResult', attempt: this.attempt, answers: rows });
 
     const correct = rows.filter((r) => r.correct).map((r) => r.playerId);
-    if (correct.length > 0) return this.endRound(correct);
-    if (this.attempt >= this.rules.maxAttempts) return this.endRound([]);
+    if (correct.length > 0) return this.endRound(correct, rows);
+    if (this.attempt >= this.rules.maxAttempts) return this.endRound([], rows);
 
     this.applyHint();
     this.attempt++;
@@ -283,7 +324,7 @@ export class Session {
     }
   }
 
-  protected endRound(correct: string[]): void {
+  protected endRound(correct: string[], answers: AnswerRow[] = []): void {
     this.clearTimer();
     this.phase = 'roundEnd';
 
@@ -293,6 +334,10 @@ export class Session {
       delta.set(this.drawerId, drawerPoints(correct.length, this.rules.drawerPointPerCorrect));
     }
     for (const p of this.players) p.score += delta.get(p.id) ?? 0;
+
+    // 결과 화면에도 마감 시각을 준다. 이 화면만 시간이 없으면 나가는 문이 next() 하나뿐인데,
+    // 방장이 폰을 잠그거나 탭을 뒤로 넘긴 순간 나머지 전원이 비활성 버튼 앞에 영영 갇힌다.
+    this.setDeadline(this.rules.roundEndSeconds, () => this.advance());
 
     // 화면 전환을 먼저 보낸다
     this.broadcastRoom();
@@ -304,6 +349,7 @@ export class Session {
       owners: this.slices.map((s) => ({ sliceIndex: s.index, playerId: this.owner.get(s.index) ?? null })),
       scores: this.players.map((p) => ({ playerId: p.id, delta: delta.get(p.id) ?? 0, total: p.score })),
       correct,
+      answers,
     };
     this.lastRoundEnd = msg;
     this.broadcast(msg);
@@ -312,12 +358,26 @@ export class Session {
   next(playerId: string): void {
     if (playerId !== this.hostId) return;
     if (this.phase !== 'roundEnd') return;
+    this.advance();
+  }
+
+  /**
+   * 다음 라운드로 넘긴다. next()와 결과 화면 타이머가 함께 쓴다.
+   *
+   * 방장 확인은 next() 쪽에만 있다 — 타이머가 터지는 상황이 바로
+   * 방장이 없는 상황이라, 여기서 방장을 따지면 있으나 마나다.
+   */
+  private advance(): void {
+    if (this.phase !== 'roundEnd') return;
 
     // 사람이 빠져 최소 인원을 밑돌면 로비로 돌아가 기다린다. 점수는 그대로 둔다.
     // 시작하려면 minPlayers명이 필요하지만, 진행 중에는 한 명 빠지는 것까지는 버틴다 —
     // 그 정도로 로비로 튕기면 흔한 이탈 한 번에도 판이 깨진다.
-    if (this.players.filter((p) => p.connected).length < this.rules.minPlayers - 1) {
+    if (this.connectedCount < this.rules.minPlayers - 1) {
       this.clearTimer();
+      // 유령을 데리고 로비로 돌아가지 않는다. 저 소켓들은 이미 닫혔으니 다시는
+      // 아무 일도 안 일어나고, 머릿수만 부풀려 시작·정원 판정을 전부 어긋나게 한다.
+      this.prune();
       this.order = [];
       this.round = 0;
       this.phase = 'lobby';
@@ -328,6 +388,29 @@ export class Session {
     this.round++;
     if (this.round >= this.order.length) return this.finishGame();
     this.beginRound();
+  }
+
+  /**
+   * 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 —
+   * 이 문이 한 사람 뒤에 잠기면, 그 사람이 자리를 뜬 순간 방 코드가 통째로 죽는다.
+   */
+  again(playerId: string): void {
+    if (this.phase !== 'final') return;
+    if (!this.players.some((p) => p.id === playerId)) return;
+
+    this.clearTimer();
+    this.prune();
+    this.order = [];
+    this.round = 0;
+    this.attempt = 1;
+    this.answers.clear();
+    this.skips.clear();
+    this.usedWords.clear();
+    this.lastFinal = null;
+    this.lastRoundEnd = null;
+    for (const p of this.players) p.score = 0;
+    this.phase = 'lobby';
+    this.broadcastRoom();
   }
 
   protected finishGame(): void {
@@ -368,10 +451,14 @@ export class Session {
       }
     }
     this.broadcastRoom();
+    // 누가 사라진 이 순간, 남은 사람들이 이미 넘기기를 다 눌러둔 상태일 수 있다.
+    // 방금 방을 나간 사람을 기다리며 타이머를 다 태우면 안 된다.
+    this.checkSkipQuorum();
   }
 
   handle(playerId: string, msg: ClientMsg): void {
     switch (msg.t) {
+      case 'again': return this.again(playerId);
       case 'join': return this.join(playerId, msg.name);
       case 'start': return this.start(playerId);
       case 'stroke': return this.addStroke(playerId, msg.points);
@@ -385,6 +472,35 @@ export class Session {
   }
 
   // ---------- 보조 ----------
+
+  /** 지금 이 방에 실제로 붙어 있는 사람 수. 정원·시작 인원 판정은 전부 이걸 쓴다. */
+  get connectedCount(): number {
+    return this.players.filter((p) => p.connected).length;
+  }
+
+  /** 끊긴 사람을 명단에서 지운다. 로비로 돌아갈 때와 한 판 더에서만 부른다. */
+  private prune(): void {
+    this.players = this.players.filter((p) => p.connected);
+    if (!this.players.some((p) => p.id === this.hostId)) {
+      this.hostId = this.players[0]?.id ?? '';
+    }
+  }
+
+  /**
+   * 이번 게임에 아직 안 나온 제시어를 고른다.
+   *
+   * 9라운드를 90단어짜리 풀에서 돌리면 중복이 꽤 자주 난다. 중복은 앞 라운드
+   * 결과 화면을 본 전원에게 정답을 그냥 알려주는 것과 같다.
+   * 풀이 바닥나면 중복을 허용한다 — 멈추는 것보다 낫다.
+   */
+  private nextWord(): { topic: string; word: string } {
+    const fresh = this.topics
+      .map((t) => ({ topic: t.topic, words: t.words.filter((w) => !this.usedWords.has(w)) }))
+      .filter((t) => t.words.length > 0);
+    const chosen = pickWord(fresh.length > 0 ? fresh : this.topics, this.pick);
+    this.usedWords.add(chosen.word);
+    return chosen;
+  }
 
   protected livePlayer(id: string): boolean {
     return this.players.some((p) => p.id === id && p.connected);

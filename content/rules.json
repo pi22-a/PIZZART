@@ -4,6 +4,7 @@
   "sliceCountMin": 8,
   "drawSeconds": 60,
   "guessSeconds": 90,
+  "roundEndSeconds": 25,
   "maxAttempts": 3,
   "attemptPoints": [3, 2, 1],
   "drawerPointPerCorrect": 1

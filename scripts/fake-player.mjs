@@ -7,6 +7,7 @@
 //   --skip          답을 적은 뒤 넘기기를 누른다
 //   --host          방장이 누구든 인원이 차는 대로 게임을 시작한다 (모든 봇에 전달해도 안전)
 //   --next          방장이 누구든 결과 화면에서 다음으로 넘긴다 (모든 봇에 전달해도 안전)
+//   --again         최종 화면에서 딱 한 번 "한 판 더"를 누른다 (같은 방에서 두 판을 돌려본다)
 //   --quiet         받은 메시지를 찍지 않는다
 import { WebSocket } from 'ws';
 
@@ -23,6 +24,7 @@ let drewThisRound = -1;
 let answeredKey = '';
 let nextSentForRound = -1;
 let startSent = false;
+let againSent = false;
 
 const log = (...a) => { if (!has('--quiet')) console.log(`[${name}]`, ...a); };
 const send = (m) => ws.send(JSON.stringify(m));
@@ -76,6 +78,11 @@ ws.on('message', (raw) => {
     if (m.phase === 'roundEnd' && has('--next') && youId === m.hostId && nextSentForRound !== m.round) {
       nextSentForRound = m.round;
       setTimeout(() => send({ t: 'next' }), 1500);
+    }
+    // 한 판만 더 돌린다. 래치를 안 걸면 판이 끝없이 이어진다.
+    if (m.phase === 'final' && has('--again') && !againSent) {
+      againSent = true;
+      setTimeout(() => { send({ t: 'again' }); log('한 판 더'); }, 1000);
     }
     return;
   }

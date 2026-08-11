@@ -538,3 +538,301 @@ describe('이탈과 재입장', () => {
     expect(msgsOfType('room').at(-1)!.hostId).toBe('');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 아래는 마지막 전체 리뷰에서 나온 수정들이다. 하나하나가 실제 플레이를 멈춰
+// 세울 수 있는 것들이라, 재발 방지용 테스트를 붙여 둔다.
+// ---------------------------------------------------------------------------
+
+/** 결과 화면(roundEnd)까지 한 라운드를 끝까지 굴린다 */
+function playRound(): void {
+  if (s.phase === 'drawing') { drawStar(s.drawerId); s.drawDone(s.drawerId); }
+  clock.fire(); clock.fire(); clock.fire();
+}
+
+describe('결과 화면 마감 시간 (수정 1)', () => {
+  beforeEach(() => { s.start('p1'); });
+
+  it('결과 화면에도 마감 시각이 실린다 — 유일하게 시간 없는 화면이면 안 된다', () => {
+    playRound();
+    expect(s.phase).toBe('roundEnd');
+    expect(msgsOfType('room').at(-1)!.deadline).not.toBeNull();
+  });
+
+  it('아무도 다음을 누르지 않아도 시간이 지나면 다음 라운드로 간다', () => {
+    playRound();
+    expect(s.phase).toBe('roundEnd');
+    clock.fire(); // 결과 화면 마감
+    expect(s.phase).toBe('drawing');
+    expect(msgsOfType('room').at(-1)!.round).toBe(1);
+  });
+
+  it('방장이 화면을 잠가 아무 말이 없어도 방이 멈추지 않는다', () => {
+    // 방장이 소켓을 닫은 게 아니라 그냥 조용한 경우다 — 방장 승계도 일어나지 않는다.
+    playRound();
+    const host = msgsOfType('room').at(-1)!.hostId;
+    expect(host).toBe('p1'); // 아무도 끊기지 않았으니 방장은 그대로다
+    clock.fire();
+    expect(s.phase).toBe('drawing');
+  });
+
+  it('마지막 라운드면 시간이 지나 최종 결과로 간다', () => {
+    for (let i = 0; i < 4; i++) { playRound(); clock.fire(); }
+    expect(s.phase).toBe('final');
+  });
+
+  it('방장이 아니어도 시간은 흐른다 — 타이머는 방장을 확인하지 않는다', () => {
+    playRound();
+    s.next('p2'); // 방장이 아니므로 무시된다
+    expect(s.phase).toBe('roundEnd');
+    clock.fire();
+    expect(s.phase).toBe('drawing');
+  });
+});
+
+describe('한 판 더 (수정 2)', () => {
+  function toFinal(): void {
+    s.start('p1');
+    for (let i = 0; i < 4; i++) { playRound(); s.next('p1'); }
+    expect(s.phase).toBe('final');
+  }
+
+  it('최종 화면에서 한 판 더를 누르면 로비로 돌아간다', () => {
+    toFinal();
+    s.again('p1');
+    expect(s.phase).toBe('lobby');
+  });
+
+  it('방장이 아니어도 한 판 더를 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다', () => {
+    toFinal();
+    s.again('p3');
+    expect(s.phase).toBe('lobby');
+  });
+
+  it('한 판 더를 하면 점수가 0으로 돌아간다', () => {
+    toFinal();
+    sent = [];
+    s.again('p1');
+    expect(msgsOfType('room').at(-1)!.players.every((p) => p.score === 0)).toBe(true);
+  });
+
+  it('한 판 더는 끊긴 사람을 방에서 내보낸다 — 방 코드를 다시 쓸 수 있어야 한다', () => {
+    toFinal();
+    s.disconnect('p4');
+    sent = [];
+    s.again('p1');
+    const players = msgsOfType('room').at(-1)!.players;
+    expect(players.map((p) => p.id)).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('한 판 더 뒤에 다시 시작할 수 있다', () => {
+    toFinal();
+    s.again('p1');
+    s.start('p1');
+    expect(s.phase).toBe('drawing');
+    expect(msgsOfType('room').at(-1)!.round).toBe(0);
+    expect(msgsOfType('room').at(-1)!.totalRounds).toBe(4);
+  });
+
+  it('한 판 더 뒤에 다시 들어온 사람은 옛 순위를 다시 받지 않는다', () => {
+    toFinal();
+    s.again('p1');
+    sent = [];
+    s.join('p2', 'p2');
+    expect(msgsTo('p2').filter((m) => m.t === 'final').length).toBe(0);
+  });
+
+  it('최종 화면이 아니면 한 판 더는 무시된다', () => {
+    s.start('p1');
+    s.again('p1');
+    expect(s.phase).toBe('drawing');
+  });
+});
+
+describe('이름 갱신 (수정 3)', () => {
+  it('같은 사람이 이름을 다시 보내면 갱신된다', () => {
+    s.join('p2', '진짜이름');
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.name).toBe('진짜이름');
+  });
+
+  it('이름이 비어 있으면 예전 이름을 지우지 않는다', () => {
+    s.join('p2', '진짜이름');
+    s.join('p2', '');
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.name).toBe('진짜이름');
+  });
+});
+
+describe('결과 화면이 스스로 완결적이다 (수정 4)', () => {
+  beforeEach(() => { s.start('p1'); });
+
+  /** p2가 정답, p3가 오답을 적고 라운드가 끝난다 */
+  function endWithAnswers(): void {
+    const word = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    drawStar('p1'); s.drawDone('p1');
+    s.answer('p2', word);
+    s.answer('p3', '하마');
+    clock.fire();
+  }
+
+  it('roundEnd에 마지막 시도의 답이 함께 실린다', () => {
+    endWithAnswers();
+    const end = msgsOfType('roundEnd').at(-1)!;
+    expect(end.answers.find((a) => a.playerId === 'p3')!.text).toBe('하마');
+    expect(end.answers.find((a) => a.playerId === 'p2')!.correct).toBe(true);
+  });
+
+  it('결과 화면에서 새로고침해도 답 목록이 그대로 온다', () => {
+    endWithAnswers();
+    sent = [];
+    s.join('p4', 'p4'); // 결과 화면에서 새로고침
+    const again = msgsTo('p4').filter((m) => m.t === 'roundEnd').at(-1) as Extract<ServerMsg, { t: 'roundEnd' }>;
+    expect(again.answers.find((a) => a.playerId === 'p3')!.text).toBe('하마');
+  });
+});
+
+describe('넘기기 정족수 재확인 (수정 5)', () => {
+  beforeEach(() => { s.start('p1'); });
+
+  it('남은 한 명이 끊기면 이미 눌러둔 넘기기로 바로 공개된다', () => {
+    drawStar('p1'); s.drawDone('p1');
+    s.skip('p2');
+    s.skip('p3');
+    sent = [];
+    s.disconnect('p4'); // 남은 한 명이 사라진다 — 아무도 버튼을 누를 수 없다
+    expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
+  });
+
+  it('맞히는 사람이 전부 끊기면 라운드를 접는다', () => {
+    drawStar('p1'); s.drawDone('p1');
+    s.disconnect('p2');
+    s.disconnect('p3');
+    s.disconnect('p4');
+    expect(s.phase).toBe('roundEnd');
+  });
+
+  it('그리기가 끝날 때 맞히는 사람이 없으면 바로 라운드를 접는다', () => {
+    drawStar('p1');
+    s.disconnect('p2'); s.disconnect('p3'); s.disconnect('p4');
+    s.drawDone('p1');
+    expect(s.phase).toBe('roundEnd');
+  });
+});
+
+describe('라운드 사이 상태 청소 (수정 6)', () => {
+  it('다음 라운드에 지난 라운드의 답·넘기기 표시가 남지 않는다', () => {
+    s.start('p1');
+    drawStar('p1'); s.drawDone('p1');
+    s.answer('p2', '아무거나');
+    s.skip('p3');
+    clock.fire(); clock.fire(); clock.fire();
+    s.next('p1');
+    const room = msgsOfType('room').at(-1)!;
+    expect(room.attempt).toBe(1);
+    expect(room.players.some((p) => p.answered)).toBe(false);
+    expect(room.players.some((p) => p.skipped)).toBe(false);
+  });
+
+  it('결과 화면에서도 시도 표시가 새 라운드 값으로 튀지 않는다', () => {
+    s.start('p1');
+    drawStar('p1'); s.drawDone('p1');
+    clock.fire(); clock.fire(); clock.fire();
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(3); // 결과 화면은 방금 끝난 시도를 보여준다
+    s.next('p1');
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(1);
+  });
+});
+
+describe('유령 정리 (수정 7)', () => {
+  it('로비로 돌아갈 때 끊긴 사람을 내보낸다', () => {
+    s.start('p1');
+    drawStar('p1'); s.drawDone('p1');
+    s.disconnect('p3'); s.disconnect('p4');
+    clock.fire(); clock.fire(); clock.fire();
+    s.next('p1');
+    expect(s.phase).toBe('lobby');
+    expect(msgsOfType('room').at(-1)!.players.map((p) => p.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('유령을 머릿수로 세어 게임을 시작하지 않는다', () => {
+    s.start('p1');
+    drawStar('p1'); s.drawDone('p1');
+    s.disconnect('p3'); s.disconnect('p4');
+    clock.fire(); clock.fire(); clock.fire();
+    s.next('p1');
+    s.start('p1'); // 실제로는 두 명뿐이다
+    expect(s.phase).toBe('lobby');
+  });
+
+  it('유령 때문에 진짜 사람을 방이 가득 찼다고 막지 않는다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9']);
+    s.start('p1');
+    for (const id of ['p5', 'p6', 'p7', 'p8', 'p9']) s.disconnect(id);
+    sent = [];
+    s.join('p10', '늦둥이');
+    expect(msgsTo('p10').filter((m) => m.t === 'error').length).toBe(0);
+    expect(msgsOfType('room').at(-1)!.players.some((p) => p.id === 'p10')).toBe(true);
+  });
+
+  it('로비로 돌아간 뒤 라운드 수가 실제 인원과 맞는다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+    s.start('p1');
+    drawStar('p1'); s.drawDone('p1');
+    s.disconnect('p5'); s.disconnect('p6');
+    clock.fire(); clock.fire(); clock.fire();
+    s.next('p1');
+    expect(s.phase).toBe('drawing'); // 4명 남았으니 계속 간다
+    s.disconnect('p3'); s.disconnect('p4');
+    playRound();
+    s.next(msgsOfType('room').at(-1)!.hostId);
+    expect(s.phase).toBe('lobby');
+    s.join('a', 'a'); s.join('b', 'b');
+    s.start('p1');
+    expect(msgsOfType('room').at(-1)!.totalRounds).toBe(4); // p1, p2, a, b
+  });
+});
+
+describe('한 게임 안에서 제시어가 겹치지 않는다 (수정 10)', () => {
+  it('라운드마다 다른 제시어가 나온다', () => {
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock,
+      pick: () => 0, // 늘 첫 번째를 고른다 — 제외 목록이 없으면 매번 같은 단어가 나온다
+      shuffle: (xs) => xs,
+      topics: [{ topic: '동물', words: ['호랑이', '펭귄', '코끼리', '토끼', '여우'] }],
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.start('p1');
+
+    const words: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      words.push((msgsTo(s.drawerId).filter((m) => m.t === 'word').at(-1) as Extract<ServerMsg, { t: 'word' }>).word);
+      playRound();
+      s.next('p1');
+    }
+    expect(new Set(words).size).toBe(4);
+  });
+
+  it('단어가 바닥나면 멈추지 않고 중복을 허용한다', () => {
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock,
+      pick: () => 0,
+      shuffle: (xs) => xs,
+      topics: [{ topic: '동물', words: ['호랑이', '펭귄'] }], // 4라운드에 2단어뿐
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.start('p1');
+    for (let i = 0; i < 4; i++) { playRound(); s.next('p1'); }
+    expect(s.phase).toBe('final'); // 무한 루프에 빠지지 않고 끝까지 간다
+  });
+
+  it('한 판 더를 하면 제시어 목록이 초기화된다', () => {
+    s.start('p1');
+    for (let i = 0; i < 4; i++) { playRound(); s.next('p1'); }
+    s.again('p1');
+    s.start('p1');
+    expect(s.phase).toBe('drawing'); // 단어 풀이 비어 멈추면 안 된다
+  });
+});

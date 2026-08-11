@@ -1,7 +1,7 @@
 import { Net } from './net';
 import { CircleCanvas } from './canvas';
 import type { Point } from '../shared/drawing';
-import type { AnswerRow, PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking, countdown, stopSpinHint,
@@ -26,8 +26,8 @@ let lastPhase = '';
 let lastRound = -1;
 let lastAttempt = -1;
 let drawerId = '';
-/** 직전 attemptResult의 답변들. 라운드가 바뀌면 비운다(Finding 3). */
-let lastAnswerRows = new Map<string, AnswerRow>();
+/** 이번 시도에 내 조각을 받았는가. 못 받았으면 이 라운드는 관전이다. */
+let hasSlices = false;
 
 const net = new Net(room, onMsg);
 net.onStatus((ok) => setTag('netTag', ok ? '연결됨' : '끊김'));
@@ -37,8 +37,13 @@ drawCanvas.onPoint((p: Point) => net.pushPoint(p));
 drawCanvas.onStroke(() => net.endStroke());
 
 const nameInput = $('nameInput') as HTMLInputElement;
-nameInput.value = params.get('name') ?? '';
-const join = () => net.send({ t: 'join', name: nameInput.value.trim() || '손님', cid: cid! });
+// 새로고침해도 이름을 잃지 않는다. 잃으면 서버가 이름을 받아줘도 다시 '손님'이 된다.
+nameInput.value = params.get('name') ?? sessionStorage.getItem('pizza-name') ?? '';
+const join = () => {
+  const name = nameInput.value.trim() || '손님';
+  sessionStorage.setItem('pizza-name', name === '손님' ? '' : name);
+  net.send({ t: 'join', name, cid: cid! });
+};
 join();
 nameInput.addEventListener('change', join);
 
@@ -46,14 +51,46 @@ $('startBtn').addEventListener('click', () => net.send({ t: 'start' }));
 $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));
 $('undoBtn').addEventListener('click', () => net.send({ t: 'undo' }));
 $('nextBtn').addEventListener('click', () => net.send({ t: 'next' }));
-$('skipBtn').addEventListener('click', () => net.send({ t: 'skip' }));
+$('againBtn').addEventListener('click', () => net.send({ t: 'again' }));
+$('skipBtn').addEventListener('click', () => {
+  // 적어둔 답을 먼저 밀어 보낸다. 이 넘기기로 정족수가 차면 서버가 그 자리에서
+  // 시도를 끝내버려, 250ms 뒤에 갈 예정이던 답은 영영 못 간다 — 다 쳐놓고 (무응답).
+  flushAnswer();
+  net.send({ t: 'skip' });
+});
 
 const answerInput = $('answerInput') as HTMLInputElement;
 let answerTimer = 0;
 answerInput.addEventListener('input', () => {
   clearTimeout(answerTimer);
-  answerTimer = window.setTimeout(() => net.send({ t: 'answer', text: answerInput.value }), 250);
+  answerTimer = window.setTimeout(() => {
+    answerTimer = 0;
+    net.send({ t: 'answer', text: answerInput.value });
+  }, 250);
 });
+// 엔터는 모두의 반사 신경이다. 여기서 안 받으면 아무 일도 안 일어난 것처럼 보인다.
+answerInput.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Enter') flushAnswer();
+});
+
+/** 디바운스 대기 중인 답을 지금 당장 보낸다 */
+function flushAnswer(): void {
+  if (!answerTimer) return;
+  clearTimeout(answerTimer);
+  answerTimer = 0;
+  net.send({ t: 'answer', text: answerInput.value });
+}
+
+/**
+ * 조각을 못 받은 사람에게 살아 있는 척하는 입력창을 주지 않는다.
+ * 라운드 도중 합류자와, 조각을 나눌 때 끊겨 있던 사람이 여기 해당한다.
+ * 그대로 두면 열심히 답을 쳐 넣지만 서버는 조용히 버린다.
+ */
+function setSpectating(on: boolean): void {
+  answerInput.disabled = on;
+  ($('skipBtn') as HTMLButtonElement).disabled = on;
+  $('spectateNote').textContent = on ? '이번 라운드는 관전입니다 — 다음 라운드부터 참여합니다' : '';
+}
 
 function onMsg(m: ServerMsg): void {
   if (m.t === 'joined') { youId = m.youId; return; }
@@ -75,7 +112,7 @@ function onMsg(m: ServerMsg): void {
     // 시도 사이에는 phase가 안 바뀌므로 라운드 번호를 트리거로 쓴다.
     if (m.round !== lastRound) {
       lastRound = m.round;
-      lastAnswerRows.clear();
+      hasSlices = false;
       renderAnswers('lastAnswers', [], names);
     }
 
@@ -83,6 +120,7 @@ function onMsg(m: ServerMsg): void {
     if (m.attempt !== lastAttempt) {
       lastAttempt = m.attempt;
       answerInput.value = '';
+      hasSlices = false;
     }
 
     ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
@@ -96,6 +134,7 @@ function onMsg(m: ServerMsg): void {
     if (m.phase === 'guessing') {
       $('guessNote').textContent =
         `시도 ${m.attempt}/${m.maxAttempts} — 못 맞히면 조각이 하나 늘어납니다`;
+      setSpectating(!hasSlices);
     }
     return;
   }
@@ -105,12 +144,13 @@ function onMsg(m: ServerMsg): void {
 
   if (m.t === 'slices') {
     sliceCount = m.count;
+    hasSlices = true;
     renderSlices(m.slices, sliceCount);
+    setSpectating(false);
     return;
   }
 
   if (m.t === 'attemptResult') {
-    lastAnswerRows = new Map(m.answers.map((r) => [r.playerId, r]));
     renderAnswers('lastAnswers', m.answers, names);
     return;
   }
@@ -120,9 +160,13 @@ function onMsg(m: ServerMsg): void {
     setTag('revealWord', `정답: ${m.word}`);
     // 결과 화면의 핵심은 점수가 아니라 다들 뭐라고 답했는가다(Finding 3).
     // 출제자는 답을 낸 적이 없으니 (무응답)이 아니라 점수 변화만 보여준다.
+    //
+    // 답은 이 메시지에 실려 온 것만 쓴다. 예전엔 attemptResult로 채워둔 지역 맵을
+    // 봤는데, 결과 화면에서 새로고침하면 그 맵이 비어 있어 나만 전원 (무응답)으로 보였다.
+    const rows = new Map(m.answers.map((r) => [r.playerId, r]));
     renderAnswers('revealAnswers', m.scores.map((s) => {
       const deltaText = s.delta > 0 ? `+${s.delta}점` : `${s.delta}점`;
-      const row = lastAnswerRows.get(s.playerId);
+      const row = rows.get(s.playerId);
       const text = s.playerId === drawerId
         ? deltaText
         : row?.text

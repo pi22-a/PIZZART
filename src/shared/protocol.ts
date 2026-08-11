@@ -23,7 +23,9 @@ export type ClientMsg =
   | { t: 'drawDone' }
   | { t: 'answer'; text: string }
   | { t: 'skip' }
-  | { t: 'next' };
+  | { t: 'next' }
+  /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
+  | { t: 'again' };
 
 export interface AnswerRow {
   playerId: string;
@@ -74,6 +76,14 @@ export type ServerMsg =
       scores: Array<{ playerId: string; delta: number; total: number }>;
       /** 아무도 못 맞혔으면 빈 배열 */
       correct: string[];
+      /**
+       * 마지막 시도에 다들 뭐라고 적었는가. 결과 화면의 알맹이다.
+       *
+       * attemptResult에도 같은 내용이 있지만 여기에 한 번 더 싣는다 —
+       * 결과 화면에서 새로고침한 사람은 attemptResult를 못 받으므로,
+       * 이 메시지 하나만으로 화면이 완성되어야 한다.
+       */
+      answers: AnswerRow[];
     }
   | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
   | { t: 'error'; msg: string };

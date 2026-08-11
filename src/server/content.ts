@@ -8,6 +8,8 @@ export interface Rules {
   sliceCountMin: number;
   drawSeconds: number;
   guessSeconds: number;
+  /** 결과 화면이 스스로 다음 라운드로 넘어가기까지. 방장이 화면을 잠가도 방이 멈추지 않게 한다. */
+  roundEndSeconds: number;
   maxAttempts: number;
   attemptPoints: number[];
   drawerPointPerCorrect: number;
