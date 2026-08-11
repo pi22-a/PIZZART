@@ -1,7 +1,7 @@
 import { Net } from './net';
 import { CircleCanvas } from './canvas';
 import type { Point } from '../shared/drawing';
-import type { PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { AnswerRow, PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking, countdown, stopSpinHint,
@@ -23,6 +23,11 @@ let hostId = '';
 let names = new Map<string, string>();
 let sliceCount = 8;
 let lastPhase = '';
+let lastRound = -1;
+let lastAttempt = -1;
+let drawerId = '';
+/** 직전 attemptResult의 답변들. 라운드가 바뀌면 비운다(Finding 3). */
+let lastAnswerRows = new Map<string, AnswerRow>();
 
 const net = new Net(room, onMsg);
 net.onStatus((ok) => setTag('netTag', ok ? '연결됨' : '끊김'));
@@ -63,13 +68,29 @@ function onMsg(m: ServerMsg): void {
 
     const me = m.players.find((p) => p.id === youId);
     const iDraw = me?.isDrawer === true;
+    const drawer = m.players.find((p) => p.isDrawer);
+    if (drawer) drawerId = drawer.id;
+
+    // 라운드 번호가 바뀌면 지난 라운드의 답변 잔상을 지운다(Finding 2, 3).
+    // 시도 사이에는 phase가 안 바뀌므로 라운드 번호를 트리거로 쓴다.
+    if (m.round !== lastRound) {
+      lastRound = m.round;
+      lastAnswerRows.clear();
+      renderAnswers('lastAnswers', [], names);
+    }
+
+    // 시도 번호가 바뀌면 입력창을 비운다(Finding 4). phase는 시도마다 바뀌지 않는다.
+    if (m.attempt !== lastAttempt) {
+      lastAttempt = m.attempt;
+      answerInput.value = '';
+    }
 
     ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
     ($('nextBtn') as HTMLButtonElement).disabled = youId !== hostId;
     $('lobbyNote').textContent =
       youId === hostId ? '방장입니다. 4명이 모이면 시작하세요.' : '방장이 시작하기를 기다립니다.';
 
-    if (m.phase !== lastPhase) onPhase(m.phase, iDraw, m.players);
+    if (m.phase !== lastPhase) onPhase(m.phase, iDraw, m.players, m.topic);
     lastPhase = m.phase;
 
     if (m.phase === 'guessing') {
@@ -89,6 +110,7 @@ function onMsg(m: ServerMsg): void {
   }
 
   if (m.t === 'attemptResult') {
+    lastAnswerRows = new Map(m.answers.map((r) => [r.playerId, r]));
     renderAnswers('lastAnswers', m.answers, names);
     return;
   }
@@ -96,11 +118,18 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'roundEnd') {
     sliceCount = m.sliceCount;
     setTag('revealWord', `정답: ${m.word}`);
-    renderAnswers('revealAnswers', m.scores.map((s) => ({
-      playerId: s.playerId,
-      text: s.delta > 0 ? `+${s.delta}점 (합계 ${s.total})` : `합계 ${s.total}`,
-      correct: m.correct.includes(s.playerId),
-    })), names);
+    // 결과 화면의 핵심은 점수가 아니라 다들 뭐라고 답했는가다(Finding 3).
+    // 출제자는 답을 낸 적이 없으니 (무응답)이 아니라 점수 변화만 보여준다.
+    renderAnswers('revealAnswers', m.scores.map((s) => {
+      const deltaText = s.delta > 0 ? `+${s.delta}점` : `${s.delta}점`;
+      const row = lastAnswerRows.get(s.playerId);
+      const text = s.playerId === drawerId
+        ? deltaText
+        : row?.text
+          ? `${row.text} (${deltaText})`
+          : '(무응답)';
+      return { playerId: s.playerId, text, correct: m.correct.includes(s.playerId) };
+    }), names);
     revealRound($('revealCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.owners, youId);
     return;
   }
@@ -109,20 +138,23 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'error') { alert(m.msg); return; }
 }
 
-function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[]): void {
+function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: string): void {
   if (phase !== 'guessing') stopSpinHint();
 
   if (phase === 'lobby') return show('lobby');
   if (phase === 'drawing') {
     if (iDraw) { drawCanvas.clear(); return show('draw'); }
     const drawer = players.find((p) => p.isDrawer);
-    $('waitTopic').textContent = document.getElementById('topicTag')!.textContent ?? '';
+    $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
     $('waitWho').textContent = `${drawer?.name ?? '누군가'} 님이 그리는 중입니다`;
     return show('wait');
   }
   if (phase === 'guessing') {
-    if (iDraw) { $('waitWho').textContent = '모두가 당신의 그림을 맞히는 중입니다'; return show('wait'); }
-    answerInput.value = '';
+    if (iDraw) {
+      $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
+      $('waitWho').textContent = '모두가 당신의 그림을 맞히는 중입니다';
+      return show('wait');
+    }
     return show('guess');
   }
   if (phase === 'roundEnd') return show('round');

@@ -1,5 +1,5 @@
 import type { Point } from '../shared/drawing';
-import { CENTER, RADIUS } from '../shared/drawing';
+import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import { drawStrokes, fitCanvas } from './ink';
 
 /**
@@ -15,6 +15,17 @@ export function drawSlice(el: HTMLCanvasElement, strokes: Point[][], sliceCount:
 
   const half = Math.PI / sliceCount;
   const up = -Math.PI / 2;
+
+  // 조각은 1000x1000 칸의 위쪽 좁은 영역에만 그려지므로(꼭짓점이 중심, 호가 위쪽 절반까지),
+  // 조각의 바운딩 박스를 계산해 화면 가득 차도록 확대·중앙 정렬한다.
+  const boxW = 2 * RADIUS * Math.sin(half);
+  const boxH = RADIUS;
+  const zoom = 0.92 * Math.min(CANVAS / boxW, CANVAS / boxH);
+  const boxCx = CENTER[0];
+  const boxCy = CENTER[1] - RADIUS / 2;
+  ctx.translate(CANVAS / 2, CANVAS / 2);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-boxCx, -boxCy);
 
   // 조각 모양(반죽)
   ctx.beginPath();
