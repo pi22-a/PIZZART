@@ -47,6 +47,8 @@ node scripts/fake-player.mjs 방코드 봇1 --draw --answer=피자 --skip
 
 | 값 | 뜻 |
 |---|---|
+| `minPlayers` | 시작에 필요한 최소 인원. 진행 중에는 이보다 하나 적어도 계속된다 |
+| `maxPlayers` | 방 정원 |
 | `sliceCountMin` | 조각 수의 최솟값. 맞히는 사람이 더 많으면 인원에 맞춰 늘어난다 |
 | `drawSeconds` | 그리는 시간 |
 | `guessSeconds` | 시도 한 번의 추론 시간 |
