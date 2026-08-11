@@ -357,6 +357,15 @@ export class Session {
       if (this.hostId === playerId) this.hostId = this.players[0]?.id ?? '';
     } else {
       this.players[idx].connected = false;
+      // 방장이 게임 도중(로비가 아닐 때) 끊기면 hostId를 그대로 두지 않는다.
+      // next()가 방장만 통과시키는 유일한 문이라, hostId가 끊긴 사람을 계속
+      // 가리키면 결과 화면에서 아무도 다음으로 못 넘겨 방이 영구히 멈춘다.
+      // 살아있는 사람이 없으면 hostId를 비워둔다 — 방이 비었으니 상관없다.
+      // 원래 방장이 돌아와도 이 자리를 돌려주지 않는다: join()은 hostId가
+      // 비어 있을 때만 새로 채우므로, 넘어간 방장을 몰래 바꿔치기하지 않는다.
+      if (this.hostId === playerId) {
+        this.hostId = this.players.find((p) => p.connected)?.id ?? '';
+      }
     }
     this.broadcastRoom();
   }

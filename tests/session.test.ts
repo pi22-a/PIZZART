@@ -76,6 +76,17 @@ describe('로비', () => {
     expect(s.phase).toBe('lobby');
   });
 
+  it('로비에서 방장이 나가도 남은 사람이 시작할 수 있다', () => {
+    // 최소 인원(4명)을 밑돌지 않도록 5명으로 시작한다 — 아니면 방장 승계와
+    // 무관하게 인원 부족으로 시작이 막혀 이 테스트가 무엇을 증명하는지 흐려진다.
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.disconnect('p1'); // 방장이 로비에서 나간다 — 로비에서는 자리가 통째로 사라진다
+    const newHost = msgsOfType('room').at(-1)!.hostId;
+    expect(newHost).not.toBe('');
+    s.start(newHost);
+    expect(s.phase).toBe('drawing');
+  });
+
   it('라운드 수는 시작 시점 인원으로 고정된다', () => {
     s.start('p1');
     expect(msgsOfType('room').at(-1)!.totalRounds).toBe(4);
@@ -377,11 +388,16 @@ describe('이탈과 재입장', () => {
     s.drawDone('p1');
     clock.fire(); clock.fire(); clock.fire();
     expect(s.phase).toBe('roundEnd');
+    // 원본과 똑같은 참조인지 확인하기 위해, 브로드캐스트 직후와 재입장 사이에
+    // 상태를 바꾼다(p3 이탈). 다시 계산하는 구현이면 여기서 값이 달라질 수 있지만,
+    // 그때 그 메시지를 그대로 돌려주는 구현이면 이탈과 무관하게 값이 그대로다.
+    const before = msgsOfType('roundEnd').at(-1)!;
+    s.disconnect('p3');
     sent = [];
     s.join('p2', 'p2');
     const again = msgsTo('p2').filter((m) => m.t === 'roundEnd');
     expect(again.length).toBe(1);
-    expect((again[0] as Extract<ServerMsg, { t: 'roundEnd' }>).word.length).toBeGreaterThan(0);
+    expect(again[0]).toEqual(before);
   });
 
   it('최종 화면에서 돌아오면 순위를 다시 받는다', () => {
@@ -391,9 +407,15 @@ describe('이탈과 재입장', () => {
       s.next('p1');
     }
     expect(s.phase).toBe('final');
+    // 위와 같은 이유로, 최종 화면이 나간 뒤 누군가 이탈해도(p4) 이미 본 순위는
+    // 바뀌면 안 된다 — 다시 계산했다면 이탈자 처리에 따라 값이 달라질 수 있다.
+    const before = msgsOfType('final').at(-1)!;
+    s.disconnect('p4');
     sent = [];
     s.join('p3', 'p3');
-    expect(msgsTo('p3').filter((m) => m.t === 'final').length).toBe(1);
+    const again = msgsTo('p3').filter((m) => m.t === 'final');
+    expect(again.length).toBe(1);
+    expect(again[0]).toEqual(before);
   });
 
   it('맞히는 사람이 돌아오면 받았던 조각을 그대로 다시 받는다', () => {
@@ -466,5 +488,53 @@ describe('이탈과 재입장', () => {
     s.next('p1');
     expect(s.phase).toBe('lobby');
     expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.score).toBe(3);
+  });
+
+  // 체크포인트 B에서 걸린 버그다. 방장이 게임 도중(로비가 아닐 때) 끊기면 hostId가
+  // 그대로 남아, 결과 화면에서 아무도 다음으로 넘길 수 없어 방이 영구히 멈춘다.
+  it('방장이 라운드 도중 끊기면 살아있는 다른 사람에게 방장이 넘어간다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    clock.fire(); clock.fire(); clock.fire();
+    expect(s.phase).toBe('roundEnd');
+    s.disconnect('p1'); // 방장(출제자)이 결과 화면에서 나간다
+    const hostId = msgsOfType('room').at(-1)!.hostId;
+    expect(hostId).not.toBe('p1');
+    expect(hostId).not.toBe('');
+  });
+
+  it('새 방장이 다음을 눌러 라운드를 진행시킬 수 있다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    clock.fire(); clock.fire(); clock.fire();
+    s.disconnect('p1');
+    // newHost를 room 메시지에서 다시 읽지 않고 p2로 못박는다 — 버그가 있으면
+    // hostId가 여전히 'p1'을 가리켜, 그 값을 그대로 썼을 때 우연히 통과할 수 있다.
+    s.next('p2');
+    expect(s.phase).toBe('drawing');
+  });
+
+  // 원래 방장이 돌아와도 자리를 되찾지 않는다 — 진행을 맡고 있던 사람 밑에서
+  // 방장을 몰래 바꿔치기하면 누가 방장인지 더 헷갈린다.
+  it('원래 방장이 돌아와도 방장 자리를 되찾지 않는다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    clock.fire(); clock.fire(); clock.fire();
+    s.disconnect('p1');
+    const newHost = msgsOfType('room').at(-1)!.hostId;
+    sent = [];
+    s.join('p1', 'p1'); // 원래 방장이 재접속한다
+    expect(msgsOfType('room').at(-1)!.hostId).toBe(newHost);
+  });
+
+  it('방장이 끊길 때 남은 사람이 아무도 없어도 죽지 않는다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    clock.fire(); clock.fire(); clock.fire();
+    s.disconnect('p2');
+    s.disconnect('p3');
+    s.disconnect('p4');
+    expect(() => s.disconnect('p1')).not.toThrow(); // 방장까지 끊긴다 — 아무도 안 남는다
+    expect(msgsOfType('room').at(-1)!.hostId).toBe('');
   });
 });
