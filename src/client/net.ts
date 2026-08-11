@@ -1,5 +1,5 @@
 import type { ClientMsg, ServerMsg } from '../shared/protocol';
-import type { Point } from '../shared/glyph';
+import type { Point } from '../shared/drawing';
 
 const FLUSH_MS = 50;
 
