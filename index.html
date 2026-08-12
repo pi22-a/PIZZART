@@ -35,9 +35,16 @@
   .answers li { padding:6px 10px; background:#2b2118; border-radius:8px; margin-bottom:6px; }
   .answers li.ok { background:#2f4a2a; }
   .muted { opacity:.6; font-size:13px; }
-  .shared { outline:2px dashed var(--crust); }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
-  .slices canvas { width:150px; }
+  /* 조각마다 캔버스+라벨을 묶는 칸. 내 조각과 공개된 조각을 한눈에 구별해야 한다 —
+     안 그러면 다들 같은 그림을 받았다고 착각한다(설명하고 맞히는 게 게임의 전부인데). */
+  .slice { display:flex; flex-direction:column; align-items:center; gap:4px; width:150px; }
+  .slice .tag { font-size:11px; font-weight:700; }
+  .slice.mine canvas { outline:3px solid var(--sauce); }
+  .slice.mine .tag { color:var(--sauce); }
+  .slice.shared { opacity:.6; }
+  .slice.shared canvas { outline:2px dashed var(--crust); }
+  .slice.shared .tag { color:var(--crust); font-weight:400; }
 </style>
 </head>
 <body>

@@ -60,6 +60,18 @@ function slices(): ServerMsg {
   return { t: 'slices', count: 8, slices: [{ id: 'a', strokes: [[[500, 500], [600, 500]]], shared: false }] };
 }
 
+function slicesWithShared(): ServerMsg {
+  return {
+    t: 'slices',
+    count: 8,
+    slices: [
+      { id: 'a', strokes: [[[500, 500], [600, 500]]], shared: false },
+      { id: 'b', strokes: [[[500, 500], [600, 500]]], shared: true },
+      { id: 'c', strokes: [[[500, 500], [600, 500]]], shared: true },
+    ],
+  };
+}
+
 /** 내 조각까지 받아 정상적으로 참여 중인 추론 화면 */
 async function guessing(): Promise<void> {
   await boot();
@@ -206,6 +218,23 @@ describe('한 판 더 버튼 (수정 2)', () => {
     deliver({ t: 'joined', youId: 'me' }); // hostId는 'd'다
     deliver(room({ phase: 'final' }));
     expect($<HTMLButtonElement>('againBtn').disabled).toBe(false);
+  });
+});
+
+describe('내 조각과 공개된 조각을 라벨로 구별한다 (버그 2)', () => {
+  it('내 조각에는 "내 조각", 공개 조각에는 "모두 공개"가 붙는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room());
+    deliver(slicesWithShared());
+
+    const items = [...$('sliceBox').children] as HTMLElement[];
+    expect(items.length).toBe(3);
+    expect(items[0].classList.contains('mine')).toBe(true);
+    expect(items[0].querySelector('.tag')?.textContent).toBe('내 조각');
+    expect(items[1].classList.contains('shared')).toBe(true);
+    expect(items[1].querySelector('.tag')?.textContent).toBe('모두 공개');
+    expect(items[2].classList.contains('shared')).toBe(true);
   });
 });
 

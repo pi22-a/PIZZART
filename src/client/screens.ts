@@ -58,9 +58,17 @@ export function renderSlices(
   const box = $('sliceBox');
   box.innerHTML = '';
   for (const s of slices) {
+    // 캔버스 하나만 덜렁 붙이면 내 조각과 공개된 조각이 구별 안 된다 — 감싸는 칸에
+    // 라벨을 달아 "이건 나만 보는 것" / "이건 다 같이 본 것"을 글자로 못박는다.
+    const wrap = document.createElement('div');
+    wrap.className = s.shared ? 'slice shared' : 'slice mine';
     const c = document.createElement('canvas');
-    if (s.shared) c.className = 'shared';
-    box.appendChild(c);
+    wrap.appendChild(c);
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.textContent = s.shared ? '모두 공개' : '내 조각';
+    wrap.appendChild(tag);
+    box.appendChild(wrap);
     // 붙인 뒤에 그려야 clientWidth가 잡힌다
     drawSlice(c, s.strokes, sliceCount);
   }

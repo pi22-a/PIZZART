@@ -26,7 +26,11 @@ export function fitCanvas(el: HTMLCanvasElement): number {
   const dpr = window.devicePixelRatio || 1;
   const size = Math.max(1, Math.min(el.clientWidth, el.clientHeight));
   const px = Math.round(size * dpr);
-  if (el.width !== px) {
+  // width만 검사하면 안 된다: 새로 만든 <canvas>는 기본값이 300x150이라,
+  // CSS 150px에 dpr 2가 곱해져 목표 px가 정확히 300이 되는 흔한 경우
+  // "이미 300이니 됐다"고 오판하고 height 150을 그대로 남긴다.
+  // 그러면 정사각형이어야 할 비트맵이 300x150으로 눌린 채 그려진다.
+  if (el.width !== px || el.height !== px) {
     el.width = px;
     el.height = px;
   }
