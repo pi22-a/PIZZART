@@ -37,15 +37,39 @@ drawCanvas.onPoint((p: Point) => net.pushPoint(p));
 drawCanvas.onStroke(() => net.endStroke());
 
 const nameInput = $('nameInput') as HTMLInputElement;
+const nameSaveBtn = $('nameSaveBtn') as HTMLButtonElement;
+const NAME_HINT_DEFAULT = '엔터를 쳐도 저장됩니다 · 최대 12자';
 // 새로고침해도 이름을 잃지 않는다. 잃으면 서버가 이름을 받아줘도 다시 '손님'이 된다.
 nameInput.value = params.get('name') ?? sessionStorage.getItem('pizza-name') ?? '';
-const join = () => {
-  const name = nameInput.value.trim() || '손님';
-  sessionStorage.setItem('pizza-name', name === '손님' ? '' : name);
-  net.send({ t: 'join', name, cid: cid! });
-};
+/** 지금까지 서버에 확정된 이름. 빈 이름 저장 시도를 되돌릴 때 여기로 복원한다. */
+let lastName = nameInput.value.trim() || '손님';
+const join = () => net.send({ t: 'join', name: lastName, cid: cid! });
 join();
-nameInput.addEventListener('change', join);
+
+/**
+ * 저장 버튼 클릭·엔터·change(포커스 이탈) 세 경로가 전부 여기로 모인다.
+ * 세 경로가 각자 다른 걸 보내면 "엔터가 저장 버튼과 같은 일을 하는지" 아무도 확신할 수 없다.
+ *
+ * 이름을 비우고 저장하면 서버는 조용히 '손님'으로 바꿔버린다 — 파티에서 그렇게 되면
+ * 누가 자기인지 아무도 못 알아본다. 그래서 빈 이름은 거부하고 이전 이름을 지킨다.
+ */
+const saveName = () => {
+  const raw = nameInput.value.trim();
+  if (!raw) {
+    nameInput.value = lastName;
+    setTag('nameHint', `이름을 비워둘 수 없어 이전 이름(${lastName})을 유지합니다`);
+    return;
+  }
+  lastName = raw;
+  sessionStorage.setItem('pizza-name', raw);
+  net.send({ t: 'join', name: raw, cid: cid! });
+  setTag('nameHint', NAME_HINT_DEFAULT);
+};
+nameSaveBtn.addEventListener('click', saveName);
+nameInput.addEventListener('change', saveName);
+nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Enter') saveName();
+});
 
 $('startBtn').addEventListener('click', () => net.send({ t: 'start' }));
 $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));

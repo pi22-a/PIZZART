@@ -290,6 +290,58 @@ describe('플레이어 카드 렌더링', () => {
   });
 });
 
+describe('로비 레이아웃 — 이름 블록과 저장 경로 (레이아웃 개선)', () => {
+  it('이름 라벨, 저장 버튼, 엔터 힌트가 마크업에 존재한다', async () => {
+    await boot();
+    const label = document.querySelector('label[for="nameInput"]');
+    expect(label?.textContent).toBe('이름');
+    expect($('nameSaveBtn').textContent).toBe('저장');
+    expect($('nameHint').textContent).toBe('엔터를 쳐도 저장됩니다 · 최대 12자');
+  });
+
+  it('저장 버튼 클릭이 join 메시지를 보낸다', async () => {
+    await boot();
+    const input = $<HTMLInputElement>('nameInput');
+    input.value = '피자';
+    $('nameSaveBtn').click();
+    const joinMsg = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
+    expect(joinMsg?.name).toBe('피자');
+  });
+
+  it('엔터 keydown이 저장 버튼과 같은 join 메시지를 보낸다', async () => {
+    await boot();
+    const input = $<HTMLInputElement>('nameInput');
+    input.value = '피자';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const joinMsg = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
+    expect(joinMsg?.name).toBe('피자');
+  });
+
+  it('change(포커스 이탈)도 같은 join 메시지를 보낸다 — 세 경로가 일치해야 한다', async () => {
+    await boot();
+    const input = $<HTMLInputElement>('nameInput');
+    input.value = '피자';
+    input.dispatchEvent(new Event('change'));
+    const joinMsg = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
+    expect(joinMsg?.name).toBe('피자');
+  });
+
+  it('빈 이름으로 저장하면 손님이 되지 않고 이전 이름을 유지한다', async () => {
+    await boot();
+    const input = $<HTMLInputElement>('nameInput');
+    input.value = '피자';
+    $('nameSaveBtn').click();
+    live.out = [];
+
+    input.value = '';
+    $('nameSaveBtn').click();
+
+    expect(live.out.some((m) => m.t === 'join')).toBe(false);
+    expect(input.value).toBe('피자');
+    expect($('nameHint').textContent).toContain('피자');
+  });
+});
+
 describe('로비 카운트 라인', () => {
   it('참가자가 부족하면 더 필요한 인원을 보여준다', async () => {
     await boot();

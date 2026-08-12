@@ -36,6 +36,11 @@
   .answers li { padding:6px 10px; background:#2b2118; border-radius:8px; margin-bottom:6px; }
   .answers li.ok { background:#2f4a2a; }
   .muted { opacity:.6; font-size:13px; }
+  /* 로비를 이름 입력 → 인원 현황 → 시작, 세 블록으로 눈이 순서대로 훑도록 나눈다.
+     이름 저장과 시작은 서로 다른 행동이라 한 줄에 붙여두면 하나의 흐름처럼 읽힌다. */
+  .lobby-name label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
+  .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid #3d3227; }
+  .lobby-start button { font-size:18px; padding:14px 28px; }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
   /* 조각마다 캔버스+라벨을 묶는 칸. 내 조각과 공개된 조각을 한눈에 구별해야 한다 —
      안 그러면 다들 같은 그림을 받았다고 착각한다(설명하고 맞히는 게 게임의 전부인데). */
@@ -63,11 +68,20 @@
     <h1>P I Z Z A</h1>
     <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
       자기 조각이 어디였는지 아무도 모릅니다. 통화를 켜고 서로에게 설명하세요.</p>
-    <div class="bar">
-      <input id="nameInput" placeholder="이름" maxlength="12" />
+    <div class="lobby-name">
+      <label for="nameInput">이름</label>
+      <div class="bar">
+        <input id="nameInput" placeholder="이름" maxlength="12" />
+        <button id="nameSaveBtn">저장</button>
+      </div>
+      <p class="muted" id="nameHint">엔터를 쳐도 저장됩니다 · 최대 12자</p>
+    </div>
+
+    <p class="muted" id="lobbyNote"></p>
+
+    <div class="lobby-start">
       <button id="startBtn">시작</button>
     </div>
-    <p class="muted" id="lobbyNote"></p>
   </section>
 
   <section class="screen" id="s-draw">
