@@ -9,9 +9,10 @@ import { fileURLToPath } from 'node:url';
 import type { ClientMsg, ServerMsg } from '../src/shared/protocol';
 
 const root = pjoin(dirname(fileURLToPath(import.meta.url)), '..');
-const bodyHtml = readFileSync(pjoin(root, 'index.html'), 'utf8')
-  .split('<body>')[1]
-  .split('</body>')[0];
+const indexHtml = readFileSync(pjoin(root, 'index.html'), 'utf8');
+// #sliceBox 위쪽 여백(수정 2)은 CSS 문제라 <style>도 실제로 붙여야 getComputedStyle로 잴 수 있다.
+const styleHtml = indexHtml.split('<style>')[1].split('</style>')[0];
+const bodyHtml = indexHtml.split('<body>')[1].split('</body>')[0];
 
 /** main.ts가 만드는 웹소켓을 가로챈다 */
 class FakeSocket {
@@ -33,6 +34,12 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 async function boot(): Promise<void> {
   vi.resetModules();
+  if (!document.getElementById('test-style')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'test-style';
+    styleEl.textContent = styleHtml;
+    document.head.appendChild(styleEl);
+  }
   document.body.innerHTML = bodyHtml;
   await import('../src/client/main');
   live.out = [];
@@ -108,7 +115,7 @@ describe('넘기기가 적어둔 답을 버리지 않는다 (수정 8)', () => {
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
     // 디바운스 250ms가 아직 안 지났다 — 여기서 넘기기를 누르는 게 실제 상황이다
-    $('skipBtn').click();
+    $('hintBtn').click();
 
     const kinds = live.out.map((m) => m.t);
     expect(kinds).toContain('answer');
@@ -121,7 +128,7 @@ describe('넘기기가 적어둔 답을 버리지 않는다 (수정 8)', () => {
     const input = $<HTMLInputElement>('answerInput');
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
-    $('skipBtn').click();
+    $('hintBtn').click();
     vi.advanceTimersByTime(1000);
     expect(live.out.filter((m) => m.t === 'answer').length).toBe(1);
   });
@@ -143,14 +150,16 @@ describe('관전자에게 살아 있는 척하는 화면을 주지 않는다 (�
     deliver({ t: 'joined', youId: 'me' });
     deliver(room()); // 조각은 오지 않는다 — 라운드 도중 합류자다
     expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
-    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(true);
+    expect($<HTMLButtonElement>('hintBtn').disabled).toBe(true);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(true);
     expect($('spectateNote').textContent).toContain('관전');
   });
 
   it('조각을 받으면 입력이 열린다', async () => {
     await guessing();
     expect($<HTMLInputElement>('answerInput').disabled).toBe(false);
-    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(false);
+    expect($<HTMLButtonElement>('hintBtn').disabled).toBe(false);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(false);
     expect($('spectateNote').textContent).toBe('');
   });
 
@@ -404,5 +413,121 @@ describe('로비 카운트 라인', () => {
       minPlayers: 4,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
+  });
+});
+
+describe('조각 액자가 인원 알약과 붙지 않는다 (Fix 2)', () => {
+  it('.screen에 위쪽 여백이 생겨 #sliceBox가 인원 줄에서 떨어진다', async () => {
+    await boot();
+    // 인원 알약 줄(#players)은 .screen 바깥의 형제 요소라, .screen 자체의 margin-top이
+    // 곧 "인원 줄 하단 ↔ 화면 내용 상단" 사이의 간격이다. 오너가 잰 실측(0px)이 재발하면
+    // 여기서 바로 0px로 돌아와 잡힌다.
+    const style = getComputedStyle($('s-guess'));
+    expect(style.marginTop).not.toBe('0px');
+    expect(style.marginTop).toBe('16px');
+  });
+});
+
+describe('힌트받기 집계와 눌림 표시 (Fix 3)', () => {
+  const withSkips = (skips: Record<string, boolean>) => room({
+    players: PLAYERS.map((p) => ({ ...p, skipped: skips[p.id] ?? false })),
+  });
+
+  it('출제자를 뺀 접속 중 인원 기준으로 집계가 뜬다', async () => {
+    await guessing();
+    deliver(withSkips({ me: true }));
+    // 게서는 me, x 둘뿐(d는 출제자라 제외) — 그중 1명이 눌렀다.
+    expect($('hintTally').textContent).toBe('1/2명이 눌렀습니다');
+  });
+
+  it('전원이 누르면 2/2로 올라간다', async () => {
+    await guessing();
+    deliver(withSkips({ me: true, x: true }));
+    expect($('hintTally').textContent).toBe('2/2명이 눌렀습니다');
+  });
+
+  it('내가 누른 상태가 버튼 자체에 pressed 클래스로 나타난다', async () => {
+    await guessing();
+    expect($('hintBtn').classList.contains('pressed')).toBe(false);
+    deliver(withSkips({ me: true }));
+    expect($('hintBtn').classList.contains('pressed')).toBe(true);
+  });
+
+  it('접속이 끊긴 사람은 집계 분모에서 빠진다', async () => {
+    await guessing();
+    deliver(room({
+      players: [
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true },
+        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false },
+        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false },
+      ],
+    }));
+    expect($('hintTally').textContent).toBe('1/1명이 눌렀습니다');
+  });
+});
+
+describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
+  it('제출 버튼은 디바운스를 기다리지 않고 즉시 보낸다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '코끼리';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+    expect(live.out.filter((m) => m.t === 'answer').length).toBe(1);
+    expect((live.out[0] as { text: string }).text).toBe('코끼리');
+  });
+
+  it('제출하면 "제출됨" 확인이 뜬다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '코끼리';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+  });
+
+  it('엔터도 제출 버튼과 똑같이 확인을 켠다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '펭귄';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+    expect(live.out.filter((m) => m.t === 'answer').length).toBe(1);
+  });
+
+  it('디바운스로만 자동 저장됐을 때는 확인이 뜨지 않는다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '코끼리';
+    input.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(300);
+    expect(live.out.filter((m) => m.t === 'answer').length).toBe(1); // 자동 저장 자체는 나갔다
+    expect($('answerSavedNote').textContent).toBe(''); // 확인 표시는 명시적 제출에서만
+  });
+
+  it('제출 뒤 글자를 고치면 확인이 사라진다 — 화면이 거짓말하면 안 된다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '코끼리';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+
+    input.value = '코끼리다';
+    input.dispatchEvent(new Event('input'));
+    expect($('answerSavedNote').textContent).toBe('');
+  });
+
+  it('새 시도가 시작되면 지난 시도의 확인 표시가 넘어오지 않는다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '코끼리';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+
+    deliver(room({ attempt: 2 }));
+    expect($('answerSavedNote').textContent).toBe('');
   });
 });

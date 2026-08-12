@@ -4,7 +4,7 @@ import type { Point } from '../shared/drawing';
 import type { PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
-  renderRanking, countdown, stopSpinHint, renderLobbyNote,
+  renderRanking, countdown, stopSpinHint, renderLobbyNote, renderHintTally,
 } from './screens';
 import { revealRound } from './reveal';
 
@@ -76,8 +76,10 @@ $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));
 $('undoBtn').addEventListener('click', () => net.send({ t: 'undo' }));
 $('nextBtn').addEventListener('click', () => net.send({ t: 'next' }));
 $('againBtn').addEventListener('click', () => net.send({ t: 'again' }));
-$('skipBtn').addEventListener('click', () => {
-  // 적어둔 답을 먼저 밀어 보낸다. 이 넘기기로 정족수가 차면 서버가 그 자리에서
+// 버튼 라벨은 "힌트받기"로 바뀌었지만 서버로 나가는 메시지 이름(skip)은 그대로다 —
+// 서버·프로토콜은 이 작업 범위 밖이고, 이름을 바꿔봐야 서버 테스트만 흔들린다.
+$('hintBtn').addEventListener('click', () => {
+  // 적어둔 답을 먼저 밀어 보낸다. 이 힌트받기로 정족수가 차면 서버가 그 자리에서
   // 시도를 끝내버려, 250ms 뒤에 갈 예정이던 답은 영영 못 간다 — 다 쳐놓고 (무응답).
   flushAnswer();
   net.send({ t: 'skip' });
@@ -86,6 +88,8 @@ $('skipBtn').addEventListener('click', () => {
 const answerInput = $('answerInput') as HTMLInputElement;
 let answerTimer = 0;
 answerInput.addEventListener('input', () => {
+  // 제출 뒤에 글자를 고치면 "제출됨" 표시가 지금 값과 어긋난 거짓말이 된다 — 바로 지운다.
+  markAnswerSaved(false);
   clearTimeout(answerTimer);
   answerTimer = window.setTimeout(() => {
     answerTimer = 0;
@@ -93,16 +97,34 @@ answerInput.addEventListener('input', () => {
   }, 250);
 });
 // 엔터는 모두의 반사 신경이다. 여기서 안 받으면 아무 일도 안 일어난 것처럼 보인다.
+// 제출 버튼과 똑같이 즉시 반영 + 확인 표시까지 간다.
 answerInput.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Enter') flushAnswer();
+  if (e.key === 'Enter') submitAnswer();
 });
+$('answerSubmitBtn').addEventListener('click', submitAnswer);
 
-/** 디바운스 대기 중인 답을 지금 당장 보낸다 */
+/** 디바운스 대기 중인 답을 지금 당장 보낸다 (넘기기 직전에 쓰는 조용한 경로) */
 function flushAnswer(): void {
   if (!answerTimer) return;
   clearTimeout(answerTimer);
   answerTimer = 0;
   net.send({ t: 'answer', text: answerInput.value });
+}
+
+/**
+ * 제출 버튼과 엔터가 공유하는 경로. flushAnswer와 달리 대기 중인 디바운스가 없어도
+ * (예: 아무것도 안 고친 채 다시 눌렀을 때) 무조건 보내고, "제출됨" 확인을 켠다 —
+ * 답은 최종이 아니라 지금 서버에 저장된 값이라는 뜻이라, 다시 고치면 확인은 다시 꺼진다.
+ */
+function submitAnswer(): void {
+  clearTimeout(answerTimer);
+  answerTimer = 0;
+  net.send({ t: 'answer', text: answerInput.value });
+  markAnswerSaved(true);
+}
+
+function markAnswerSaved(saved: boolean): void {
+  $('answerSavedNote').textContent = saved ? '제출됨 ✓' : '';
 }
 
 /**
@@ -112,7 +134,8 @@ function flushAnswer(): void {
  */
 function setSpectating(on: boolean): void {
   answerInput.disabled = on;
-  ($('skipBtn') as HTMLButtonElement).disabled = on;
+  ($('answerSubmitBtn') as HTMLButtonElement).disabled = on;
+  ($('hintBtn') as HTMLButtonElement).disabled = on;
   $('spectateNote').textContent = on ? '이번 라운드는 관전입니다 — 다음 라운드부터 참여합니다' : '';
 }
 
@@ -144,6 +167,7 @@ function onMsg(m: ServerMsg): void {
     if (m.attempt !== lastAttempt) {
       lastAttempt = m.attempt;
       answerInput.value = '';
+      markAnswerSaved(false); // 지난 시도의 "제출됨"이 새 시도까지 이어지면 거짓말이다
       hasSlices = false;
     }
 
@@ -158,6 +182,7 @@ function onMsg(m: ServerMsg): void {
       $('guessNote').textContent =
         `시도 ${m.attempt}/${m.maxAttempts} — 못 맞히면 조각이 하나 늘어납니다`;
       setSpectating(!hasSlices);
+      renderHintTally(m.players, youId);
     }
     return;
   }

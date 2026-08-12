@@ -3,6 +3,32 @@ import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import { drawStrokes, fitCanvas } from './ink';
 
 /**
+ * 조각을 캔버스에 채우는 여유율. 1이면 바운딩 박스가 캔버스에 꽉 맞는다.
+ *
+ * 0.92였을 때는 (1000-920)/2 = 40 유닛만 남아, 300x300 캔버스 기준 위쪽 12px·아래쪽
+ * 9px 정도만 비어 잘린 것처럼 보였다(오너가 실제로 측정한 값). 0.80은 (1000-800)/2 = 100
+ * 유닛, 같은 캔버스 기준 약 30px — 액자에서 확실히 떨어져 보인다.
+ */
+export const SLICE_PADDING = 0.80;
+
+/**
+ * 조각의 바운딩 박스와, 그걸 캔버스(CANVAS x CANVAS)에 맞추는 배율을 계산한다.
+ * drawSlice의 확대 로직과 Fix 1의 여백 산수를 같은 곳에서 재사용·테스트하려고 뺐다.
+ */
+export function computeSliceZoom(
+  sliceCount: number,
+  padding: number = SLICE_PADDING,
+): { zoom: number; boxW: number; boxH: number } {
+  const half = Math.PI / sliceCount;
+  // 조각은 1000x1000 칸의 위쪽 좁은 영역에만 그려지므로(꼭짓점이 중심, 호가 위쪽 절반까지),
+  // 조각의 바운딩 박스를 계산해 화면 가득 차도록 확대·중앙 정렬한다.
+  const boxW = 2 * RADIUS * Math.sin(half);
+  const boxH = RADIUS;
+  const zoom = padding * Math.min(CANVAS / boxW, CANVAS / boxH);
+  return { zoom, boxW, boxH };
+}
+
+/**
  * 조각 하나를 그린다. 좌표는 서버가 이미 위를 향하게 돌려서 보낸 것이다.
  * 꼭짓점이 중심에, 부채꼴이 위로 뻗는다.
  */
@@ -16,11 +42,7 @@ export function drawSlice(el: HTMLCanvasElement, strokes: Point[][], sliceCount:
   const half = Math.PI / sliceCount;
   const up = -Math.PI / 2;
 
-  // 조각은 1000x1000 칸의 위쪽 좁은 영역에만 그려지므로(꼭짓점이 중심, 호가 위쪽 절반까지),
-  // 조각의 바운딩 박스를 계산해 화면 가득 차도록 확대·중앙 정렬한다.
-  const boxW = 2 * RADIUS * Math.sin(half);
-  const boxH = RADIUS;
-  const zoom = 0.92 * Math.min(CANVAS / boxW, CANVAS / boxH);
+  const { zoom } = computeSliceZoom(sliceCount);
   const boxCx = CENTER[0];
   const boxCy = CENTER[1] - RADIUS / 2;
   ctx.translate(CANVAS / 2, CANVAS / 2);
