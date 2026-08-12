@@ -531,3 +531,38 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     expect($('answerSavedNote').textContent).toBe('');
   });
 });
+
+describe('그린 획이 서버까지 간다', () => {
+  // 실제로 브라우저에서 그려보니 그림이 통째로 사라졌다. 원인은 50ms 배치였다 —
+  // 사람이 천천히 그으면 점 사이 간격이 50ms를 넘어 점 하나짜리 stroke 메시지가 나가고,
+  // 서버는 점이 둘 미만인 획을 버린다. 봇은 완성된 획을 직접 보내서 여태 안 걸렸다.
+  it('서버는 점이 하나뿐인 획을 버린다', async () => {
+    const { Session } = await import('../src/server/session');
+    const s = new Session(() => {}, {
+      scheduler: { after: () => () => {} },
+      rules: { ...TEST_RULES_CLIENT },
+    });
+    for (const n of ['a', 'b', 'c', 'd']) s.join(n, n);
+    s.start('a');
+    s.addStroke(s.drawerId, [[500, 500]]);
+    expect(s.strokeCount).toBe(0);
+  });
+
+  it('점이 둘 이상인 획은 받는다 — 클라이언트는 획을 통째로 보내야 한다', async () => {
+    const { Session } = await import('../src/server/session');
+    const s = new Session(() => {}, {
+      scheduler: { after: () => () => {} },
+      rules: { ...TEST_RULES_CLIENT },
+    });
+    for (const n of ['a', 'b', 'c', 'd']) s.join(n, n);
+    s.start('a');
+    s.addStroke(s.drawerId, [[500, 500], [600, 520], [640, 610]]);
+    expect(s.strokeCount).toBe(1);
+  });
+});
+
+const TEST_RULES_CLIENT = {
+  minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
+  drawSeconds: 60, guessSeconds: 90, roundEndSeconds: 25,
+  maxAttempts: 3, attemptPoints: [3, 2, 1], drawerPointPerCorrect: 1,
+};

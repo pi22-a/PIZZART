@@ -103,6 +103,12 @@
   <section class="screen" id="s-wait">
     <h1 id="waitTopic"></h1>
     <p class="muted" id="waitWho"></p>
+    <!-- 출제자는 그리고 나면 할 일이 없다. 남들이 지금 어떤 조각을 보고 헤매는지
+         보여주면 그 시간이 구경거리가 된다. 맞히는 사람에게는 절대 안 나간다. -->
+    <div id="boardWrap" style="display:none">
+      <div style="max-width:340px"><canvas id="boardCanvas"></canvas></div>
+      <p class="muted" id="boardNote"></p>
+    </div>
   </section>
 
   <section class="screen" id="s-guess">
@@ -130,6 +136,8 @@
           <button id="hintBtn">힌트받기</button>
           <span class="muted" id="hintTally"></span>
         </div>
+        <p class="muted" id="hintNote">지금 조각으로는 모르겠다면 눌러보세요.
+          맞히는 사람의 <b>과반</b>이 누르면 조각이 하나 더 풀립니다.</p>
         <p class="muted" id="spectateNote"></p>
         <ul class="answers" id="lastAnswers"></ul>
       </div>

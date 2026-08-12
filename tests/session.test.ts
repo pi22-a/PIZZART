@@ -24,11 +24,31 @@ let clock: ManualScheduler;
 let s: Session;
 
 /** p1이 방장, p1이 첫 출제자. 4명으로 시작한다. */
+/**
+ * 테스트가 쓸 규칙. content/rules.json을 읽지 않고 여기 고정한다.
+ *
+ * 예전에는 주입하지 않아 실제 설정 파일을 그대로 읽었고, 플레이테스트 중 숫자 하나를
+ * 조정할 때마다 세션 테스트 서른 개가 한꺼번에 빨개졌다. 규칙 값은 손잡이고,
+ * 손잡이를 돌렸다고 테스트가 깨지면 안 된다.
+ */
+const TEST_RULES = {
+  minPlayers: 4,
+  maxPlayers: 9,
+  sliceCountMin: 8,
+  drawSeconds: 60,
+  guessSeconds: 90,
+  roundEndSeconds: 25,
+  maxAttempts: 3,
+  attemptPoints: [3, 2, 1],
+  drawerPointPerCorrect: 1,
+};
+
 function newSession(names = ['p1', 'p2', 'p3', 'p4']) {
   sent = [];
   clock = new ManualScheduler();
   s = new Session((to, msg) => sent.push({ to, msg }), {
     scheduler: clock,
+    rules: { ...TEST_RULES },
     // 무작위를 고정한다 — 늘 첫 번째를 고른다
     pick: () => 0,
     shuffle: (xs) => xs,
@@ -231,18 +251,19 @@ describe('추론 루프', () => {
     expect(res[0].answers.find((a) => a.playerId === 'p2')!.text).toBe('엉뚱한답');
   });
 
-  it('맞히는 사람 전원이 넘기기를 누르면 바로 공개된다', () => {
+  it('맞히는 사람 과반이 힌트를 누르면 바로 공개된다', () => {
+    // 경쟁 게임이라 만장일치를 요구하면 감이 온 사람이 절대 안 눌러 시간만 흘러간다.
+    // 맞히는 사람은 셋이므로 과반은 둘이다.
     s.skip('p2');
-    s.skip('p3');
     expect(msgsOfType('attemptResult').length).toBe(0);
-    s.skip('p4');
+    s.skip('p3');
     expect(msgsOfType('attemptResult').length).toBe(4);
   });
 
-  it('출제자의 넘기기는 세지 않는다 — 답을 아는 사람이 속도를 정하면 안 된다', () => {
-    s.skip('p1');
-    s.skip('p2');
-    s.skip('p3');
+  it('출제자의 힌트받기는 세지 않는다 — 답을 아는 사람이 속도를 정하면 안 된다', () => {
+    s.skip('p1'); // 출제자
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    s.skip('p2'); // 맞히는 사람 셋 중 하나 — 과반이 아니다
     expect(msgsOfType('attemptResult').length).toBe(0);
   });
 
@@ -693,12 +714,17 @@ describe('결과 화면이 스스로 완결적이다 (수정 4)', () => {
 describe('넘기기 정족수 재확인 (수정 5)', () => {
   beforeEach(() => { s.start('p1'); });
 
-  it('남은 한 명이 끊기면 이미 눌러둔 넘기기로 바로 공개된다', () => {
+  it('사람이 끊겨 과반이 채워지면 바로 공개된다', () => {
+    // 맞히는 사람 넷 중 둘이 눌렀다 — 아직 과반이 아니다.
+    // 한 명이 끊겨 셋이 되는 순간 둘이 과반이 되므로, 아무도 버튼을 다시 안 눌러도 넘어가야 한다.
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.skip('p2');
     s.skip('p3');
     sent = [];
-    s.disconnect('p4'); // 남은 한 명이 사라진다 — 아무도 버튼을 누를 수 없다
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    s.disconnect('p4');
     expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
   });
 
@@ -797,6 +823,7 @@ describe('한 게임 안에서 제시어가 겹치지 않는다 (수정 10)', ()
     clock = new ManualScheduler();
     s = new Session((to, msg) => sent.push({ to, msg }), {
       scheduler: clock,
+      rules: { ...TEST_RULES },
       pick: () => 0, // 늘 첫 번째를 고른다 — 제외 목록이 없으면 매번 같은 단어가 나온다
       shuffle: (xs) => xs,
       topics: [{ topic: '동물', words: ['호랑이', '펭귄', '코끼리', '토끼', '여우'] }],
@@ -818,6 +845,7 @@ describe('한 게임 안에서 제시어가 겹치지 않는다 (수정 10)', ()
     clock = new ManualScheduler();
     s = new Session((to, msg) => sent.push({ to, msg }), {
       scheduler: clock,
+      rules: { ...TEST_RULES },
       pick: () => 0,
       shuffle: (xs) => xs,
       topics: [{ topic: '동물', words: ['호랑이', '펭귄'] }], // 4라운드에 2단어뿐

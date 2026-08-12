@@ -7,8 +7,14 @@ describe('loadRules', () => {
     expect(r.minPlayers).toBe(4);
     expect(r.maxPlayers).toBe(9);
     expect(r.sliceCountMin).toBe(8);
-    expect(r.maxAttempts).toBe(3);
-    expect(r.attemptPoints).toEqual([3, 2, 1]);
+    // maxAttempts와 attemptPoints는 플레이테스트 중 돌리는 손잡이다.
+    // 특정 값을 못박으면 숫자를 조정할 때마다 테스트가 빨개진다. 관계만 검사한다.
+    expect(r.maxAttempts).toBeGreaterThanOrEqual(1);
+    expect(r.attemptPoints.length).toBe(r.maxAttempts);
+    // 늦게 맞힐수록 낮아야 한다
+    for (let i = 1; i < r.attemptPoints.length; i++) {
+      expect(r.attemptPoints[i]).toBeLessThan(r.attemptPoints[i - 1]);
+    }
   });
 
   it('시도 횟수만큼 점수 표가 있다', () => {

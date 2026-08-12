@@ -126,6 +126,9 @@ export class Session {
     if (this.phase === 'guessing' && this.seen.has(id)) {
       this.sendSlices(id);
     }
+    if (this.phase === 'guessing' && id === this.drawerId) {
+      this.sendBoard();
+    }
     if (this.phase === 'roundEnd' && this.lastRoundEnd) {
       this.send(id, this.lastRoundEnd);
     }
@@ -239,6 +242,7 @@ export class Session {
     this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
     this.broadcastRoom();
     for (const g of guessers) this.sendSlices(g.id);
+    this.sendBoard();
   }
 
   protected attempt = 1;
@@ -263,17 +267,21 @@ export class Session {
   }
 
   /**
-   * 넘기기 정족수를 다시 센다. skip()과 disconnect() 양쪽에서 부른다.
+   * 힌트 정족수를 다시 센다. skip()과 disconnect() 양쪽에서 부른다.
    *
    * skip() 안에서만 세면, 셋 중 둘이 누른 뒤 나머지 한 명이 끊겼을 때
-   * 그 버튼을 다시 눌러줄 사람이 없어 90초짜리 시도를 세 번 다 기다린다.
+   * 그 버튼을 다시 눌러줄 사람이 없어 시도 시간을 끝까지 기다린다.
+   *
+   * 전원 만장일치가 아니라 과반이다. 경쟁 게임이라 감이 온 사람은 절대 누르지 않으므로,
+   * 만장일치로 두면 사실상 시간 초과만 기다리게 된다.
    */
   private checkSkipQuorum(): void {
     if (this.phase !== 'guessing') return;
     const live = this.guessers();
     // 맞히는 사람이 전부 사라졌다. 시도를 더 돌릴 이유가 없으니 라운드를 접는다.
     if (live.length === 0) return this.endRound([], this.answerRows());
-    if (live.every((g) => this.skips.has(g.id))) this.endAttempt();
+    const pressed = live.filter((g) => this.skips.has(g.id)).length;
+    if (pressed > live.length / 2) this.endAttempt();
   }
 
   /** 지금 시도의 답안 줄. 조각을 받은 사람만 들어간다. */
@@ -303,6 +311,7 @@ export class Session {
     this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
     this.broadcastRoom();
     for (const id of this.seen.keys()) this.sendSlices(id);
+    this.sendBoard();
   }
 
   /** 시도에 실패할 때마다 조각을 하나 더 푼다. 자세한 규칙은 hint.ts에 있다. */
@@ -532,6 +541,22 @@ export class Session {
       shared: this.publicSlices.includes(index),
     }));
     this.send(playerId, { t: 'slices', count: this.slices.length, slices: list });
+  }
+
+  /**
+   * 출제자에게 지금 밖에 나가 있는 조각이 무엇인지 보여준다.
+   * 정답과 그림을 이미 아는 사람이라 원본을 실어도 새지 않는다.
+   */
+  protected sendBoard(): void {
+    if (this.phase !== 'guessing') return;
+    const out = new Set<number>();
+    for (const seen of this.seen.values()) for (const i of seen) out.add(i);
+    this.send(this.drawerId, {
+      t: 'board',
+      sliceCount: this.slices.length,
+      drawing: this.strokes,
+      visible: [...out].sort((a, b) => a - b),
+    });
   }
 
   protected broadcast(msg: ServerMsg): void {

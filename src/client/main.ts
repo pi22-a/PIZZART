@@ -6,7 +6,7 @@ import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking, countdown, stopSpinHint, renderLobbyNote, renderHintTally,
 } from './screens';
-import { revealRound } from './reveal';
+import { revealRound, drawBoard } from './reveal';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -33,8 +33,18 @@ const net = new Net(room, onMsg);
 net.onStatus((ok) => setTag('netTag', ok ? '연결됨' : '끊김'));
 
 const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { interactive: true });
-drawCanvas.onPoint((p: Point) => net.pushPoint(p));
-drawCanvas.onStroke(() => net.endStroke());
+/**
+ * 획은 다 그은 뒤에 통째로 보낸다.
+ *
+ * 예전에는 점이 찍힐 때마다 net에 넣고 50ms마다 모아 보냈다. 그 방식은 전원이 동시에
+ * 그리며 서로의 선을 실시간으로 보던 이전 게임의 것이고, PIZZA는 출제자 혼자 그리며
+ * 아무도 그 과정을 보지 않으므로 쪼개 보낼 이유가 없다.
+ *
+ * 게다가 쪼개면 실제로 망가졌다. 사람이 천천히 그으면 점 사이 간격이 50ms를 넘어
+ * 점 하나짜리 메시지가 나가는데, 서버는 점이 둘 미만인 획을 버린다. 즉 또박또박 그린
+ * 그림일수록 통째로 사라졌다.
+ */
+drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
 
 const nameInput = $('nameInput') as HTMLInputElement;
 const nameSaveBtn = $('nameSaveBtn') as HTMLButtonElement;
@@ -203,6 +213,14 @@ function onMsg(m: ServerMsg): void {
     return;
   }
 
+  if (m.t === 'board') {
+    $('boardWrap').style.display = '';
+    drawBoard($('boardCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.visible);
+    $('boardNote').textContent =
+      `${m.sliceCount}조각 중 ${m.visible.length}조각이 나가 있습니다 — 밝은 부분만 보입니다`;
+    return;
+  }
+
   if (m.t === 'roundEnd') {
     sliceCount = m.sliceCount;
     setTag('revealWord', `정답: ${m.word}`);
@@ -239,12 +257,14 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
     const drawer = players.find((p) => p.isDrawer);
     $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
     $('waitWho').textContent = `${drawer?.name ?? '누군가'} 님이 그리는 중입니다`;
+    $('boardWrap').style.display = 'none';
     return show('wait');
   }
   if (phase === 'guessing') {
     if (iDraw) {
       $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
       $('waitWho').textContent = '모두가 당신의 그림을 맞히는 중입니다';
+      $('boardWrap').style.display = '';
       return show('wait');
     }
     return show('guess');

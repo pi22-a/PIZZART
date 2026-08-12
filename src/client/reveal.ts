@@ -69,3 +69,43 @@ export function revealRound(
   };
   requestAnimationFrame(frame);
 }
+
+/**
+ * 출제자 전용. 지금 맞히는 사람들에게 나가 있는 조각을 밝게, 아직 숨은 조각을 어둡게 그린다.
+ *
+ * 출제자는 정답도 그림도 이미 알고 있으므로 여기에 원본을 그려도 새는 것이 없다.
+ * 그리기가 끝나면 할 일이 없던 시간을, 남들이 무엇을 보고 헤매는지 지켜보는 시간으로 바꾼다.
+ */
+export function drawBoard(
+  el: HTMLCanvasElement,
+  drawing: Point[][],
+  sliceCount: number,
+  visible: number[],
+): void {
+  const ctx = el.getContext('2d')!;
+  const scale = fitCanvas(el);
+  const step = (Math.PI * 2) / sliceCount;
+  const out = new Set(visible);
+
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.clearRect(0, 0, CANVAS, CANVAS);
+
+  for (let i = 0; i < sliceCount; i++) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(CENTER[0], CENTER[1]);
+    ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, i * step, (i + 1) * step);
+    ctx.closePath();
+    // 나가 있는 조각만 반죽 색으로 밝게, 나머지는 배경에 가깝게 눕힌다
+    ctx.fillStyle = out.has(i) ? '#f6efe2' : '#2b2118';
+    ctx.fill();
+    ctx.strokeStyle = '#3d3227';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.clip();
+    if (out.has(i)) drawStrokes(ctx, drawing);
+    ctx.restore();
+  }
+  ctx.restore();
+}

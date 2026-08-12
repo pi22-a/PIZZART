@@ -65,6 +65,14 @@ export type ServerMsg =
    * 몇 조각으로 잘렸는지는 알아도 내 것이 어디였는지는 알 수 없으므로 새어도 무해하다.
    */
   | { t: 'slices'; count: number; slices: Array<{ id: string; strokes: Point[][]; shared: boolean }> }
+  /**
+   * 출제자에게만. 지금 맞히는 사람들에게 어떤 조각이 나가 있는지 보여준다.
+   *
+   * 출제자는 어차피 정답과 그림을 다 알고 있으므로 여기에 원본을 실어도 새는 것이 없다.
+   * 그리는 동안 말고는 할 일이 없던 출제자에게, 남들이 무엇을 보고 헤매는지 지켜보는
+   * 재미를 준다.
+   */
+  | { t: 'board'; sliceCount: number; drawing: Point[][]; visible: number[] }
   /** 시도 하나가 끝났다. 답이 동시에 공개된다. */
   | { t: 'attemptResult'; attempt: number; answers: AnswerRow[] }
   /** 라운드 종료. 여기서 처음으로 원본과 섹터 번호가 내려간다. */
