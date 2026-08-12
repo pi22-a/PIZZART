@@ -15,15 +15,38 @@ export function setTag(id: string, text: string): void {
   $(id).textContent = text;
 }
 
-export function renderPlayers(players: PlayerInfo[], youId: string): void {
+export function renderPlayers(players: PlayerInfo[], youId: string, hostId: string = ''): void {
   $('players').innerHTML = players
     .map((p) => {
       const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : ''].join(' ');
       const mark = p.answered ? ' ✎' : p.skipped ? ' ⏩' : '';
       const me = p.id === youId ? '★' : '';
-      return `<span class="${cls}">${me}${escape(p.name)} ${p.score}${mark}</span>`;
+      const host = p.id === hostId ? '👑' : '';
+      return `<span class="${cls}">${me}${host}${escape(p.name)} ${p.score}${mark}</span>`;
     })
     .join('');
+}
+
+export function renderLobbyNote(
+  players: PlayerInfo[],
+  youId: string,
+  hostId: string,
+  minPlayers: number,
+): void {
+  const connectedCount = players.filter((p) => p.connected).length;
+  const isHost = youId === hostId;
+
+  if (connectedCount < minPlayers) {
+    // 참가자 X/Y — Y명 더 모이면 시작할 수 있습니다
+    const needMore = minPlayers - connectedCount;
+    setTag('lobbyNote', `참가자 ${connectedCount}/${minPlayers} — ${needMore}명 더 모이면 시작할 수 있습니다`);
+  } else if (isHost) {
+    // 참가자 X/Y — 시작할 수 있습니다
+    setTag('lobbyNote', `참가자 ${connectedCount}/${minPlayers} — 시작할 수 있습니다`);
+  } else {
+    // 참가자 X/Y — 방장이 시작하기를 기다립니다
+    setTag('lobbyNote', `참가자 ${connectedCount}/${minPlayers} — 방장이 시작하기를 기다립니다`);
+  }
 }
 
 let stopSpin: (() => void) | null = null;

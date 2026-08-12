@@ -559,6 +559,7 @@ export class Session {
       attempt: this.attempt,
       maxAttempts: this.rules.maxAttempts,
       deadline: this.deadline,
+      minPlayers: this.rules.minPlayers,
     });
   }
 }

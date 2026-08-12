@@ -4,7 +4,7 @@ import type { Point } from '../shared/drawing';
 import type { PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
-  renderRanking, countdown, stopSpinHint,
+  renderRanking, countdown, stopSpinHint, renderLobbyNote,
 } from './screens';
 import { revealRound } from './reveal';
 
@@ -98,7 +98,7 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'room') {
     hostId = m.hostId;
     names = new Map(m.players.map((p) => [p.id, p.name]));
-    renderPlayers(m.players, youId);
+    renderPlayers(m.players, youId, hostId);
     setTag('roundTag', m.phase === 'lobby' ? '' : `라운드 ${m.round + 1}/${m.totalRounds}`);
     setTag('topicTag', m.topic ? `주제 ${m.topic}` : '');
     countdown(m.deadline);
@@ -125,8 +125,7 @@ function onMsg(m: ServerMsg): void {
 
     ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
     ($('nextBtn') as HTMLButtonElement).disabled = youId !== hostId;
-    $('lobbyNote').textContent =
-      youId === hostId ? '방장입니다. 4명이 모이면 시작하세요.' : '방장이 시작하기를 기다립니다.';
+    renderLobbyNote(m.players, youId, hostId, m.minPlayers);
 
     if (m.phase !== lastPhase) onPhase(m.phase, iDraw, m.players, m.topic);
     lastPhase = m.phase;

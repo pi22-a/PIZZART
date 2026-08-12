@@ -51,7 +51,7 @@ const PLAYERS = [
 function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg {
   return {
     t: 'room', phase: 'guessing', players: PLAYERS, hostId: 'd',
-    round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null,
+    round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 4,
     ...over,
   } as ServerMsg;
 }
@@ -206,5 +206,70 @@ describe('한 판 더 버튼 (수정 2)', () => {
     deliver({ t: 'joined', youId: 'me' }); // hostId는 'd'다
     deliver(room({ phase: 'final' }));
     expect($<HTMLButtonElement>('againBtn').disabled).toBe(false);
+  });
+});
+
+describe('로비 카운트 라인', () => {
+  it('참가자가 부족하면 더 필요한 인원을 보여준다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby',
+      players: [
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+      ],
+      minPlayers: 4,
+    }));
+    expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
+  });
+
+  it('참가자가 충분하고 내가 방장이면 시작 가능 메시지를 보여준다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby',
+      hostId: 'me',
+      players: [
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+      ],
+      minPlayers: 4,
+    }));
+    expect($('lobbyNote').textContent).toBe('참가자 4/4 — 시작할 수 있습니다');
+  });
+
+  it('참가자가 충분하지만 내가 방장이 아니면 대기 메시지를 보여준다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby',
+      hostId: 'd',
+      players: [
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+      ],
+      minPlayers: 4,
+    }));
+    expect($('lobbyNote').textContent).toBe('참가자 4/4 — 방장이 시작하기를 기다립니다');
+  });
+
+  it('접속 해제된 참가자는 카운트에 포함되지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby',
+      players: [
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false },
+      ],
+      minPlayers: 4,
+    }));
+    expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
   });
 });

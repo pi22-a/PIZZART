@@ -49,6 +49,8 @@ export type ServerMsg =
       maxAttempts: number;
       /** 지금 단계가 끝나는 시각 (epoch ms). 타이머가 없으면 null */
       deadline: number | null;
+      /** 게임을 시작하는 데 필요한 최소 인원 */
+      minPlayers: number;
     }
   /** 제시어. 출제자에게만 간다. */
   | { t: 'word'; word: string }
