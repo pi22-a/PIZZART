@@ -15,14 +15,15 @@ export function setTag(id: string, text: string): void {
   $(id).textContent = text;
 }
 
-export function renderPlayers(players: PlayerInfo[], youId: string, hostId: string = ''): void {
+export function renderPlayers(players: PlayerInfo[], youId: string, hostId: string = '', phase: string = ''): void {
   $('players').innerHTML = players
     .map((p) => {
-      const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : ''].join(' ');
+      const meClass = p.id === youId ? ' me' : '';
+      const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : '', meClass].filter(Boolean).join(' ');
       const mark = p.answered ? ' ✎' : p.skipped ? ' ⏩' : '';
-      const me = p.id === youId ? '★' : '';
       const host = p.id === hostId ? '👑' : '';
-      return `<span class="${cls}">${me}${host}${escape(p.name)} ${p.score}${mark}</span>`;
+      const score = phase !== 'lobby' ? ` ${p.score}` : '';
+      return `<span class="${cls}">${host}${escape(p.name)}${score}${mark}</span>`;
     })
     .join('');
 }

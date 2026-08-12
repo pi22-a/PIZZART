@@ -98,7 +98,7 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'room') {
     hostId = m.hostId;
     names = new Map(m.players.map((p) => [p.id, p.name]));
-    renderPlayers(m.players, youId, hostId);
+    renderPlayers(m.players, youId, hostId, m.phase);
     setTag('roundTag', m.phase === 'lobby' ? '' : `라운드 ${m.round + 1}/${m.totalRounds}`);
     setTag('topicTag', m.topic ? `주제 ${m.topic}` : '');
     countdown(m.deadline);

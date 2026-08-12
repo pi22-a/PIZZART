@@ -238,6 +238,58 @@ describe('내 조각과 공개된 조각을 라벨로 구별한다 (버그 2)', 
   });
 });
 
+describe('플레이어 카드 렌더링', () => {
+  it('로비에서는 점수가 숨겨진다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'lobby' }));
+    const playersHtml = $('players').innerHTML;
+    expect(playersHtml).not.toContain(' 0');
+  });
+
+  it('추론 단계에서는 점수가 보인다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'guessing' }));
+    const playersHtml = $('players').innerHTML;
+    expect(playersHtml).toContain(' 0');
+  });
+
+  it('내 카드에는 me 클래스가 붙는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room());
+    const meCard = [...$('players').querySelectorAll('.p')].find((el) =>
+      el.textContent?.includes('나'));
+    expect(meCard?.classList.contains('me')).toBe(true);
+  });
+
+  it('다른 사람 카드에는 me 클래스가 없다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room());
+    const otherCard = [...$('players').querySelectorAll('.p')].find((el) =>
+      el.textContent?.includes('친구'));
+    expect(otherCard?.classList.contains('me')).toBe(false);
+  });
+
+  it('별 문자는 더 이상 표시되지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room());
+    const playersHtml = $('players').innerHTML;
+    expect(playersHtml).not.toContain('★');
+  });
+
+  it('왕관 문자는 계속 표시된다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ hostId: 'me' }));
+    const playersHtml = $('players').innerHTML;
+    expect(playersHtml).toContain('👑');
+  });
+});
+
 describe('로비 카운트 라인', () => {
   it('참가자가 부족하면 더 필요한 인원을 보여준다', async () => {
     await boot();
