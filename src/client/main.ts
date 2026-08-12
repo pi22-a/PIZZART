@@ -6,7 +6,7 @@ import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking, countdown, stopSpinHint, renderLobbyNote, renderHintTally,
 } from './screens';
-import { revealRound, drawBoard } from './reveal';
+import { revealRound, drawBoard, drawAssembled } from './reveal';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -24,6 +24,7 @@ let names = new Map<string, string>();
 let sliceCount = 8;
 let lastPhase = '';
 let lastRound = -1;
+let iSolved = false;
 let lastAttempt = -1;
 let drawerId = '';
 /** 이번 시도에 내 조각을 받았는가. 못 받았으면 이 라운드는 관전이다. */
@@ -161,6 +162,7 @@ function onMsg(m: ServerMsg): void {
     countdown(m.deadline);
 
     const me = m.players.find((p) => p.id === youId);
+    iSolved = me?.solved === true;
     const iDraw = me?.isDrawer === true;
     const drawer = m.players.find((p) => p.isDrawer);
     if (drawer) drawerId = drawer.id;
@@ -189,6 +191,14 @@ function onMsg(m: ServerMsg): void {
     lastPhase = m.phase;
 
     if (m.phase === 'guessing') {
+      const last = m.attempt >= m.maxAttempts;
+      $('scoreTag').textContent = iSolved
+        ? '맞혔습니다 — 점수 확정'
+        : `지금 맞히면 ${me?.pendingScore ?? 0}점`;
+      $('solvedWrap').style.display = iSolved ? '' : 'none';
+      ($('answerSubmitBtn') as HTMLButtonElement).disabled = iSolved;
+      ($('hintBtn') as HTMLButtonElement).disabled = iSolved || last || me?.skipped === true;
+      $('hintNote').style.display = iSolved || last ? 'none' : '';
       $('guessNote').textContent =
         `시도 ${m.attempt}/${m.maxAttempts} — 못 맞히면 조각이 하나 늘어납니다`;
       setSpectating(!hasSlices);
@@ -214,10 +224,24 @@ function onMsg(m: ServerMsg): void {
   }
 
   if (m.t === 'board') {
+    const note = `${m.sliceCount}조각 중 ${m.visible.length}조각이 나가 있습니다 — 밝은 부분만 보입니다`;
+    // 출제자는 대기 화면에서, 먼저 맞힌 사람은 추론 화면 안에서 같은 현황판을 본다.
     $('boardWrap').style.display = '';
     drawBoard($('boardCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.visible);
-    $('boardNote').textContent =
-      `${m.sliceCount}조각 중 ${m.visible.length}조각이 나가 있습니다 — 밝은 부분만 보입니다`;
+    $('boardNote').textContent = note;
+    if (iSolved) {
+      $('solvedWrap').style.display = '';
+      drawBoard($('solvedBoard') as HTMLCanvasElement, m.drawing, m.sliceCount, m.visible);
+      $('solvedNote').textContent = note;
+    }
+    return;
+  }
+
+  if (m.t === 'assembled') {
+    // 마지막 회차. 회전을 풀어 제자리에 끼운 조각을 보여준다.
+    $('sliceBox').style.display = 'none';
+    $('assembledWrap').style.display = '';
+    drawAssembled($('assembledCanvas') as HTMLCanvasElement, m.pieces, m.sliceCount);
     return;
   }
 

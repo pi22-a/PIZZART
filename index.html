@@ -115,6 +115,11 @@
     <div class="row">
       <div class="col">
         <div class="slices" id="sliceBox"></div>
+        <div id="assembledWrap" style="display:none">
+          <div style="max-width:340px"><canvas id="assembledCanvas"></canvas></div>
+          <p class="muted">마지막 기회입니다. 지금까지 본 조각을 <b>제자리에 끼워</b> 놓았습니다.
+            여기서 맞히면 1점입니다.</p>
+        </div>
         <div class="bar" style="margin-top:12px">
           <canvas class="hint" id="spinHint"></canvas>
           <span class="muted">조각은 전부 위를 향하게 돌려져 있습니다.<br />원본에서 어느 방향이었는지는 알 수 없습니다.</span>
@@ -122,6 +127,7 @@
       </div>
       <div class="col">
         <p class="muted" id="guessLabel">무엇을 그린 걸까요</p>
+        <p class="pill big" id="scoreTag"></p>
         <div class="bar">
           <input id="answerInput" maxlength="40" />
           <button id="answerSubmitBtn">제출</button>
@@ -136,9 +142,13 @@
           <button id="hintBtn">힌트받기</button>
           <span class="muted" id="hintTally"></span>
         </div>
-        <p class="muted" id="hintNote">지금 조각으로는 모르겠다면 눌러보세요.
-          맞히는 사람의 <b>과반</b>이 누르면 조각이 하나 더 풀립니다.</p>
+        <p class="muted" id="hintNote">지금 조각으로 모르겠다면 눌러보세요.
+          <b>나만</b> 조각이 하나 늘고, 점수가 1점 깎입니다. 회차당 한 번입니다.</p>
         <p class="muted" id="spectateNote"></p>
+        <div id="solvedWrap" style="display:none">
+          <p class="muted" id="solvedNote"></p>
+          <div style="max-width:300px"><canvas id="solvedBoard"></canvas></div>
+        </div>
         <ul class="answers" id="lastAnswers"></ul>
       </div>
     </div>

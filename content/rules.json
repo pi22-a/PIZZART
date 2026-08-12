@@ -3,15 +3,12 @@
   "maxPlayers": 9,
   "sliceCountMin": 8,
   "drawSeconds": 90,
-  "guessSeconds": 90,
-  "roundEndSeconds": 60,
-  "maxAttempts": 5,
-  "attemptPoints": [
-    5,
-    4,
-    3,
-    2,
-    1
-  ],
-  "drawerPointPerCorrect": 1
+  "guessSeconds": 30,
+  "roundEndSeconds": 0,
+  "maxAttempts": 6,
+  "maxSlices": 5,
+  "startScore": 10,
+  "wrongSubmitCost": 1,
+  "hintCost": 1,
+  "finalAttemptScore": 1
 }

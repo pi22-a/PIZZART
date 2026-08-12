@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import type { Point } from '../shared/drawing';
 import { insideCircle } from '../shared/drawing';
 import { slice, sliceCount, type Slice } from '../shared/slicer';
+import { rotate } from '../shared/geometry';
+import { CENTER } from '../shared/drawing';
 import type { ClientMsg, Phase, PlayerInfo, ServerMsg } from '../shared/protocol';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
-import { planHint } from './hint';
-import { guesserPoints, drawerPoints } from './scorer';
 import type { AnswerRow } from '../shared/protocol';
 
 interface Player {
@@ -177,7 +177,10 @@ export class Session {
     // 지난 라운드의 ✎ 표시가 남고 room.attempt가 3으로 나간다.
     this.attempt = 1;
     this.answers.clear();
-    this.skips.clear();
+    this.wrongSubmits.clear();
+    this.hintsTaken.clear();
+    this.hintedThisAttempt.clear();
+    this.solved.clear();
     this.phase = 'drawing';
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
@@ -235,8 +238,10 @@ export class Session {
 
     this.attempt = 1;
     this.answers.clear();
-    this.skips.clear();
-    this.publicSlices = [];
+    this.wrongSubmits.clear();
+    this.hintsTaken.clear();
+    this.hintedThisAttempt.clear();
+    this.solved.clear();
     this.phase = 'guessing';
 
     this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
@@ -246,49 +251,78 @@ export class Session {
   }
 
   protected attempt = 1;
+  /** 틀린 제출 횟수. 맞힌 제출은 세지 않는다. */
+  protected wrongSubmits = new Map<string, number>();
+  /** 받은 힌트 횟수 */
+  protected hintsTaken = new Map<string, number>();
+  /** 이번 회차에 이미 힌트를 받았는가 — 회차당 한 번이다 */
+  protected hintedThisAttempt = new Set<string>();
+  /** 이미 맞혀서 점수가 확정된 사람 → 그 점수 */
+  protected solved = new Map<string, number>();
   protected answers = new Map<string, string>();
-  protected skips = new Set<string>();
-  protected publicSlices: number[] = [];
   protected seen = new Map<string, Set<number>>();
 
   answer(playerId: string, text: string): void {
     if (this.phase !== 'guessing') return;
     if (!this.seen.has(playerId)) return; // 출제자와 관전자는 못 적는다
+    if (this.solved.has(playerId)) return; // 이미 맞힌 사람은 더 낼 것이 없다
     this.answers.set(playerId, String(text).slice(0, 40));
     this.broadcastRoom();
-  }
-
-  skip(playerId: string): void {
-    if (this.phase !== 'guessing') return;
-    if (!this.seen.has(playerId)) return; // 답을 아는 출제자는 속도를 정할 수 없다
-    this.skips.add(playerId);
-    this.broadcastRoom();
-    this.checkSkipQuorum();
+    this.maybeEndAttempt();
   }
 
   /**
-   * 힌트 정족수를 다시 센다. skip()과 disconnect() 양쪽에서 부른다.
+   * 힌트를 하나 받는다. 즉시 조각이 하나 늘고 점수가 깎인다.
    *
-   * skip() 안에서만 세면, 셋 중 둘이 누른 뒤 나머지 한 명이 끊겼을 때
-   * 그 버튼을 다시 눌러줄 사람이 없어 시도 시간을 끝까지 기다린다.
-   *
-   * 전원 만장일치가 아니라 과반이다. 경쟁 게임이라 감이 온 사람은 절대 누르지 않으므로,
-   * 만장일치로 두면 사실상 시간 초과만 기다리게 된다.
+   * 예전에는 맞히는 사람 과반이 눌러야 전원에게 같은 조각이 공개됐다. 경쟁 게임으로
+   * 방향을 잡으면서 개인 선택으로 바꿨다 — 남의 판단을 기다릴 이유가 없고,
+   * "점수를 깎아서라도 조각을 더 볼 것인가"가 이 게임의 전략 그 자체가 된다.
    */
-  private checkSkipQuorum(): void {
+  hint(playerId: string): void {
     if (this.phase !== 'guessing') return;
-    const live = this.guessers();
-    // 맞히는 사람이 전부 사라졌다. 시도를 더 돌릴 이유가 없으니 라운드를 접는다.
-    if (live.length === 0) return this.endRound([], this.answerRows());
-    const pressed = live.filter((g) => this.skips.has(g.id)).length;
-    if (pressed > live.length / 2) this.endAttempt();
+    const mine = this.seen.get(playerId);
+    if (!mine) return;                              // 출제자·관전자
+    if (this.solved.has(playerId)) return;          // 이미 맞혔다
+    if (this.hintedThisAttempt.has(playerId)) return; // 회차당 한 번
+    if (mine.size >= this.rules.maxSlices) return;  // 상한
+    if (this.attempt >= this.rules.maxAttempts) return; // 조립판에서는 못 받는다
+
+    const all = this.slices.map((x) => x.index);
+    const candidates = all.filter((i) => !mine.has(i));
+    if (candidates.length === 0) return;
+
+    mine.add(candidates[this.pick(candidates.length)]);
+    this.hintedThisAttempt.add(playerId);
+    this.hintsTaken.set(playerId, (this.hintsTaken.get(playerId) ?? 0) + 1);
+
+    this.sendSlices(playerId);
+    this.sendBoard();
+    this.broadcastRoom();
   }
 
-  /** 지금 시도의 답안 줄. 조각을 받은 사람만 들어간다. */
+  /** 아직 못 맞힌 사람이 모두 답을 냈으면 30초를 기다릴 이유가 없다. */
+  private maybeEndAttempt(): void {
+    if (this.phase !== 'guessing') return;
+    const pending = this.guessers().filter((g) => !this.solved.has(g.id));
+    if (pending.length === 0) return this.endAttempt();
+    if (pending.every((g) => this.answers.has(g.id))) this.endAttempt();
+  }
+
+  /** 지금 이 사람이 맞혔을 때 받게 될 점수. 화면에 미리 보여준다. */
+  scoreFor(playerId: string): number {
+    if (this.attempt >= this.rules.maxAttempts) return this.rules.finalAttemptScore;
+    const wrong = this.wrongSubmits.get(playerId) ?? 0;
+    const hints = this.hintsTaken.get(playerId) ?? 0;
+    const raw = this.rules.startScore - wrong * this.rules.wrongSubmitCost - hints * this.rules.hintCost;
+    return Math.max(0, raw);
+  }
+
+  /** 지금 회차의 답안 줄. 아직 못 맞힌 사람만 채점 대상이다. */
   private answerRows(): AnswerRow[] {
     return [...this.seen.keys()].map((id) => {
+      if (this.solved.has(id)) return { playerId: id, text: '(맞힘)', correct: true };
       const text = this.answers.get(id) ?? '';
-      return { playerId: id, text, correct: judge(text, this.word) };
+      return { playerId: id, text, correct: text.length > 0 && judge(text, this.word) };
     });
   }
 
@@ -296,52 +330,46 @@ export class Session {
     if (this.phase !== 'guessing') return;
     this.clearTimer();
 
+    // 이번 회차에 새로 맞힌 사람의 점수를 확정하고, 틀린 제출을 센다
+    for (const id of this.seen.keys()) {
+      if (this.solved.has(id)) continue;
+      const text = this.answers.get(id) ?? '';
+      if (text.length === 0) continue;
+      if (judge(text, this.word)) this.solved.set(id, this.scoreFor(id));
+      else this.wrongSubmits.set(id, (this.wrongSubmits.get(id) ?? 0) + 1);
+    }
+
     const rows = this.answerRows();
     this.broadcast({ t: 'attemptResult', attempt: this.attempt, answers: rows });
 
-    const correct = rows.filter((r) => r.correct).map((r) => r.playerId);
-    if (correct.length > 0) return this.endRound(correct, rows);
-    if (this.attempt >= this.rules.maxAttempts) return this.endRound([], rows);
+    // 살아있는 사람 기준으로 본다. 전부 나가버렸으면 더 돌릴 이유가 없다.
+    if (this.guessers().length === 0) return this.endRound([...this.solved.keys()], rows);
+    const pending = [...this.seen.keys()].filter((id) => !this.solved.has(id));
+    if (pending.length === 0) return this.endRound([...this.solved.keys()], rows);
+    if (this.attempt >= this.rules.maxAttempts) return this.endRound([...this.solved.keys()], rows);
 
-    this.applyHint();
     this.attempt++;
     this.answers.clear();
-    this.skips.clear();
+    this.hintedThisAttempt.clear();
 
     this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
     this.broadcastRoom();
-    for (const id of this.seen.keys()) this.sendSlices(id);
+    const assembling = this.attempt >= this.rules.maxAttempts;
+    for (const id of this.seen.keys()) {
+      this.sendSlices(id);
+      if (assembling && !this.solved.has(id)) this.sendAssembled(id);
+    }
     this.sendBoard();
-  }
-
-  /** 시도에 실패할 때마다 조각을 하나 더 푼다. 자세한 규칙은 hint.ts에 있다. */
-  private applyHint(): void {
-    const all = this.slices.map((s) => s.index);
-    const taken = new Set<number>();
-    for (const seen of this.seen.values()) for (const i of seen) taken.add(i);
-    const hidden = all.filter((i) => !taken.has(i));
-
-    const plan = planHint(hidden, this.seen, all, this.pick);
-
-    if (plan.publicSlice !== null) {
-      this.publicSlices.push(plan.publicSlice);
-      for (const seen of this.seen.values()) seen.add(plan.publicSlice);
-      return;
-    }
-    for (const { playerId, sliceIndex } of plan.perPlayer) {
-      this.seen.get(playerId)?.add(sliceIndex);
-    }
   }
 
   protected endRound(correct: string[], answers: AnswerRow[] = []): void {
     this.clearTimer();
     this.phase = 'roundEnd';
 
-    const delta = new Map<string, number>();
-    for (const id of correct) delta.set(id, guesserPoints(this.attempt, this.rules.attemptPoints));
-    if (this.drawerId) {
-      delta.set(this.drawerId, drawerPoints(correct.length, this.rules.drawerPointPerCorrect));
-    }
+    // 점수는 맞힌 그 순간 이미 확정돼 solved에 들어 있다. 여기서 다시 계산하지 않는다 —
+    // 지금 계산하면 그 뒤에 남이 쓴 힌트나 오답이 내 점수에 섞인다.
+    // 출제자는 점수를 받지 않는다.
+    const delta = new Map<string, number>(this.solved);
     for (const p of this.players) p.score += delta.get(p.id) ?? 0;
 
     // 결과 화면에도 마감 시각을 준다. 이 화면만 시간이 없으면 나가는 문이 next() 하나뿐인데,
@@ -413,7 +441,6 @@ export class Session {
     this.round = 0;
     this.attempt = 1;
     this.answers.clear();
-    this.skips.clear();
     this.usedWords.clear();
     this.lastFinal = null;
     this.lastRoundEnd = null;
@@ -460,9 +487,9 @@ export class Session {
       }
     }
     this.broadcastRoom();
-    // 누가 사라진 이 순간, 남은 사람들이 이미 넘기기를 다 눌러둔 상태일 수 있다.
-    // 방금 방을 나간 사람을 기다리며 타이머를 다 태우면 안 된다.
-    this.checkSkipQuorum();
+    // 누가 사라진 이 순간, 남은 사람이 전부 답을 내둔 상태일 수 있다.
+    // 방금 나간 사람을 기다리며 타이머를 다 태우면 안 된다.
+    this.maybeEndAttempt();
   }
 
   handle(playerId: string, msg: ClientMsg): void {
@@ -474,7 +501,7 @@ export class Session {
       case 'undo': return this.undo(playerId);
       case 'drawDone': return this.drawDone(playerId);
       case 'answer': return this.answer(playerId, msg.text);
-      case 'skip': return this.skip(playerId);
+      case 'skip': return this.hint(playerId);
       case 'next': return this.next(playerId);
       default: return;
     }
@@ -521,6 +548,9 @@ export class Session {
 
   protected setDeadline(seconds: number, fn: () => void): void {
     this.clearTimer();
+    // 0 이하는 "자동으로 넘어가지 않는다"는 뜻이다. 결과 화면이 그렇다 —
+    // 방장이 직접 눌러야 다음 라운드로 간다.
+    if (seconds <= 0) return;
     this.deadline = Date.now() + seconds * 1000;
     this.cancelTimer = this.scheduler.after(seconds * 1000, fn);
   }
@@ -538,7 +568,7 @@ export class Session {
     const list = [...mine].map((index) => ({
       id: this.sliceId.get(index)!,
       strokes: this.slices[index].strokes,
-      shared: this.publicSlices.includes(index),
+      shared: false,
     }));
     this.send(playerId, { t: 'slices', count: this.slices.length, slices: list });
   }
@@ -547,16 +577,35 @@ export class Session {
    * 출제자에게 지금 밖에 나가 있는 조각이 무엇인지 보여준다.
    * 정답과 그림을 이미 아는 사람이라 원본을 실어도 새지 않는다.
    */
+  /**
+   * 마지막 회차에 내가 본 조각들을 회전을 풀어 제자리로 되돌려 보낸다.
+   * 서버가 들고 있는 조각은 전부 위를 향하게 돌아가 있으므로, 돌린 만큼 되돌린다.
+   */
+  protected sendAssembled(playerId: string): void {
+    const mine = this.seen.get(playerId);
+    if (!mine) return;
+    const count = this.slices.length;
+    const step = (Math.PI * 2) / count;
+    const pieces = [...mine].sort((a, b) => a - b).map((index) => {
+      const spin = -Math.PI / 2 - (index + 0.5) * step;
+      return { index, strokes: this.slices[index].strokes.map((st) => rotate(st, CENTER, -spin)) };
+    });
+    this.send(playerId, { t: 'assembled', sliceCount: count, pieces });
+  }
+
   protected sendBoard(): void {
     if (this.phase !== 'guessing') return;
     const out = new Set<number>();
     for (const seen of this.seen.values()) for (const i of seen) out.add(i);
-    this.send(this.drawerId, {
+    const msg: ServerMsg = {
       t: 'board',
       sliceCount: this.slices.length,
       drawing: this.strokes,
       visible: [...out].sort((a, b) => a - b),
-    });
+    };
+    // 출제자와, 먼저 맞혀 할 일이 없어진 사람에게. 둘 다 이미 답을 안다.
+    this.send(this.drawerId, msg);
+    for (const id of this.solved.keys()) this.send(id, msg);
   }
 
   protected broadcast(msg: ServerMsg): void {
@@ -571,7 +620,10 @@ export class Session {
       score: p.score,
       isDrawer: p.id === this.drawerId && this.phase !== 'lobby',
       answered: this.answers.has(p.id),
-      skipped: this.skips.has(p.id),
+      skipped: this.hintedThisAttempt.has(p.id),
+      solved: this.solved.has(p.id),
+      sliceCount: this.seen.get(p.id)?.size ?? 0,
+      pendingScore: this.solved.get(p.id) ?? this.scoreFor(p.id),
     }));
     this.broadcast({
       t: 'room',

@@ -10,8 +10,14 @@ export interface PlayerInfo {
   isDrawer: boolean;
   /** 이번 시도에 답을 적어두었는가 (내용은 공개 전까지 안 나간다) */
   answered: boolean;
-  /** 이번 시도에 넘기기를 눌렀는가 */
+  /** 이번 회차에 힌트를 받았는가 */
   skipped: boolean;
+  /** 이미 맞혀서 점수가 확정됐는가 */
+  solved: boolean;
+  /** 지금 몇 조각을 들고 있는가 */
+  sliceCount: number;
+  /** 지금 맞히면 받을 점수. 이미 맞혔으면 확정된 점수 */
+  pendingScore: number;
 }
 
 export type ClientMsg =
@@ -57,7 +63,7 @@ export type ServerMsg =
   /** 출제자가 새로고침했을 때 자기 그림을 되찾는다. 출제자에게만 간다. */
   | { t: 'canvas'; strokes: Point[][] }
   /**
-   * 내가 볼 수 있는 조각 전부 — 내 것 + 전원 공개된 것 + 나에게만 재배포된 것.
+   * 내가 볼 수 있는 조각 전부 — 처음 받은 것 + 힌트로 받은 것. 전부 나만의 것이다.
    * 이미 회전되어 있고, id는 섹터 번호와 무관한 불투명 값이다.
    * 번호가 새면 "내 건 3시 방향"이 되고 게임이 그 자리에서 무너진다.
    *
@@ -66,11 +72,15 @@ export type ServerMsg =
    */
   | { t: 'slices'; count: number; slices: Array<{ id: string; strokes: Point[][]; shared: boolean }> }
   /**
-   * 출제자에게만. 지금 맞히는 사람들에게 어떤 조각이 나가 있는지 보여준다.
-   *
-   * 출제자는 어차피 정답과 그림을 다 알고 있으므로 여기에 원본을 실어도 새는 것이 없다.
-   * 그리는 동안 말고는 할 일이 없던 출제자에게, 남들이 무엇을 보고 헤매는지 지켜보는
-   * 재미를 준다.
+   * 마지막 회차의 조립판. 지금까지 본 조각을 회전을 풀어 제자리에 끼워 보여준다.
+   * 이 게임의 핵심 장치인 회전을 마지막에 풀어주는 자비이자 마지막 기회다.
+   * 여기서 맞히면 점수는 1점 고정이라, 방향을 알려줘도 판이 무너지지 않는다.
+   */
+  | { t: 'assembled'; sliceCount: number; pieces: Array<{ index: number; strokes: Point[][] }> }
+  /**
+   * 이미 답을 아는 사람에게만 — 출제자와, 먼저 맞혀서 점수가 확정된 사람.
+   * 지금 남들에게 어떤 조각이 나가 있는지 보여준다. 정답을 아는 사람들이라 원본을 실어도
+   * 새는 것이 없고, 할 일이 없어진 그 시간이 남을 지켜보는 시간이 된다.
    */
   | { t: 'board'; sliceCount: number; drawing: Point[][]; visible: number[] }
   /** 시도 하나가 끝났다. 답이 동시에 공개된다. */

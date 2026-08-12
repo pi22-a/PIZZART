@@ -8,11 +8,20 @@ export interface Rules {
   sliceCountMin: number;
   drawSeconds: number;
   guessSeconds: number;
-  /** 결과 화면이 스스로 다음 라운드로 넘어가기까지. 방장이 화면을 잠가도 방이 멈추지 않게 한다. */
-  roundEndSeconds: number;
+  /** 마지막 회차는 조각을 제자리에 끼워 보여주는 조립판이다. */
   maxAttempts: number;
-  attemptPoints: number[];
-  drawerPointPerCorrect: number;
+  /** 한 사람이 가질 수 있는 조각 수의 상한. 처음 1장 + 힌트 4번. */
+  maxSlices: number;
+  /** 아무것도 안 쓰고 첫 회차에 맞히면 받는 점수 */
+  startScore: number;
+  /** 틀린 제출 한 번의 대가. 맞힌 제출은 공짜다 */
+  wrongSubmitCost: number;
+  /** 힌트 한 번의 대가 */
+  hintCost: number;
+  /** 조립판(마지막 회차)에서 맞히면 주는 고정 점수 */
+  finalAttemptScore: number;
+  /** 0이면 자동으로 안 넘어간다 — 방장이 직접 눌러야 한다 */
+  roundEndSeconds: number;
 }
 
 export interface Topic {

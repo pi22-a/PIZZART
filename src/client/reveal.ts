@@ -109,3 +109,42 @@ export function drawBoard(
   }
   ctx.restore();
 }
+
+/**
+ * 마지막 회차의 조립판. 내가 본 조각을 회전이 풀린 제자리에 끼워 보여준다.
+ *
+ * 좌표는 서버가 이미 원래 방향으로 되돌려 보낸 것이라 그대로 그리면 된다.
+ * 아직 못 본 칸은 어둡게 비워 둔다 — 어디가 비었는지가 그 자체로 단서다.
+ */
+export function drawAssembled(
+  el: HTMLCanvasElement,
+  pieces: Array<{ index: number; strokes: Point[][] }>,
+  sliceCount: number,
+): void {
+  const ctx = el.getContext('2d')!;
+  const scale = fitCanvas(el);
+  const step = (Math.PI * 2) / sliceCount;
+  const have = new Map(pieces.map((p) => [p.index, p.strokes]));
+
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.clearRect(0, 0, CANVAS, CANVAS);
+
+  for (let i = 0; i < sliceCount; i++) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(CENTER[0], CENTER[1]);
+    ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, i * step, (i + 1) * step);
+    ctx.closePath();
+    ctx.fillStyle = have.has(i) ? '#f6efe2' : '#241d16';
+    ctx.fill();
+    ctx.strokeStyle = '#3d3227';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.clip();
+    const st = have.get(i);
+    if (st) drawStrokes(ctx, st);
+    ctx.restore();
+  }
+  ctx.restore();
+}

@@ -32,15 +32,10 @@ let s: Session;
  * 손잡이를 돌렸다고 테스트가 깨지면 안 된다.
  */
 const TEST_RULES = {
-  minPlayers: 4,
-  maxPlayers: 9,
-  sliceCountMin: 8,
-  drawSeconds: 60,
-  guessSeconds: 90,
-  roundEndSeconds: 25,
-  maxAttempts: 3,
-  attemptPoints: [3, 2, 1],
-  drawerPointPerCorrect: 1,
+  minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
+  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
+  maxAttempts: 6, maxSlices: 5,
+  startScore: 10, wrongSubmitCost: 1, hintCost: 1, finalAttemptScore: 1,
 };
 
 function newSession(names = ['p1', 'p2', 'p3', 'p4']) {
@@ -231,7 +226,7 @@ describe('정보 은닉', () => {
   });
 });
 
-describe('추론 루프', () => {
+describe('추론 루프 — 개인 점수제', () => {
   let word: string;
 
   beforeEach(() => {
@@ -242,137 +237,152 @@ describe('추론 루프', () => {
     sent = [];
   });
 
-  it('시간이 다 되면 답이 동시에 공개된다', () => {
-    s.answer('p2', '엉뚱한답');
-    expect(msgsOfType('attemptResult').length).toBe(0);
-    clock.fire();
-    const res = msgsOfType('attemptResult');
-    expect(res.length).toBe(4);
-    expect(res[0].answers.find((a) => a.playerId === 'p2')!.text).toBe('엉뚱한답');
-  });
+  const scoreOf = (id: string) =>
+    msgsOfType('room').at(-1)!.players.find((p) => p.id === id)!.pendingScore;
 
-  it('맞히는 사람 과반이 힌트를 누르면 바로 공개된다', () => {
-    // 경쟁 게임이라 만장일치를 요구하면 감이 온 사람이 절대 안 눌러 시간만 흘러간다.
-    // 맞히는 사람은 셋이므로 과반은 둘이다.
-    s.skip('p2');
-    expect(msgsOfType('attemptResult').length).toBe(0);
-    s.skip('p3');
-    expect(msgsOfType('attemptResult').length).toBe(4);
-  });
+  /** 남은 회차를 끝까지 흘려 라운드를 종료시킨다. 이제 한 명이 맞혀도 라운드는 안 끝난다. */
+  const finish = () => { while (s.phase === 'guessing') clock.fire(); };
+  const deltaOf = (id: string) =>
+    msgsOfType('roundEnd').at(-1)!.scores.find((x) => x.playerId === id)!.delta;
 
-  it('출제자의 힌트받기는 세지 않는다 — 답을 아는 사람이 속도를 정하면 안 된다', () => {
-    s.skip('p1'); // 출제자
-    expect(msgsOfType('attemptResult').length).toBe(0);
-    s.skip('p2'); // 맞히는 사람 셋 중 하나 — 과반이 아니다
-    expect(msgsOfType('attemptResult').length).toBe(0);
-  });
-
-  it('아무도 못 맞히면 힌트를 주고 다음 시도로 간다', () => {
-    clock.fire();
-    expect(s.phase).toBe('guessing');
-    const room = msgsOfType('room').at(-1)!;
-    expect(room.attempt).toBe(2);
-    // 조각이 하나 늘어난다
-    const slices = msgsTo('p2').filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
-    expect(slices.slices.length).toBe(2);
-  });
-
-  it('힌트로 나온 조각은 전원이 같은 것을 받는다', () => {
-    clock.fire();
-    const shared = ['p2', 'p3', 'p4'].map((g) => {
-      const m = msgsTo(g).filter((x) => x.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
-      return m.slices.find((x) => x.shared)!.id;
-    });
-    expect(new Set(shared).size).toBe(1);
-  });
-
-  it('한 명이라도 맞히면 라운드가 끝난다', () => {
-    s.answer('p3', word);
-    clock.fire();
-    expect(s.phase).toBe('roundEnd');
-    const end = msgsOfType('roundEnd')[0];
-    expect(end.word).toBe(word);
-    expect(end.correct).toEqual(['p3']);
-  });
-
-  it('맞힌 사람은 시도 회차에 따라 점수를 받는다', () => {
-    s.answer('p3', word);
-    clock.fire();
-    const end = msgsOfType('roundEnd')[0];
-    expect(end.scores.find((x) => x.playerId === 'p3')!.delta).toBe(3);
-  });
-
-  it('늦게 맞힐수록 점수가 낮다', () => {
-    clock.fire();               // 1차 실패
-    s.answer('p3', word);
-    clock.fire();               // 2차에서 맞힘
-    const end = msgsOfType('roundEnd')[0];
-    expect(end.scores.find((x) => x.playerId === 'p3')!.delta).toBe(2);
-  });
-
-  it('출제자는 맞힌 사람 수만큼 받는다', () => {
+  it('아무것도 안 쓰고 1회차에 맞히면 만점이다', () => {
     s.answer('p2', word);
-    s.answer('p3', word);
-    clock.fire();
-    const end = msgsOfType('roundEnd')[0];
-    expect(end.scores.find((x) => x.playerId === 'p1')!.delta).toBe(2);
+    finish();
+    expect(deltaOf('p2')).toBe(10);
   });
 
-  it('세 번 다 실패하면 전원 0점으로 끝난다', () => {
+  it('힌트를 받으면 조각이 나만 늘고 점수가 깎인다', () => {
+    s.hint('p3');                 // 방 상태를 한 번 흘려보낸다
+    expect(scoreOf('p2')).toBe(10);
+    s.hint('p2');
+    expect(scoreOf('p2')).toBe(9);
+    expect(scoreOf('p3')).toBe(9);  // p3는 자기가 받은 만큼만 깎였다
+    const mine = msgsTo('p2').filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
+    expect(mine.slices.length).toBe(2);
+    // 아무것도 안 한 사람은 조각도 점수도 그대로다
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p4')!.sliceCount).toBe(1);
+    expect(scoreOf('p4')).toBe(10);
+  });
+
+  it('힌트는 회차당 한 번뿐이다', () => {
+    s.hint('p2');
+    s.hint('p2');
+    expect(scoreOf('p2')).toBe(9);
+  });
+
+  it('1회차에 틀리고 힌트도 받았으면 2회차 정답은 8점', () => {
+    s.answer('p2', '엉뚱한답');
+    s.hint('p2');
+    clock.fire();               // 1회차 종료 — 오답 -1, 힌트 -1
+    s.answer('p2', word);
+    finish();
+    expect(deltaOf('p2')).toBe(8);
+  });
+
+  it('제출은 안 하고 힌트만 받았으면 2회차 정답은 9점', () => {
+    s.hint('p2');
     clock.fire();
+    s.answer('p2', word);
+    finish();
+    expect(deltaOf('p2')).toBe(9);
+  });
+
+  it('1~4회차를 전부 쓰면 5회차 정답은 2점', () => {
+    for (let i = 0; i < 4; i++) {
+      s.answer('p2', '오답');
+      s.hint('p2');
+      clock.fire();
+    }
+    s.answer('p2', word);
+    finish();
+    expect(deltaOf('p2')).toBe(2);
+  });
+
+  it('먼저 맞혀도 라운드는 남은 사람을 위해 계속된다', () => {
+    s.answer('p2', word);
     clock.fire();
-    clock.fire();
+    expect(s.phase).toBe('guessing');   // p3, p4가 아직 못 맞혔다
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.solved).toBe(true);
+  });
+
+  it('전원이 맞히면 그 자리에서 라운드가 끝난다', () => {
+    s.answer('p2', word); s.answer('p3', word); s.answer('p4', word);
     expect(s.phase).toBe('roundEnd');
-    const end = msgsOfType('roundEnd')[0];
-    expect(end.correct).toEqual([]);
-    expect(end.scores.every((x) => x.delta === 0)).toBe(true);
+  });
+
+  it('맞힌 사람은 더 제출할 수 없고 힌트도 못 받는다', () => {
+    s.answer('p2', word);
+    clock.fire();
+    const before = scoreOf('p2');
+    s.hint('p2');
+    s.answer('p2', '아무거나');
+    expect(scoreOf('p2')).toBe(before);
+  });
+
+  it('마지막 회차는 조립판이고, 거기서 맞히면 1점이다', () => {
+    for (let i = 0; i < 5; i++) clock.fire();   // 1~5회차를 그냥 흘려보낸다
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(6);
+    const asm = msgsTo('p2').filter((m) => m.t === 'assembled');
+    expect(asm.length).toBeGreaterThan(0);
+    s.answer('p2', word);
+    finish();
+    expect(deltaOf('p2')).toBe(1);
+  });
+
+  it('조립판 조각은 회전이 풀려 제자리에 있다', () => {
+    s.hint('p2');
+    for (let i = 0; i < 5; i++) clock.fire();
+    const asm = (msgsTo('p2').filter((m) => m.t === 'assembled').at(-1)) as Extract<ServerMsg, { t: 'assembled' }>;
+    // 내가 본 조각만, 각자 자기 섹터 번호를 달고 온다
+    expect(asm.pieces.length).toBeGreaterThanOrEqual(2);
+    for (const piece of asm.pieces) {
+      expect(piece.index).toBeGreaterThanOrEqual(0);
+      expect(piece.index).toBeLessThan(asm.sliceCount);
+    }
+  });
+
+  it('출제자는 점수를 받지 않는다', () => {
+    s.answer('p2', word); s.answer('p3', word); s.answer('p4', word);
+    expect(deltaOf('p1')).toBe(0);
+  });
+
+  it('출제자는 힌트도 답도 낼 수 없다', () => {
+    s.hint('p1');
+    s.answer('p1', word);
+    clock.fire();
+    const rows = msgsOfType('attemptResult').at(-1)!.answers;
+    expect(rows.find((r) => r.playerId === 'p1')).toBeUndefined();
+  });
+
+  it('아직 못 맞힌 사람이 모두 답을 내면 시간을 안 기다린다', () => {
+    s.answer('p2', '가'); s.answer('p3', '나');
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    s.answer('p4', '다');
+    expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
   });
 
   it('라운드가 끝나야 원본과 섹터 번호가 내려간다', () => {
-    s.answer('p2', word);
-    clock.fire();
-    const end = msgsOfType('roundEnd')[0];
+    for (let i = 0; i < 6; i++) clock.fire();
+    const end = msgsOfType('roundEnd').at(-1)!;
     expect(end.drawing.length).toBeGreaterThan(0);
     expect(end.owners.length).toBe(end.sliceCount);
-    expect(end.owners.filter((o) => o.playerId !== null).length).toBe(3);
   });
 
   it('방장이 다음을 누르면 다음 라운드로 간다', () => {
-    s.answer('p2', word);
-    clock.fire();
+    for (let i = 0; i < 6; i++) clock.fire();
     s.next('p1');
     expect(s.phase).toBe('drawing');
-    expect(msgsOfType('room').at(-1)!.round).toBe(1);
   });
 
-  it('마지막 라운드가 끝나면 최종 결과가 나온다', () => {
-    for (let i = 0; i < 4; i++) {
-      if (s.phase === 'lobby') break;
-      if (s.phase === 'drawing') { drawStar(s.drawerId); s.drawDone(s.drawerId); }
-      clock.fire(); clock.fire(); clock.fire();
-      s.next('p1');
-    }
-    expect(s.phase).toBe('final');
-    expect(msgsOfType('final').at(-1)!.ranking.length).toBe(4);
+  it('결과 화면은 스스로 넘어가지 않는다 — 방장이 눌러야 한다', () => {
+    for (let i = 0; i < 6; i++) clock.fire();
+    expect(s.phase).toBe('roundEnd');
+    expect(msgsOfType('room').at(-1)!.deadline).toBe(null);
+    clock.fire();
+    expect(s.phase).toBe('roundEnd');
   });
 });
 
-describe('힌트 폴백 — 숨은 조각이 없을 때', () => {
-  it('9명이면 처음부터 전원이 조각을 하나씩 갖고, 힌트는 남의 조각 재배포다', () => {
-    newSession(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9']);
-    s.start('p1');
-    drawStar('p1');
-    s.drawDone('p1');
-    sent = [];
-
-    clock.fire(); // 1차 실패 → 힌트
-
-    const m = msgsTo('p2').filter((x) => x.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
-    expect(m.slices.length).toBe(2);
-    // 전원 공개가 아니라 개인 배포다
-    expect(m.slices.every((x) => x.shared === false)).toBe(true);
-  });
-});
 
 describe('이탈과 재입장', () => {
   beforeEach(() => { s.start('p1'); });
@@ -407,7 +417,7 @@ describe('이탈과 재입장', () => {
   it('결과 화면에서 돌아오면 결과를 다시 받는다', () => {
     drawStar('p1');
     s.drawDone('p1');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     expect(s.phase).toBe('roundEnd');
     // 원본과 똑같은 참조인지 확인하기 위해, 브로드캐스트 직후와 재입장 사이에
     // 상태를 바꾼다(p3 이탈). 다시 계산하는 구현이면 여기서 값이 달라질 수 있지만,
@@ -424,7 +434,7 @@ describe('이탈과 재입장', () => {
   it('최종 화면에서 돌아오면 순위를 다시 받는다', () => {
     for (let i = 0; i < 4; i++) {
       if (s.phase === 'drawing') { drawStar(s.drawerId); s.drawDone(s.drawerId); }
-      clock.fire(); clock.fire(); clock.fire();
+      for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
       s.next('p1');
     }
     expect(s.phase).toBe('final');
@@ -455,8 +465,10 @@ describe('이탈과 재입장', () => {
     s.drawDone('p1');
     s.disconnect('p4');
     sent = [];
-    s.skip('p2');
-    s.skip('p3');
+    // 힌트는 이제 개인 선택이라 회차를 끝내지 않는다.
+    // 대신 살아있는 사람이 전부 답을 내면 끊긴 사람을 기다리지 않고 넘어가야 한다.
+    s.answer('p2', '가');
+    s.answer('p3', '나');
     expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
   });
 
@@ -474,7 +486,7 @@ describe('이탈과 재입장', () => {
   });
 
   it('출제 차례인 사람이 없으면 건너뛴다', () => {
-    drawStar('p1'); s.drawDone('p1'); clock.fire(); clock.fire(); clock.fire();
+    drawStar('p1'); s.drawDone('p1'); for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.disconnect('p2'); // 다음 출제자
     s.next('p1');
     expect(s.drawerId).toBe('p3');
@@ -494,7 +506,7 @@ describe('이탈과 재입장', () => {
     s.disconnect('p3');
     s.disconnect('p4');
     // 남은 사람은 p1, p2 — 진행 중인 라운드는 끝까지 간다
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     expect(s.phase).toBe('roundEnd');
     s.next('p1');
     expect(s.phase).toBe('lobby');
@@ -506,9 +518,10 @@ describe('이탈과 재입장', () => {
     s.answer('p2', word);
     clock.fire();
     s.disconnect('p3'); s.disconnect('p4');
+    while (s.phase === 'guessing') clock.fire();
     s.next('p1');
     expect(s.phase).toBe('lobby');
-    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.score).toBe(3);
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.score).toBe(10);
   });
 
   // 체크포인트 B에서 걸린 버그다. 방장이 게임 도중(로비가 아닐 때) 끊기면 hostId가
@@ -516,7 +529,7 @@ describe('이탈과 재입장', () => {
   it('방장이 라운드 도중 끊기면 살아있는 다른 사람에게 방장이 넘어간다', () => {
     drawStar('p1');
     s.drawDone('p1');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     expect(s.phase).toBe('roundEnd');
     s.disconnect('p1'); // 방장(출제자)이 결과 화면에서 나간다
     const hostId = msgsOfType('room').at(-1)!.hostId;
@@ -527,7 +540,7 @@ describe('이탈과 재입장', () => {
   it('새 방장이 다음을 눌러 라운드를 진행시킬 수 있다', () => {
     drawStar('p1');
     s.drawDone('p1');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.disconnect('p1');
     // newHost를 room 메시지에서 다시 읽지 않고 p2로 못박는다 — 버그가 있으면
     // hostId가 여전히 'p1'을 가리켜, 그 값을 그대로 썼을 때 우연히 통과할 수 있다.
@@ -540,7 +553,7 @@ describe('이탈과 재입장', () => {
   it('원래 방장이 돌아와도 방장 자리를 되찾지 않는다', () => {
     drawStar('p1');
     s.drawDone('p1');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.disconnect('p1');
     const newHost = msgsOfType('room').at(-1)!.hostId;
     sent = [];
@@ -551,7 +564,7 @@ describe('이탈과 재입장', () => {
   it('방장이 끊길 때 남은 사람이 아무도 없어도 죽지 않는다', () => {
     drawStar('p1');
     s.drawDone('p1');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.disconnect('p2');
     s.disconnect('p3');
     s.disconnect('p4');
@@ -566,48 +579,51 @@ describe('이탈과 재입장', () => {
 // ---------------------------------------------------------------------------
 
 /** 결과 화면(roundEnd)까지 한 라운드를 끝까지 굴린다 */
+/** 한 라운드를 아무도 못 맞힌 채 끝까지 돌린다. 회차 수는 규칙에서 가져온다. */
 function playRound(): void {
   if (s.phase === 'drawing') { drawStar(s.drawerId); s.drawDone(s.drawerId); }
-  clock.fire(); clock.fire(); clock.fire();
+  for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
 }
 
-describe('결과 화면 마감 시간 (수정 1)', () => {
+describe('결과 화면은 방장이 넘긴다', () => {
   beforeEach(() => { s.start('p1'); });
 
-  it('결과 화면에도 마감 시각이 실린다 — 유일하게 시간 없는 화면이면 안 된다', () => {
+  // 처음에는 방장이 폰을 잠그면 방이 멈추는 것을 막으려고 자동 넘김을 뒀다.
+  // 경쟁 게임으로 방향을 잡으면서 "결과를 언제까지 볼지는 방장이 정한다"로 바꿨다.
+  // 그 대가로 방장이 조용하면 방이 기다린다 — 방장이 끊기면 승계는 그대로 일어난다.
+  it('결과 화면에는 마감 시각이 없다', () => {
     playRound();
     expect(s.phase).toBe('roundEnd');
-    expect(msgsOfType('room').at(-1)!.deadline).not.toBeNull();
+    expect(msgsOfType('room').at(-1)!.deadline).toBeNull();
   });
 
-  it('아무도 다음을 누르지 않아도 시간이 지나면 다음 라운드로 간다', () => {
+  it('시간이 흘러도 스스로 넘어가지 않는다', () => {
     playRound();
+    clock.fire();
+    clock.fire();
     expect(s.phase).toBe('roundEnd');
-    clock.fire(); // 결과 화면 마감
+  });
+
+  it('방장이 누르면 넘어간다', () => {
+    playRound();
+    s.next('p1');
     expect(s.phase).toBe('drawing');
     expect(msgsOfType('room').at(-1)!.round).toBe(1);
   });
 
-  it('방장이 화면을 잠가 아무 말이 없어도 방이 멈추지 않는다', () => {
-    // 방장이 소켓을 닫은 게 아니라 그냥 조용한 경우다 — 방장 승계도 일어나지 않는다.
+  it('방장이 아니면 못 넘긴다', () => {
     playRound();
-    const host = msgsOfType('room').at(-1)!.hostId;
-    expect(host).toBe('p1'); // 아무도 끊기지 않았으니 방장은 그대로다
-    clock.fire();
-    expect(s.phase).toBe('drawing');
-  });
-
-  it('마지막 라운드면 시간이 지나 최종 결과로 간다', () => {
-    for (let i = 0; i < 4; i++) { playRound(); clock.fire(); }
-    expect(s.phase).toBe('final');
-  });
-
-  it('방장이 아니어도 시간은 흐른다 — 타이머는 방장을 확인하지 않는다', () => {
-    playRound();
-    s.next('p2'); // 방장이 아니므로 무시된다
+    s.next('p2');
     expect(s.phase).toBe('roundEnd');
-    clock.fire();
-    expect(s.phase).toBe('drawing');
+  });
+
+  it('방장이 끊기면 승계받은 사람이 넘길 수 있다', () => {
+    playRound();
+    s.disconnect('p1');
+    const host = msgsOfType('room').at(-1)!.hostId;
+    expect(host).not.toBe('p1');
+    s.next(host);
+    expect(s.phase).not.toBe('roundEnd');
   });
 });
 
@@ -690,9 +706,12 @@ describe('결과 화면이 스스로 완결적이다 (수정 4)', () => {
   function endWithAnswers(): void {
     const word = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
     drawStar('p1'); s.drawDone('p1');
+    // roundEnd에 실리는 것은 '마지막 회차'의 답이므로, 마지막 회차까지 간 뒤 답을 낸다.
+    while (msgsOfType('room').at(-1)!.attempt < TEST_RULES.maxAttempts) clock.fire();
     s.answer('p2', word);
     s.answer('p3', '하마');
-    clock.fire();
+    s.answer('p4', '기린');
+    while (s.phase === 'guessing') clock.fire();
   }
 
   it('roundEnd에 마지막 시도의 답이 함께 실린다', () => {
@@ -714,17 +733,16 @@ describe('결과 화면이 스스로 완결적이다 (수정 4)', () => {
 describe('넘기기 정족수 재확인 (수정 5)', () => {
   beforeEach(() => { s.start('p1'); });
 
-  it('사람이 끊겨 과반이 채워지면 바로 공개된다', () => {
-    // 맞히는 사람 넷 중 둘이 눌렀다 — 아직 과반이 아니다.
-    // 한 명이 끊겨 셋이 되는 순간 둘이 과반이 되므로, 아무도 버튼을 다시 안 눌러도 넘어가야 한다.
-    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+  it('사람이 끊기면 남은 사람의 답만으로 회차가 끝난다', () => {
+    // 맞히는 사람 셋 중 둘이 답을 냈다. 남은 한 명이 끊기면 그를 기다릴 이유가 없으므로
+    // 아무도 다시 아무것도 하지 않아도 회차가 끝나야 한다.
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
-    s.skip('p2');
-    s.skip('p3');
+    s.answer('p2', '가');
+    s.answer('p3', '나');
     sent = [];
     expect(msgsOfType('attemptResult').length).toBe(0);
-    s.disconnect('p4');
+    s.disconnect('p4'); // 마지막 한 명이 사라지면 그를 기다릴 이유가 없다
     expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
   });
 
@@ -749,8 +767,8 @@ describe('라운드 사이 상태 청소 (수정 6)', () => {
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.answer('p2', '아무거나');
-    s.skip('p3');
-    clock.fire(); clock.fire(); clock.fire();
+    s.hint('p3');
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.next('p1');
     const room = msgsOfType('room').at(-1)!;
     expect(room.attempt).toBe(1);
@@ -761,8 +779,8 @@ describe('라운드 사이 상태 청소 (수정 6)', () => {
   it('결과 화면에서도 시도 표시가 새 라운드 값으로 튀지 않는다', () => {
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
-    clock.fire(); clock.fire(); clock.fire();
-    expect(msgsOfType('room').at(-1)!.attempt).toBe(3); // 결과 화면은 방금 끝난 시도를 보여준다
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(TEST_RULES.maxAttempts); // 결과 화면은 방금 끝난 시도를 보여준다
     s.next('p1');
     expect(msgsOfType('room').at(-1)!.attempt).toBe(1);
   });
@@ -773,7 +791,7 @@ describe('유령 정리 (수정 7)', () => {
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.disconnect('p3'); s.disconnect('p4');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.next('p1');
     expect(s.phase).toBe('lobby');
     expect(msgsOfType('room').at(-1)!.players.map((p) => p.id)).toEqual(['p1', 'p2']);
@@ -783,7 +801,7 @@ describe('유령 정리 (수정 7)', () => {
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.disconnect('p3'); s.disconnect('p4');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.next('p1');
     s.start('p1'); // 실제로는 두 명뿐이다
     expect(s.phase).toBe('lobby');
@@ -804,7 +822,7 @@ describe('유령 정리 (수정 7)', () => {
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.disconnect('p5'); s.disconnect('p6');
-    clock.fire(); clock.fire(); clock.fire();
+    for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.next('p1');
     expect(s.phase).toBe('drawing'); // 4명 남았으니 계속 간다
     s.disconnect('p3'); s.disconnect('p4');

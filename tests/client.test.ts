@@ -50,9 +50,9 @@ function deliver(m: ServerMsg): void {
 }
 
 const PLAYERS = [
-  { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-  { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false },
-  { id: 'x', name: '친구', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+  { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+  { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+  { id: 'x', name: '친구', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
 ];
 
 function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg {
@@ -358,8 +358,8 @@ describe('로비 카운트 라인', () => {
     deliver(room({
       phase: 'lobby',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
       ],
       minPlayers: 4,
     }));
@@ -373,10 +373,10 @@ describe('로비 카운트 라인', () => {
       phase: 'lobby',
       hostId: 'me',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
       ],
       minPlayers: 4,
     }));
@@ -390,10 +390,10 @@ describe('로비 카운트 라인', () => {
       phase: 'lobby',
       hostId: 'd',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
       ],
       minPlayers: 4,
     }));
@@ -406,9 +406,9 @@ describe('로비 카운트 라인', () => {
     deliver(room({
       phase: 'lobby',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false },
-        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
       ],
       minPlayers: 4,
     }));
@@ -457,9 +457,9 @@ describe('힌트받기 집계와 눌림 표시 (Fix 3)', () => {
     await guessing();
     deliver(room({
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true },
-        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false },
-        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false },
+ { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
+        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
       ],
     }));
     expect($('hintTally').textContent).toBe('1/1명이 눌렀습니다');
@@ -563,6 +563,7 @@ describe('그린 획이 서버까지 간다', () => {
 
 const TEST_RULES_CLIENT = {
   minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
-  drawSeconds: 60, guessSeconds: 90, roundEndSeconds: 25,
-  maxAttempts: 3, attemptPoints: [3, 2, 1], drawerPointPerCorrect: 1,
+  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
+  maxAttempts: 6, maxSlices: 5,
+  startScore: 10, wrongSubmitCost: 1, hintCost: 1, finalAttemptScore: 1,
 };
