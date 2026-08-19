@@ -111,13 +111,6 @@
       <p>못 맞힌 채 마지막 <b>6회차</b>가 되면, 지금까지 본 조각을
         <b>제자리에 끼워</b> 보여줍니다. 거기서 맞히면 1점입니다.</p>
     </details>
-    <!-- 주제 고르기. 방장에게만 버튼이 살아 있고, 나머지는 뭘 골랐는지 읽기만 한다. -->
-    <div class="lobby-topic" id="topicPick">
-      <label>주제</label>
-      <div class="bar" id="topicBtns"></div>
-      <p class="muted" id="topicNote"></p>
-    </div>
-
     <div class="lobby-name">
       <label for="nameInput">이름</label>
       <div class="bar">
@@ -125,6 +118,13 @@
         <button id="nameSaveBtn">저장</button>
       </div>
       <p class="muted" id="nameHint">엔터를 쳐도 저장됩니다 · 최대 12자</p>
+    </div>
+
+    <!-- 주제 고르기. 방장에게만 버튼이 살아 있고, 나머지는 뭘 골랐는지 읽기만 한다. -->
+    <div class="lobby-topic" id="topicPick">
+      <label>주제</label>
+      <div class="bar" id="topicBtns"></div>
+      <p class="muted" id="topicNote"></p>
     </div>
 
     <p class="muted" id="lobbyNote"></p>
