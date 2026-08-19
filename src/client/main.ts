@@ -218,6 +218,11 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'slices') {
     sliceCount = m.count;
     hasSlices = true;
+    // 지난 라운드 마지막 회차에서 켜둔 조립판을 여기서 되돌린다. 되돌리지 않으면
+    // 조각칸이 숨겨진 채로 다음 라운드에 들어가 지난 그림이 그대로 남는다 —
+    // 조립판을 받은 적이 없는 직전 출제자만 새 그림을 보게 된다.
+    $('sliceBox').style.display = '';
+    $('assembledWrap').style.display = 'none';
     renderSlices(m.slices, sliceCount);
     setSpectating(false);
     return;

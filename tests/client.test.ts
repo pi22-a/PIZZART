@@ -567,3 +567,32 @@ const TEST_RULES_CLIENT = {
   maxAttempts: 6, maxSlices: 5,
   startScore: 10, wrongSubmitCost: 1, hintCost: 1, finalAttemptScore: 1,
 };
+
+describe('새 라운드가 지난 라운드 조립판을 덮어쓴다 (버그: 직전 출제자만 새 그림이 보인다)', () => {
+  const assembled = (): ServerMsg => ({
+    t: 'assembled', sliceCount: 8,
+    pieces: [{ index: 0, strokes: [[[500, 500], [600, 500]]] }],
+  });
+
+  it('조립판을 본 뒤 새 라운드 조각을 받으면 조각칸이 돌아온다', async () => {
+    await guessing();
+    deliver(assembled());
+    expect($('sliceBox').style.display).toBe('none');
+    expect($('assembledWrap').style.display).toBe('');
+
+    // 다음 라운드가 시작되면 조각이 새로 온다. 여기서 안 되돌리면 지난 그림이 남는다.
+    deliver(room({ round: 1 }));
+    deliver(slices());
+    expect($('assembledWrap').style.display).toBe('none');
+    expect($('sliceBox').style.display).not.toBe('none');
+    expect($('sliceBox').children.length).toBe(1);
+  });
+
+  it('마지막 회차에는 조립판이 이긴다 — 서버가 조각 다음에 조립판을 보내기 때문이다', async () => {
+    await guessing();
+    deliver(slices());
+    deliver(assembled());
+    expect($('sliceBox').style.display).toBe('none');
+    expect($('assembledWrap').style.display).toBe('');
+  });
+});
