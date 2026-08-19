@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "concurrently --names 서버,화면 --prefix-colors cyan,magenta --kill-others \"npm:dev:server\" \"npm:dev:client\"",
     "dev:watch": "concurrently --names 서버,화면 --prefix-colors cyan,magenta --kill-others \"npm:dev:server:watch\" \"npm:dev:client\"",

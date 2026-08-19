@@ -26,6 +26,16 @@ http://localhost:5173/?room=아무거나
 
 게임이 이미 진행 중이면 3명까지 계속 진행할 수 있다.
 
+## 윈도우에서
+
+그대로 돌아간다. 네이티브 컴파일이 없어서 빌드 도구도 필요 없다.
+
+- **Node 20.19 이상**이 필요하다 (또는 22.12 이상). `node -v`로 확인한다.
+- `npm install` → `npm run dev` → `http://localhost:5173/?room=아무거나`
+- 로그 앞의 `[서버] [화면]` 한글이 cmd.exe에서 깨져 보일 수 있다. 동작에는 영향이 없고,
+  PowerShell이나 Windows Terminal을 쓰거나 `chcp 65001`을 한 번 치면 멀쩡해진다.
+- 터널을 쓰려면 `cloudflared`를 따로 깔아야 한다: `winget install --id Cloudflare.cloudflared`
+
 ## 밖에서 접속하기
 
 ```bash
