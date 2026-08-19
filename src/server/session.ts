@@ -128,6 +128,9 @@ export class Session {
     }
     if (this.phase === 'guessing' && this.seen.has(id)) {
       this.sendSlices(id);
+      // 마지막 회차라면 조립판까지 돌려준다. 조각만 돌려주면 돌아온 사람만
+      // 낱장을 들고 있고, 남들이 보는 조립판을 못 봐서 같은 화면이 아니게 된다.
+      if (this.attempt >= this.rules.maxAttempts && !this.solved.has(id)) this.sendAssembled(id);
     }
     if (this.phase === 'guessing' && id === this.drawerId) {
       this.sendBoard();

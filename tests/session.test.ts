@@ -329,6 +329,15 @@ describe('추론 루프 — 개인 점수제', () => {
     expect(deltaOf('p2')).toBe(1);
   });
 
+  it('마지막 회차에서 돌아오면 조립판을 다시 받는다', () => {
+    for (let i = 0; i < 5; i++) clock.fire();   // 6회차(조립판)까지 간다
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(6);
+    s.disconnect('p2');
+    sent = [];
+    s.join('p2', 'p2');
+    expect(msgsTo('p2').filter((m) => m.t === 'assembled').length).toBe(1);
+  });
+
   it('조립판 조각은 회전이 풀려 제자리에 있다', () => {
     s.hint('p2');
     for (let i = 0; i < 5; i++) clock.fire();
