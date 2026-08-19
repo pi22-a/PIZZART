@@ -739,9 +739,20 @@ describe('한 판 더 (수정 2)', () => {
     expect(s.phase).toBe('lobby');
   });
 
-  it('방장이 아니어도 한 판 더를 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다', () => {
+  it('방장이 아니면 한 판 더를 누를 수 없다', () => {
     toFinal();
     s.again('p3');
+    expect(s.phase).toBe('final');
+  });
+
+  // 방장 전용으로 바꿔도 방이 영구히 갇히지 않는 근거다. 이게 깨지면
+  // 방장이 자리를 뜬 순간 그 방 코드는 최종 화면에서 죽는다.
+  it('방장이 나가면 다음 사람이 한 판 더를 누를 수 있다', () => {
+    toFinal();
+    s.disconnect('p1');
+    const host = msgsOfType('room').at(-1)!.hostId;
+    expect(host).not.toBe('p1');
+    s.again(host);
     expect(s.phase).toBe('lobby');
   });
 

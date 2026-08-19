@@ -225,19 +225,22 @@ describe('결과 화면이 새로고침 뒤에도 답을 보여준다 (수정 4)
 });
 
 describe('한 판 더 버튼 (수정 2)', () => {
-  it('최종 화면의 버튼이 again을 보낸다', async () => {
+  it('방장이 아니면 한 판 더 버튼이 잠기고 누가 눌러야 하는지 알려준다', async () => {
     await boot();
     deliver({ t: 'joined', youId: 'me' });
-    deliver(room({ phase: 'final' }));
-    $('againBtn').click();
-    expect(live.out.map((m) => m.t)).toContain('again');
+    deliver(room({ phase: 'final', hostId: 'd' }));
+    expect($<HTMLButtonElement>('againBtn').disabled).toBe(true);
+    expect($('againNote').textContent).toContain('출제자');
   });
 
-  it('방장이 아니어도 눌릴 수 있다', async () => {
+  it('방장이면 버튼이 열리고 again을 보낸다', async () => {
     await boot();
-    deliver({ t: 'joined', youId: 'me' }); // hostId는 'd'다
-    deliver(room({ phase: 'final' }));
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'final', hostId: 'me' }));
     expect($<HTMLButtonElement>('againBtn').disabled).toBe(false);
+    expect($('againNote').textContent).toBe('');
+    $('againBtn').click();
+    expect(live.out.map((m) => m.t)).toContain('again');
   });
 });
 

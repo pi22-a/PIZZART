@@ -507,11 +507,17 @@ export class Session {
   }
 
   /**
-   * 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 —
-   * 이 문이 한 사람 뒤에 잠기면, 그 사람이 자리를 뜬 순간 방 코드가 통째로 죽는다.
+   * 최종 화면에서 한 판 더. 방장만 누를 수 있다.
+   *
+   * 예전에는 누구나 눌렀다 — 이 문이 한 사람 뒤에 잠기면 그 사람이 자리를 뜬 순간
+   * 방 코드가 통째로 죽는다는 이유였다. 그 걱정은 방장 승계가 막아준다:
+   * 방장이 끊기면 hostId가 살아있는 사람에게 곧바로 넘어간다(disconnect 참조).
+   * 남는 문제는 결과를 아직 보고 있는데 누가 새 판을 시작해버리는 쪽이라,
+   * 다음 라운드로 넘기는 next()와 같은 문을 쓴다.
    */
   again(playerId: string): void {
     if (this.phase !== 'final') return;
+    if (playerId !== this.hostId) return;
     if (!this.players.some((p) => p.id === playerId)) return;
 
     this.clearTimer();

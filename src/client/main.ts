@@ -202,6 +202,11 @@ function onMsg(m: ServerMsg): void {
     }
     ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
     ($('nextBtn') as HTMLButtonElement).disabled = youId !== hostId;
+    ($('againBtn') as HTMLButtonElement).disabled = youId !== hostId;
+    // 잠긴 버튼만 덩그러니 두면 "왜 안 눌리지"로 끝난다. 누가 눌러야 하는지 적어준다.
+    $('againNote').textContent = youId === hostId
+      ? ''
+      : `${names.get(hostId) ?? '방장'} 님이 눌러야 새 판이 시작됩니다`;
     renderLobbyNote(m.players, youId, hostId, m.minPlayers);
 
     if (m.phase !== lastPhase) onPhase(m.phase, iDraw, m.players, m.topic);
