@@ -24,6 +24,8 @@ export type ClientMsg =
   /** cid는 브라우저가 sessionStorage에 들고 다니는 식별자다. 새로고침해도 같은 자리로 돌아온다. */
   | { t: 'join'; name: string; cid: string }
   | { t: 'start' }
+  /** 로비에서 방장이 주제를 고정한다. null이면 라운드마다 무작위. */
+  | { t: 'setTopic'; topic: string | null }
   | { t: 'stroke'; points: Point[] }
   | { t: 'undo' }
   | { t: 'drawDone' }
@@ -57,6 +59,10 @@ export type ServerMsg =
       deadline: number | null;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
+      /** 고를 수 있는 주제 목록 */
+      topics: string[];
+      /** 방장이 고정한 주제. null이면 라운드마다 무작위로 뽑는다 */
+      selectedTopic: string | null;
     }
   /** 제시어. 출제자에게만 간다. */
   | { t: 'word'; word: string }

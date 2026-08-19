@@ -55,6 +55,9 @@
   .rules p { margin:10px 0 4px; }
   .rules-score { color:var(--sauce); }
   .rules, .rules p, .rules li { font-size:13px; opacity:.85; }
+  .lobby-topic label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
+  .lobby-topic button { padding:8px 16px; background:#2b2118; color:var(--dough); border:1px solid #3d3227; }
+  .lobby-topic button.on { background:var(--sauce); color:#1c1712; border-color:var(--sauce); }
   .lobby-name label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
   .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid #3d3227; }
   .lobby-start button { font-size:18px; padding:14px 28px; }
@@ -108,6 +111,13 @@
       <p>못 맞힌 채 마지막 <b>6회차</b>가 되면, 지금까지 본 조각을
         <b>제자리에 끼워</b> 보여줍니다. 거기서 맞히면 1점입니다.</p>
     </details>
+    <!-- 주제 고르기. 방장에게만 버튼이 살아 있고, 나머지는 뭘 골랐는지 읽기만 한다. -->
+    <div class="lobby-topic" id="topicPick">
+      <label>주제</label>
+      <div class="bar" id="topicBtns"></div>
+      <p class="muted" id="topicNote"></p>
+    </div>
+
     <div class="lobby-name">
       <label for="nameInput">이름</label>
       <div class="bar">

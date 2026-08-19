@@ -104,6 +104,36 @@ export function renderAnswers(target: string, rows: AnswerRow[], names: Map<stri
     .join('');
 }
 
+/**
+ * 주제 고르기 버튼. 방장에게만 누를 수 있게 두고, 나머지에게는 무엇이 골라졌는지만 보여준다.
+ * 남이 고른 것을 못 보면 "왜 계속 동물만 나오지?"가 된다.
+ */
+export function renderTopics(
+  topics: string[],
+  selected: string | null,
+  isHost: boolean,
+  onPick: (topic: string | null) => void,
+): void {
+  const box = $('topicBtns');
+  box.innerHTML = '';
+  // 주제 목록이 안 왔으면 조용히 비워둔다. 로비가 통째로 죽는 것보다 낫다.
+  const opts: Array<{ label: string; value: string | null }> = [
+    ...(topics ?? []).map((t) => ({ label: t, value: t as string | null })),
+    { label: '랜덤', value: null },
+  ];
+  for (const o of opts) {
+    const b = document.createElement('button');
+    b.textContent = o.label;
+    b.className = o.value === selected ? 'on' : '';
+    b.disabled = !isHost;
+    b.addEventListener('click', () => onPick(o.value));
+    box.appendChild(b);
+  }
+  $('topicNote').textContent = isHost
+    ? '고른 주제로만 문제가 나옵니다. 랜덤이면 라운드마다 바뀝니다.'
+    : `방장이 고른 주제: ${selected ?? '랜덤'}`;
+}
+
 export function renderRanking(rows: Array<{ playerId: string; name: string; score: number }>): void {
   $('ranking').innerHTML = rows
     .map((r, i) => `<li>${i + 1}. ${escape(r.name)} — ${r.score}점</li>`)

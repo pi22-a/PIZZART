@@ -882,3 +882,81 @@ describe('한 게임 안에서 제시어가 겹치지 않는다 (수정 10)', ()
     expect(s.phase).toBe('drawing'); // 단어 풀이 비어 멈추면 안 된다
   });
 });
+
+describe('주제 고르기', () => {
+  const topics = [
+    { topic: '동물', words: ['호랑이', '펭귄', '코끼리', '토끼', '여우', '곰'] },
+    { topic: '음식', words: ['피자', '김밥', '라면', '치킨', '초밥', '만두'] },
+  ];
+
+  function withTopics() {
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs, topics,
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+  }
+
+  it('기본은 랜덤이고, 고를 수 있는 주제가 함께 온다', () => {
+    withTopics();
+    const room = msgsOfType('room').at(-1)!;
+    expect(room.selectedTopic).toBeNull();
+    expect(room.topics).toEqual(['동물', '음식']);
+  });
+
+  it('방장이 고른 주제로만 문제가 나온다', () => {
+    withTopics();
+    s.setTopic('p1', '음식');
+    s.start('p1');
+    for (let i = 0; i < 3; i++) {
+      expect(msgsOfType('room').at(-1)!.topic).toBe('음식');
+      playRound();
+      s.next('p1');
+    }
+  });
+
+  it('방장이 아니면 못 고른다', () => {
+    withTopics();
+    s.setTopic('p2', '음식');
+    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+  });
+
+  it('없는 주제는 무시한다', () => {
+    withTopics();
+    s.setTopic('p1', '우주');
+    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+  });
+
+  it('게임이 시작된 뒤에는 못 바꾼다', () => {
+    withTopics();
+    s.start('p1');
+    s.setTopic('p1', '음식');
+    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+  });
+
+  it('랜덤으로 되돌릴 수 있다', () => {
+    withTopics();
+    s.setTopic('p1', '음식');
+    expect(msgsOfType('room').at(-1)!.selectedTopic).toBe('음식');
+    s.setTopic('p1', null);
+    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+  });
+
+  it('고른 주제의 단어가 바닥나도 주제를 바꾸지 않는다', () => {
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs,
+      topics: [{ topic: '동물', words: ['호랑이', '펭귄'] }, { topic: '음식', words: ['피자'] }],
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.setTopic('p1', '동물');
+    s.start('p1');
+    for (let i = 0; i < 4; i++) {
+      expect(msgsOfType('room').at(-1)!.topic).toBe('동물'); // 단어가 떨어져도 음식으로 안 샌다
+      playRound();
+      s.next('p1');
+    }
+  });
+});

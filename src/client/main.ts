@@ -4,7 +4,8 @@ import type { Point } from '../shared/drawing';
 import type { PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
-  renderRanking, countdown, stopSpinHint, renderLobbyNote, renderHintTally,
+  renderRanking,
+  renderTopics, countdown, stopSpinHint, renderLobbyNote, renderHintTally,
 } from './screens';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 
@@ -183,6 +184,10 @@ function onMsg(m: ServerMsg): void {
       hasSlices = false;
     }
 
+    if (m.phase === 'lobby') {
+      renderTopics(m.topics, m.selectedTopic, youId === hostId,
+        (topic) => net.send({ t: 'setTopic', topic }));
+    }
     ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
     ($('nextBtn') as HTMLButtonElement).disabled = youId !== hostId;
     renderLobbyNote(m.players, youId, hostId, m.minPlayers);

@@ -63,6 +63,9 @@ export class Session {
   private lastRoundEnd: ServerMsg | null = null;
   private lastFinal: ServerMsg | null = null;
 
+  /** 방장이 고른 주제. null이면 라운드마다 무작위. */
+  private selectedTopic: string | null = null;
+
   /** 이번 게임에 이미 나온 제시어. 같은 판에서 두 번 나오면 정답을 흘리는 셈이다. */
   private usedWords = new Set<string>();
 
@@ -135,6 +138,18 @@ export class Session {
     if (this.phase === 'final' && this.lastFinal) {
       this.send(id, this.lastFinal);
     }
+  }
+
+  /**
+   * 방장이 주제를 고정한다. 로비에서만, 방장만.
+   * null이면 예전처럼 라운드마다 무작위로 뽑는다.
+   */
+  setTopic(playerId: string, topic: string | null): void {
+    if (playerId !== this.hostId) return;
+    if (this.phase !== 'lobby') return;
+    if (topic !== null && !this.topics.some((t) => t.topic === topic)) return;
+    this.selectedTopic = topic;
+    this.broadcastRoom();
   }
 
   start(playerId: string): void {
@@ -497,6 +512,7 @@ export class Session {
       case 'again': return this.again(playerId);
       case 'join': return this.join(playerId, msg.name);
       case 'start': return this.start(playerId);
+      case 'setTopic': return this.setTopic(playerId, msg.topic);
       case 'stroke': return this.addStroke(playerId, msg.points);
       case 'undo': return this.undo(playerId);
       case 'drawDone': return this.drawDone(playerId);
@@ -530,10 +546,15 @@ export class Session {
    * 풀이 바닥나면 중복을 허용한다 — 멈추는 것보다 낫다.
    */
   private nextWord(): { topic: string; word: string } {
-    const fresh = this.topics
+    // 방장이 주제를 골랐으면 그 안에서만 뽑는다. 안 골랐으면 전부가 후보다.
+    const pool = this.selectedTopic
+      ? this.topics.filter((t) => t.topic === this.selectedTopic)
+      : this.topics;
+    const fresh = pool
       .map((t) => ({ topic: t.topic, words: t.words.filter((w) => !this.usedWords.has(w)) }))
       .filter((t) => t.words.length > 0);
-    const chosen = pickWord(fresh.length > 0 ? fresh : this.topics, this.pick);
+    // 고른 주제의 단어가 바닥나도 주제를 바꾸지 않는다 — 중복을 허용하는 편이 덜 놀랍다.
+    const chosen = pickWord(fresh.length > 0 ? fresh : pool, this.pick);
     this.usedWords.add(chosen.word);
     return chosen;
   }
@@ -637,6 +658,8 @@ export class Session {
       maxAttempts: this.rules.maxAttempts,
       deadline: this.deadline,
       minPlayers: this.rules.minPlayers,
+      topics: this.topics.map((t) => t.topic),
+      selectedTopic: this.selectedTopic,
     });
   }
 }
