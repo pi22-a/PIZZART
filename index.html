@@ -26,6 +26,7 @@
   button#skipBtn.pressed { background:var(--crust); }
   button#skipBtn.pressed::after { content:' ✓'; }
   button.ghost { background:#2b2118; color:var(--dough); border:1px solid #3d3227; }
+  button.icon { padding:4px 10px; font-size:14px; line-height:1.4; }
   input { font:inherit; padding:10px 14px; border-radius:10px; border:1px solid #3d3227;
           background:#241d16; color:var(--dough); }
   canvas { width:100%; aspect-ratio:1; touch-action:none; }
@@ -86,6 +87,8 @@
     <span class="pill" id="topicTag"></span>
     <span class="pill" id="timeTag"></span>
     <span class="pill" id="netTag">연결 중</span>
+    <!-- 초읽기 소리 스위치. 남의 방에서 갑자기 삐 소리가 나면 곤란한 사람이 있다. -->
+    <button id="muteBtn" class="ghost icon" title="초읽기 소리 끄기">🔊</button>
   </div>
   <div class="players" id="players"></div>
 

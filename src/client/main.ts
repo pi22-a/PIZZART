@@ -8,6 +8,7 @@ import {
   renderTopics, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
 } from './screens';
 import { DoodleBoard } from './doodle';
+import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -55,6 +56,17 @@ drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
  */
 const doodle = new DoodleBoard($('doodleCanvas') as HTMLCanvasElement, () => youId);
 doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points }));
+// 자동재생 정책 때문에 사람이 한 번 누르기 전에는 소리가 안 난다. 첫 조작에서 깨운다.
+armAudio();
+const muteBtn = $('muteBtn') as HTMLButtonElement;
+const paintMute = () => {
+  muteBtn.textContent = isMuted() ? '🔇' : '🔊';
+  muteBtn.title = isMuted() ? '초읽기 소리 켜기' : '초읽기 소리 끄기';
+};
+loadMuted();
+paintMute();
+muteBtn.addEventListener('click', () => { setMuted(!isMuted()); paintMute(); });
+
 $('doodleClearBtn').addEventListener('click', () => {
   doodle.clearMine();
   net.send({ t: 'doodleClear' });
@@ -172,7 +184,10 @@ function onMsg(m: ServerMsg): void {
     renderPlayers(m.players, youId, hostId, m.phase);
     setTag('roundTag', m.phase === 'lobby' ? '' : `라운드 ${m.round + 1}/${m.totalRounds}`);
     setTag('topicTag', m.topic ? `주제 ${m.topic}` : '');
-    countdown(m.deadline);
+    // 소리는 시간이 도는 단계에서만 낸다. 결과 화면처럼 마감이 없는 곳은 조용하다.
+    countdown(m.deadline, (left) => {
+      if (m.phase === 'drawing' || m.phase === 'guessing') timeTick(left);
+    });
 
     const me = m.players.find((p) => p.id === youId);
     iSolved = me?.solved === true;

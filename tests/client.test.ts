@@ -442,6 +442,40 @@ describe('조각 액자가 인원 알약과 붙지 않는다 (Fix 2)', () => {
   });
 });
 
+describe('초읽기 소리', () => {
+  afterEach(() => localStorage.clear());
+
+  it('음소거 버튼이 아이콘과 저장된 설정을 함께 바꾼다', async () => {
+    await boot();
+    const btn = $<HTMLButtonElement>('muteBtn');
+    expect(btn.textContent).toBe('🔊');
+    btn.click();
+    expect(btn.textContent).toBe('🔇');
+    expect(localStorage.getItem('pizza-muted')).toBe('1');
+  });
+
+  it('껐던 설정은 새로고침해도 유지된다', async () => {
+    localStorage.setItem('pizza-muted', '1');
+    await boot();
+    expect($<HTMLButtonElement>('muteBtn').textContent).toBe('🔇');
+  });
+
+  it('초읽기 콜백은 초가 바뀔 때만 온다 — 안 그러면 초당 네 번 울린다', async () => {
+    const { countdown } = await import('../src/client/screens');
+    const seen: number[] = [];
+    countdown(Date.now() + 3000, (l) => seen.push(l));
+    vi.advanceTimersByTime(3000);
+    countdown(null);
+    expect(seen).toEqual([3, 2, 1, 0]);
+  });
+
+  it('AudioContext가 없는 환경에서도 조용히 넘어간다', async () => {
+    const { timeTick, setMuted } = await import('../src/client/sound');
+    expect(() => timeTick(3)).not.toThrow();
+    expect(() => setMuted(true)).not.toThrow();
+  });
+});
+
 describe('라운드 스킵 집계와 눌림 표시 (Fix 3)', () => {
   const withSkips = (skips: Record<string, boolean>) => room({
     players: PLAYERS.map((p) => ({ ...p, skipped: skips[p.id] ?? false })),

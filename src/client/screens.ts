@@ -144,17 +144,33 @@ export function renderRanking(rows: Array<{ playerId: string; name: string; scor
     .join('');
 }
 
-export function countdown(deadline: number | null): void {
+/**
+ * 남은 시간을 화면에 쓴다. 초가 실제로 바뀔 때만 onSecond를 부른다 —
+ * 250ms마다 부르면 소리가 초당 네 번 난다.
+ *
+ * 같은 마감으로 다시 불려도(방 상태는 자주 온다) 이미 지나간 초를 다시 알리지 않는다.
+ */
+export function countdown(deadline: number | null, onSecond?: (left: number) => void): void {
+  if (deadline !== lastDeadline) {
+    lastDeadline = deadline;
+    lastLeft = -1;
+  }
   const tick = () => {
     if (deadline === null) { setTag('timeTag', ''); return; }
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     setTag('timeTag', `${left}초`);
+    if (left !== lastLeft) {
+      lastLeft = left;
+      onSecond?.(left);
+    }
   };
   tick();
   clearInterval(timer);
   if (deadline !== null) timer = window.setInterval(tick, 250);
 }
 let timer = 0;
+let lastDeadline: number | null = null;
+let lastLeft = -1;
 
 function escape(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
