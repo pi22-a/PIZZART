@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Session } from './session';
 import type { ClientMsg } from '../shared/protocol';
 import type { Point } from '../shared/drawing';
+import { DOODLE_W, DOODLE_H } from '../shared/drawing';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STROKES_PER_SECOND = 40;
@@ -109,6 +110,19 @@ wss.on('connection', (socket, req) => {
         .map(([x, y]) => [clamp(Math.round(x), 0, 1000), clamp(Math.round(y), 0, 1000)] as Point);
       if (clean.length === 0) return;
       session.addStroke(id, clean);
+      return;
+    }
+
+    // 낙서도 그리기와 같은 예산을 쓴다. 한 사람이 동시에 둘을 그릴 일은 없고,
+    // 예산을 따로 주면 낙서로 대역폭을 밀어 넣는 길이 하나 더 생긴다.
+    if (msg.t === 'doodle') {
+      if (conn.strokeBudget-- <= 0) return;
+      if (!Array.isArray(msg.points)) return;
+      const clean = msg.points
+        .filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
+        .map(([x, y]) => [clamp(Math.round(x), 0, DOODLE_W), clamp(Math.round(y), 0, DOODLE_H)] as Point);
+      if (clean.length < 2) return;
+      session.addDoodle(id, clean);
       return;
     }
 

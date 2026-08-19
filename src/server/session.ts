@@ -126,6 +126,9 @@ export class Session {
       this.send(id, { t: 'word', word: this.word });
       this.send(id, { t: 'canvas', strokes: this.strokes });
     }
+    if (this.phase === 'drawing' && id !== this.drawerId) {
+      this.send(id, { t: 'doodleBoard', strokes: this.doodle });
+    }
     if (this.phase === 'guessing' && this.seen.has(id)) {
       this.sendSlices(id);
       // 마지막 회차라면 조립판까지 돌려준다. 조각만 돌려주면 돌아온 사람만
@@ -189,6 +192,7 @@ export class Session {
     this.owner.clear();
     this.sliceId.clear();
     this.seen.clear();
+    this.doodle = [];
     this.lastRoundEnd = null;
     // 시도 상태는 여기서도 반드시 지운다. endAttempt는 이어가는 길에서만 지우고
     // endRound로 빠지는 두 길에서는 안 지우기 때문에, 안 지우면 다음 라운드 내내
@@ -196,8 +200,7 @@ export class Session {
     this.attempt = 1;
     this.answers.clear();
     this.wrongSubmits.clear();
-    this.hintsTaken.clear();
-    this.hintedThisAttempt.clear();
+    this.skippedThisAttempt.clear();
     this.solved.clear();
     this.phase = 'drawing';
 
@@ -257,8 +260,7 @@ export class Session {
     this.attempt = 1;
     this.answers.clear();
     this.wrongSubmits.clear();
-    this.hintsTaken.clear();
-    this.hintedThisAttempt.clear();
+    this.skippedThisAttempt.clear();
     this.solved.clear();
     this.phase = 'guessing';
 
@@ -271,67 +273,123 @@ export class Session {
   protected attempt = 1;
   /** 틀린 제출 횟수. 맞힌 제출은 세지 않는다. */
   protected wrongSubmits = new Map<string, number>();
-  /** 받은 힌트 횟수 */
-  protected hintsTaken = new Map<string, number>();
-  /** 이번 회차에 이미 힌트를 받았는가 — 회차당 한 번이다 */
-  protected hintedThisAttempt = new Set<string>();
+/** 이번 회차를 넘기겠다고 누른 사람. 아직 못 맞힌 사람이 전부 누르면 회차가 끝난다 */
+  protected skippedThisAttempt = new Set<string>();
   /** 이미 맞혀서 점수가 확정된 사람 → 그 점수 */
   protected solved = new Map<string, number>();
   protected answers = new Map<string, string>();
   protected seen = new Map<string, Set<number>>();
 
+  /**
+   * 대기 화면 낙서판. 출제자가 그리는 동안만 살아 있고 라운드마다 지워진다.
+   * 판정에 쓰이지 않으므로 검증은 좌표 범위와 개수 상한뿐이다.
+   */
+  protected doodle: Array<{ by: string; points: Point[] }> = [];
+
+  /** 낙서 획 상한. 넘치면 오래된 것부터 버린다 — 판이 멈추는 것보다 낫다. */
+  private static readonly DOODLE_MAX = 600;
+
+  addDoodle(playerId: string, points: Point[]): void {
+    if (this.phase !== 'drawing') return;
+    if (playerId === this.drawerId) return;  // 출제자는 자기 캔버스가 따로 있다
+    if (!this.players.some((p) => p.id === playerId)) return;
+    if (points.length < 2) return;
+    this.doodle.push({ by: playerId, points });
+    if (this.doodle.length > Session.DOODLE_MAX) this.doodle.shift();
+    // 기다리는 사람들끼리만 본다. 출제자에게 보내봐야 그릴 화면이 다르다.
+    for (const p of this.players) {
+      if (p.id === this.drawerId) continue;
+      this.send(p.id, { t: 'doodleStroke', by: playerId, points });
+    }
+  }
+
+  clearDoodle(playerId: string): void {
+    if (this.phase !== 'drawing') return;
+    const before = this.doodle.length;
+    this.doodle = this.doodle.filter((s) => s.by !== playerId);
+    if (this.doodle.length === before) return;
+    for (const p of this.players) {
+      if (p.id === this.drawerId) continue;
+      this.send(p.id, { t: 'doodleBoard', strokes: this.doodle });
+    }
+  }
+
   answer(playerId: string, text: string): void {
     if (this.phase !== 'guessing') return;
     if (!this.seen.has(playerId)) return; // 출제자와 관전자는 못 적는다
     if (this.solved.has(playerId)) return; // 이미 맞힌 사람은 더 낼 것이 없다
+    // 스킵을 누른 사람은 이번 회차를 접은 것이다. 뒤늦게 도착한 답을 받아 채점하면
+    // 스킵으로 점수를 지키려던 사람이 오답으로 점수를 잃는다.
+    if (this.skippedThisAttempt.has(playerId)) return;
     this.answers.set(playerId, String(text).slice(0, 40));
     this.broadcastRoom();
     this.maybeEndAttempt();
   }
 
   /**
-   * 힌트를 하나 받는다. 즉시 조각이 하나 늘고 점수가 깎인다.
+   * 이번 회차를 넘기겠다고 누른다.
    *
-   * 예전에는 맞히는 사람 과반이 눌러야 전원에게 같은 조각이 공개됐다. 경쟁 게임으로
-   * 방향을 잡으면서 개인 선택으로 바꿨다 — 남의 판단을 기다릴 이유가 없고,
-   * "점수를 깎아서라도 조각을 더 볼 것인가"가 이 게임의 전략 그 자체가 된다.
+   * 예전에는 이 자리가 "힌트받기"였다. 점수를 깎아 조각을 사는 개인 선택이었는데,
+   * 조각은 이제 회차마다 자동으로 한 장씩 늘어난다. 그래서 이 버튼이 하는 일은
+   * 하나로 줄었다 — 아직 못 맞힌 사람이 전부 누르면 남은 시간을 버리고 다음 회차로
+   * 간다. 다음 회차로 가면 조각이 한 장 늘어나므로, 결과만 보면 힌트를 앞당겨 받는다.
    */
-  hint(playerId: string): void {
+  skip(playerId: string): void {
     if (this.phase !== 'guessing') return;
-    const mine = this.seen.get(playerId);
-    if (!mine) return;                              // 출제자·관전자
+    if (!this.seen.has(playerId)) return;           // 출제자·관전자
     if (this.solved.has(playerId)) return;          // 이미 맞혔다
-    if (this.hintedThisAttempt.has(playerId)) return; // 회차당 한 번
-    if (mine.size >= this.rules.maxSlices) return;  // 상한
-    if (this.attempt >= this.rules.maxAttempts) return; // 조립판에서는 못 받는다
+    if (this.skippedThisAttempt.has(playerId)) return;
 
-    const all = this.slices.map((x) => x.index);
-    const candidates = all.filter((i) => !mine.has(i));
-    if (candidates.length === 0) return;
-
-    mine.add(candidates[this.pick(candidates.length)]);
-    this.hintedThisAttempt.add(playerId);
-    this.hintsTaken.set(playerId, (this.hintsTaken.get(playerId) ?? 0) + 1);
-
-    this.sendSlices(playerId);
-    this.sendBoard();
+    this.skippedThisAttempt.add(playerId);
+    // 스킵은 이번 회차를 접겠다는 뜻이다. 적어둔 답이 남아 있으면 그 답으로 채점돼
+    // 점수를 잃는다 — 버튼을 누른 의도와 정반대다.
+    this.answers.delete(playerId);
     this.broadcastRoom();
+    this.maybeEndAttempt();
   }
 
-  /** 아직 못 맞힌 사람이 모두 답을 냈으면 30초를 기다릴 이유가 없다. */
+  /**
+   * 아직 못 맞힌 사람이 모두 답을 냈거나 스킵을 눌렀으면 남은 시간을 기다릴 이유가 없다.
+   */
   private maybeEndAttempt(): void {
     if (this.phase !== 'guessing') return;
-    const pending = this.guessers().filter((g) => !this.solved.has(g.id));
+    // 조각을 받은 사람만 센다. 라운드 도중 들어온 관전자는 답도 스킵도 못 하므로,
+    // 세어버리면 전원이 스킵을 눌러도 정족수가 영영 안 차고 20초를 그냥 기다린다.
+    const pending = this.guessers().filter((g) => this.seen.has(g.id) && !this.solved.has(g.id));
     if (pending.length === 0) return this.endAttempt();
-    if (pending.every((g) => this.answers.has(g.id))) this.endAttempt();
+    if (pending.every((g) => this.answers.has(g.id) || this.skippedThisAttempt.has(g.id))) {
+      this.endAttempt();
+    }
   }
 
-  /** 지금 이 사람이 맞혔을 때 받게 될 점수. 화면에 미리 보여준다. */
+  /**
+   * 회차가 하나 오를 때마다 아직 못 맞힌 사람에게 조각을 한 장씩 나눠준다.
+   *
+   * 사람마다 다른 조각을 받는다 — 같은 조각을 주면 전원이 같은 그림을 보게 되어
+   * "내 조각만 보고 맞힌다"는 이 게임의 전제가 무너진다.
+   */
+  private grantSlices(): void {
+    for (const [id, mine] of this.seen) {
+      if (this.solved.has(id)) continue;
+      if (mine.size >= this.rules.maxSlices) continue;
+      const candidates = this.slices.map((x) => x.index).filter((i) => !mine.has(i));
+      if (candidates.length === 0) continue;
+      mine.add(candidates[this.pick(candidates.length)]);
+    }
+  }
+
+  /**
+   * 지금 이 사람이 맞혔을 때 받게 될 점수. 화면에 미리 보여준다.
+   *
+   * 회차가 오를 때마다 조각이 한 장씩 늘어나므로, 값도 회차로 깎는다 —
+   * 조각을 더 보고 맞혔으면 그만큼 덜 받는 것이 이 게임의 유일한 저울이다.
+   */
   scoreFor(playerId: string): number {
     if (this.attempt >= this.rules.maxAttempts) return this.rules.finalAttemptScore;
     const wrong = this.wrongSubmits.get(playerId) ?? 0;
-    const hints = this.hintsTaken.get(playerId) ?? 0;
-    const raw = this.rules.startScore - wrong * this.rules.wrongSubmitCost - hints * this.rules.hintCost;
+    const raw = this.rules.startScore
+      - (this.attempt - 1) * this.rules.attemptCost
+      - wrong * this.rules.wrongSubmitCost;
     return Math.max(0, raw);
   }
 
@@ -368,7 +426,10 @@ export class Session {
 
     this.attempt++;
     this.answers.clear();
-    this.hintedThisAttempt.clear();
+    this.skippedThisAttempt.clear();
+    // 회차가 올랐으니 조각을 한 장씩 나눠준다. 조각을 늘린 뒤에 방 상태를 보내야
+    // 화면의 조각 수와 실제로 내려간 조각이 어긋나지 않는다.
+    this.grantSlices();
 
     this.setDeadline(this.rules.guessSeconds, () => this.endAttempt());
     this.broadcastRoom();
@@ -520,7 +581,9 @@ export class Session {
       case 'undo': return this.undo(playerId);
       case 'drawDone': return this.drawDone(playerId);
       case 'answer': return this.answer(playerId, msg.text);
-      case 'skip': return this.hint(playerId);
+      case 'skip': return this.skip(playerId);
+      case 'doodle': return this.addDoodle(playerId, msg.points);
+      case 'doodleClear': return this.clearDoodle(playerId);
       case 'next': return this.next(playerId);
       default: return;
     }
@@ -644,7 +707,7 @@ export class Session {
       score: p.score,
       isDrawer: p.id === this.drawerId && this.phase !== 'lobby',
       answered: this.answers.has(p.id),
-      skipped: this.hintedThisAttempt.has(p.id),
+      skipped: this.skippedThisAttempt.has(p.id),
       solved: this.solved.has(p.id),
       sliceCount: this.seen.get(p.id)?.size ?? 0,
       pendingScore: this.solved.get(p.id) ?? this.scoreFor(p.id),

@@ -1,12 +1,21 @@
 import type { Point } from '../shared/drawing';
 import { CANVAS } from '../shared/drawing';
 
-/** 잉크는 어디서 그리든 같은 굵기·같은 색이다. */
-export function drawStrokes(ctx: CanvasRenderingContext2D, strokes: Point[][]): void {
+/**
+ * 잉크는 어디서 그리든 같은 굵기·같은 색이다.
+ *
+ * 예외는 대기 화면 낙서판 하나다 — 여럿이 같은 판에 갈기므로 사람마다 색이 달라야 한다.
+ * 그래서 색과 굵기만 열어두고, 나머지 그리는 방식은 한 곳에 둔다.
+ */
+export function drawStrokes(
+  ctx: CanvasRenderingContext2D,
+  strokes: Point[][],
+  opts: { color?: string; width?: number } = {},
+): void {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = '#2b2118';
+  ctx.lineWidth = opts.width ?? 8;
+  ctx.strokeStyle = opts.color ?? '#2b2118';
   for (const s of strokes) {
     if (s.length < 2) continue;
     ctx.beginPath();
@@ -35,4 +44,22 @@ export function fitCanvas(el: HTMLCanvasElement): number {
     el.height = px;
   }
   return el.width / CANVAS;
+}
+
+/**
+ * 정사각형이 아닌 캔버스(대기 화면 낙서판)를 화면 폭에 맞춘다.
+ *
+ * fitCanvas는 짧은 변을 기준으로 잡아 정사각형만 다룬다. 낙서판은 가로로 긴 판이라
+ * 같은 함수를 쓰면 세로가 잘린다.
+ */
+export function fitRect(el: HTMLCanvasElement, logicalW: number, logicalH: number): number {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = Math.max(1, el.clientWidth);
+  const w = Math.round(cssW * dpr);
+  const h = Math.round(cssW * (logicalH / logicalW) * dpr);
+  if (el.width !== w || el.height !== h) {
+    el.width = w;
+    el.height = h;
+  }
+  return el.width / logicalW;
 }

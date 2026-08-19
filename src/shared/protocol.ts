@@ -10,7 +10,7 @@ export interface PlayerInfo {
   isDrawer: boolean;
   /** 이번 시도에 답을 적어두었는가 (내용은 공개 전까지 안 나간다) */
   answered: boolean;
-  /** 이번 회차에 힌트를 받았는가 */
+  /** 이번 회차를 넘기겠다고 눌렀는가 */
   skipped: boolean;
   /** 이미 맞혀서 점수가 확정됐는가 */
   solved: boolean;
@@ -30,7 +30,12 @@ export type ClientMsg =
   | { t: 'undo' }
   | { t: 'drawDone' }
   | { t: 'answer'; text: string }
+  /** 이번 회차를 넘긴다. 아직 못 맞힌 사람이 전부 누르면 다음 회차로 간다. */
   | { t: 'skip' }
+  /** 대기 화면 낙서 한 획. 게임 판정과 무관한 심심풀이라 검증만 하고 그대로 흘린다. */
+  | { t: 'doodle'; points: Point[] }
+  /** 내가 그린 낙서만 지운다. 남의 낙서는 건드리지 않는다. */
+  | { t: 'doodleClear' }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };
@@ -111,5 +116,12 @@ export type ServerMsg =
        */
       answers: AnswerRow[];
     }
+  /**
+   * 대기 화면 낙서판. 출제자가 그리는 동안 기다리는 사람들이 같이 갈기는 판이다.
+   * 낙서는 제시어·조각과 아무 관련이 없어 전원에게 그대로 보내도 새는 것이 없다.
+   */
+  | { t: 'doodleStroke'; by: string; points: Point[] }
+  /** 낙서판 전체 — 새로 들어왔거나 누가 자기 낙서를 지웠을 때 한 번에 맞춘다. */
+  | { t: 'doodleBoard'; strokes: Array<{ by: string; points: Point[] }> }
   | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
   | { t: 'error'; msg: string };

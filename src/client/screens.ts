@@ -51,19 +51,23 @@ export function renderLobbyNote(
 }
 
 /**
- * 힌트받기 옆 집계와, 내가 눌렀는지를 버튼 자체에 반영한다.
+ * 라운드 스킵 옆 집계와, 내가 눌렀는지를 버튼 자체에 반영한다.
  *
  * 프로토콜에 새 필드를 추가하지 않는다 — room이 이미 실어 보내는 PlayerInfo만으로 계산된다.
- * 힌트받기를 누를 수 있는 사람(=서버가 정족수를 세는 대상)은 출제자가 아니고 접속 중인
+ * 스킵을 누를 수 있는 사람(=서버가 정족수를 세는 대상)은 출제자가 아니고 접속 중인
  * 플레이어다(session.ts의 guessers()와 같은 조건). 그중 skipped가 true인 수를 세면 집계다.
+ *
+ * 이미 맞힌 사람은 서버가 기다리지 않으므로 분모에서 뺀다 — 안 빼면 3/4에서 영영
+ * 멈춘 것처럼 보인다.
  */
-export function renderHintTally(players: PlayerInfo[], youId: string): void {
-  const guessers = players.filter((p) => !p.isDrawer && p.connected);
-  const pressed = guessers.filter((p) => p.skipped).length;
-  setTag('hintTally', guessers.length > 0 ? `${pressed}/${guessers.length}명이 눌렀습니다` : '');
+export function renderSkipTally(players: PlayerInfo[], youId: string): void {
+  // 조각을 못 받은 관전자는 스킵을 누를 수 없다 — 서버가 세지 않으므로 분모에서도 뺀다.
+  const waiting = players.filter((p) => !p.isDrawer && p.connected && !p.solved && p.sliceCount > 0);
+  const pressed = waiting.filter((p) => p.skipped).length;
+  setTag('skipTally', waiting.length > 0 ? `${pressed}/${waiting.length}명이 스킵을 눌렀습니다` : '');
 
   const me = players.find((p) => p.id === youId);
-  $('hintBtn').classList.toggle('pressed', me?.skipped === true);
+  $('skipBtn').classList.toggle('pressed', me?.skipped === true);
 }
 
 let stopSpin: (() => void) | null = null;

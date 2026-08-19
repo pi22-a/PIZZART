@@ -108,29 +108,40 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe('넘기기가 적어둔 답을 버리지 않는다 (수정 8)', () => {
-  it('넘기기를 누르면 답이 먼저 나간다', async () => {
+// 스킵의 뜻이 뒤집혔다. 예전 넘기기는 적어둔 답을 먼저 밀어 보냈지만, 지금 스킵은
+// "이번 회차는 접는다"는 선언이라 답이 나가면 안 된다 — 나가면 오답으로 점수를 잃는다.
+describe('스킵은 적어둔 답을 버린다 (점수 손실 방지)', () => {
+  it('스킵을 누르면 적어둔 답이 나가지 않는다', async () => {
     await guessing();
     const input = $<HTMLInputElement>('answerInput');
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
-    // 디바운스 250ms가 아직 안 지났다 — 여기서 넘기기를 누르는 게 실제 상황이다
-    $('hintBtn').click();
+    // 디바운스 250ms가 아직 안 지났다 — 여기서 스킵을 누르는 게 실제 상황이다
+    $('skipBtn').click();
 
     const kinds = live.out.map((m) => m.t);
-    expect(kinds).toContain('answer');
-    expect(kinds.indexOf('answer')).toBeLessThan(kinds.indexOf('skip'));
-    expect((live.out.find((m) => m.t === 'answer') as { text: string }).text).toBe('코끼리');
+    expect(kinds).toContain('skip');
+    expect(kinds).not.toContain('answer');
   });
 
-  it('넘기기 뒤에 유령 답이 한 번 더 가지 않는다', async () => {
+  it('스킵 뒤에 유령 답이 나중에 나가지 않는다', async () => {
     await guessing();
     const input = $<HTMLInputElement>('answerInput');
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
-    $('hintBtn').click();
+    $('skipBtn').click();
     vi.advanceTimersByTime(1000);
-    expect(live.out.filter((m) => m.t === 'answer').length).toBe(1);
+    expect(live.out.filter((m) => m.t === 'answer').length).toBe(0);
+  });
+
+  it('스킵을 누른 사람은 입력과 제출이 잠긴다', async () => {
+    await guessing();
+    deliver(room({
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, skipped: true } : p)),
+    }));
+    expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(true);
+    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(true);
   });
 
   it('엔터를 치면 답이 바로 나간다', async () => {
@@ -150,7 +161,7 @@ describe('관전자에게 살아 있는 척하는 화면을 주지 않는다 (�
     deliver({ t: 'joined', youId: 'me' });
     deliver(room()); // 조각은 오지 않는다 — 라운드 도중 합류자다
     expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
-    expect($<HTMLButtonElement>('hintBtn').disabled).toBe(true);
+    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(true);
     expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(true);
     expect($('spectateNote').textContent).toContain('관전');
   });
@@ -158,7 +169,7 @@ describe('관전자에게 살아 있는 척하는 화면을 주지 않는다 (�
   it('조각을 받으면 입력이 열린다', async () => {
     await guessing();
     expect($<HTMLInputElement>('answerInput').disabled).toBe(false);
-    expect($<HTMLButtonElement>('hintBtn').disabled).toBe(false);
+    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(false);
     expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(false);
     expect($('spectateNote').textContent).toBe('');
   });
@@ -428,7 +439,7 @@ describe('조각 액자가 인원 알약과 붙지 않는다 (Fix 2)', () => {
   });
 });
 
-describe('힌트받기 집계와 눌림 표시 (Fix 3)', () => {
+describe('라운드 스킵 집계와 눌림 표시 (Fix 3)', () => {
   const withSkips = (skips: Record<string, boolean>) => room({
     players: PLAYERS.map((p) => ({ ...p, skipped: skips[p.id] ?? false })),
   });
@@ -437,20 +448,20 @@ describe('힌트받기 집계와 눌림 표시 (Fix 3)', () => {
     await guessing();
     deliver(withSkips({ me: true }));
     // 게서는 me, x 둘뿐(d는 출제자라 제외) — 그중 1명이 눌렀다.
-    expect($('hintTally').textContent).toBe('1/2명이 눌렀습니다');
+    expect($('skipTally').textContent).toBe('1/2명이 스킵을 눌렀습니다');
   });
 
   it('전원이 누르면 2/2로 올라간다', async () => {
     await guessing();
     deliver(withSkips({ me: true, x: true }));
-    expect($('hintTally').textContent).toBe('2/2명이 눌렀습니다');
+    expect($('skipTally').textContent).toBe('2/2명이 스킵을 눌렀습니다');
   });
 
   it('내가 누른 상태가 버튼 자체에 pressed 클래스로 나타난다', async () => {
     await guessing();
-    expect($('hintBtn').classList.contains('pressed')).toBe(false);
+    expect($('skipBtn').classList.contains('pressed')).toBe(false);
     deliver(withSkips({ me: true }));
-    expect($('hintBtn').classList.contains('pressed')).toBe(true);
+    expect($('skipBtn').classList.contains('pressed')).toBe(true);
   });
 
   it('접속이 끊긴 사람은 집계 분모에서 빠진다', async () => {
@@ -462,7 +473,7 @@ describe('힌트받기 집계와 눌림 표시 (Fix 3)', () => {
         { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10 },
       ],
     }));
-    expect($('hintTally').textContent).toBe('1/1명이 눌렀습니다');
+    expect($('skipTally').textContent).toBe('1/1명이 스킵을 눌렀습니다');
   });
 });
 
@@ -565,7 +576,7 @@ const TEST_RULES_CLIENT = {
   minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
-  startScore: 10, wrongSubmitCost: 1, hintCost: 1, finalAttemptScore: 1,
+  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1,
 };
 
 describe('새 라운드가 지난 라운드 조립판을 덮어쓴다 (버그: 직전 출제자만 새 그림이 보인다)', () => {

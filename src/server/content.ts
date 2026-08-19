@@ -10,14 +10,14 @@ export interface Rules {
   guessSeconds: number;
   /** 마지막 회차는 조각을 제자리에 끼워 보여주는 조립판이다. */
   maxAttempts: number;
-  /** 한 사람이 가질 수 있는 조각 수의 상한. 처음 1장 + 힌트 4번. */
+  /** 한 사람이 가질 수 있는 조각 수의 상한. 첫 회차 1장 + 회차마다 한 장씩. */
   maxSlices: number;
   /** 아무것도 안 쓰고 첫 회차에 맞히면 받는 점수 */
   startScore: number;
   /** 틀린 제출 한 번의 대가. 맞힌 제출은 공짜다 */
   wrongSubmitCost: number;
-  /** 힌트 한 번의 대가 */
-  hintCost: number;
+  /** 회차가 하나 오를 때마다 깎이는 점수. 조각을 한 장 더 보는 값이다. */
+  attemptCost: number;
   /** 조립판(마지막 회차)에서 맞히면 주는 고정 점수 */
   finalAttemptScore: number;
   /** 0이면 자동으로 안 넘어간다 — 방장이 직접 눌러야 한다 */

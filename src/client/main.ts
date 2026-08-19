@@ -5,8 +5,9 @@ import type { PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking,
-  renderTopics, countdown, stopSpinHint, renderLobbyNote, renderHintTally,
+  renderTopics, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
 } from './screens';
+import { DoodleBoard } from './doodle';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -48,6 +49,17 @@ const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { inte
  */
 drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
 
+/**
+ * 대기 화면 낙서판. 출제자가 그리는 동안 기다리는 사람들이 같이 갈긴다.
+ * 내 id는 늦게 정해지므로(joined 메시지) 값이 아니라 함수로 넘긴다.
+ */
+const doodle = new DoodleBoard($('doodleCanvas') as HTMLCanvasElement, () => youId);
+doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points }));
+$('doodleClearBtn').addEventListener('click', () => {
+  doodle.clearMine();
+  net.send({ t: 'doodleClear' });
+});
+
 const nameInput = $('nameInput') as HTMLInputElement;
 const nameSaveBtn = $('nameSaveBtn') as HTMLButtonElement;
 const NAME_HINT_DEFAULT = '엔터를 쳐도 저장됩니다 · 최대 12자';
@@ -88,12 +100,12 @@ $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));
 $('undoBtn').addEventListener('click', () => net.send({ t: 'undo' }));
 $('nextBtn').addEventListener('click', () => net.send({ t: 'next' }));
 $('againBtn').addEventListener('click', () => net.send({ t: 'again' }));
-// 버튼 라벨은 "힌트받기"로 바뀌었지만 서버로 나가는 메시지 이름(skip)은 그대로다 —
-// 서버·프로토콜은 이 작업 범위 밖이고, 이름을 바꿔봐야 서버 테스트만 흔들린다.
-$('hintBtn').addEventListener('click', () => {
-  // 적어둔 답을 먼저 밀어 보낸다. 이 힌트받기로 정족수가 차면 서버가 그 자리에서
-  // 시도를 끝내버려, 250ms 뒤에 갈 예정이던 답은 영영 못 간다 — 다 쳐놓고 (무응답).
-  flushAnswer();
+// 스킵은 "이번 회차는 접는다"는 뜻이다. 예전 힌트받기와 정반대로, 적어둔 답을
+// 밀어 보내지 않는다 — 대기 중이던 답이 나가면 스킵으로 점수를 지키려던 사람이
+// 그 답으로 채점돼 점수를 잃는다. 서버도 같은 이유로 스킵한 사람의 답을 지운다.
+$('skipBtn').addEventListener('click', () => {
+  clearTimeout(answerTimer);
+  answerTimer = 0;
   net.send({ t: 'skip' });
 });
 
@@ -147,7 +159,7 @@ function markAnswerSaved(saved: boolean): void {
 function setSpectating(on: boolean): void {
   answerInput.disabled = on;
   ($('answerSubmitBtn') as HTMLButtonElement).disabled = on;
-  ($('hintBtn') as HTMLButtonElement).disabled = on;
+  ($('skipBtn') as HTMLButtonElement).disabled = on;
   $('spectateNote').textContent = on ? '이번 라운드는 관전입니다 — 다음 라운드부터 참여합니다' : '';
 }
 
@@ -197,23 +209,34 @@ function onMsg(m: ServerMsg): void {
 
     if (m.phase === 'guessing') {
       const last = m.attempt >= m.maxAttempts;
+      const skipped = me?.skipped === true;
       $('scoreTag').textContent = iSolved
         ? '맞혔습니다 — 점수 확정'
         : `지금 맞히면 ${me?.pendingScore ?? 0}점`;
       $('solvedWrap').style.display = iSolved ? '' : 'none';
-      ($('answerSubmitBtn') as HTMLButtonElement).disabled = iSolved;
-      ($('hintBtn') as HTMLButtonElement).disabled = iSolved || last || me?.skipped === true;
-      $('hintNote').style.display = iSolved || last ? 'none' : '';
-      $('guessNote').textContent =
-        `시도 ${m.attempt}/${m.maxAttempts} — 못 맞히면 조각이 하나 늘어납니다`;
+      // 관전 처리가 입력창 잠금을 통째로 다시 쓴다. 먼저 부르지 않으면 아래에서 건
+      // 잠금이 그 자리에서 풀린다 — 스킵을 누르고도 답이 나가는 길이 열린다.
       setSpectating(!hasSlices);
-      renderHintTally(m.players, youId);
+      // 스킵을 눌렀으면 이번 회차는 접은 것이다. 입력까지 잠가야 실수로 답을 내고
+      // 점수를 잃는 길이 아예 막힌다 — 버튼만 잠그면 엔터로 그대로 나간다.
+      const mute = iSolved || skipped || !hasSlices;
+      ($('answerSubmitBtn') as HTMLButtonElement).disabled = mute;
+      answerInput.disabled = mute;
+      ($('skipBtn') as HTMLButtonElement).disabled = mute || last;
+      $('skipNote').style.display = iSolved || last ? 'none' : '';
+      $('guessNote').textContent = last
+        ? `시도 ${m.attempt}/${m.maxAttempts} — 마지막 기회입니다`
+        : `시도 ${m.attempt}/${m.maxAttempts} — 다음 회차로 넘어가면 조각이 하나 늘고 1점 깎입니다`;
+      renderSkipTally(m.players, youId);
     }
     return;
   }
 
   if (m.t === 'word') { setTag('wordTag', m.word); return; }
   if (m.t === 'canvas') { drawCanvas.render(m.strokes); return; }
+
+  if (m.t === 'doodleStroke') { doodle.add({ by: m.by, points: m.points }); return; }
+  if (m.t === 'doodleBoard') { doodle.setBoard(m.strokes); return; }
 
   if (m.t === 'slices') {
     sliceCount = m.count;
@@ -287,14 +310,25 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
 
   if (phase === 'lobby') return show('lobby');
   if (phase === 'drawing') {
-    if (iDraw) { drawCanvas.clear(); return show('draw'); }
+    if (iDraw) {
+      $('doodleWrap').style.display = 'none';
+      drawCanvas.clear();
+      return show('draw');
+    }
     const drawer = players.find((p) => p.isDrawer);
     $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
     $('waitWho').textContent = `${drawer?.name ?? '누군가'} 님이 그리는 중입니다`;
     $('boardWrap').style.display = 'none';
-    return show('wait');
+    // 판을 먼저 띄우고 나서 비운다. 반대로 하면 아직 숨겨진 캔버스에 그려
+    // 폭 0으로 뭉개지고, 그 뒤로 아무도 다시 그려주지 않아 빈 판이 된다.
+    $('doodleWrap').style.display = '';
+    show('wait');
+    // 라운드가 바뀌면 낙서판도 새 판이다. 서버도 라운드 시작에서 비운다.
+    doodle.clear();
+    return;
   }
   if (phase === 'guessing') {
+    $('doodleWrap').style.display = 'none';
     if (iDraw) {
       $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
       $('waitWho').textContent = '모두가 당신의 그림을 맞히는 중입니다';

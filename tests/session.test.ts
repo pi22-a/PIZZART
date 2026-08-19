@@ -35,7 +35,7 @@ const TEST_RULES = {
   minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
-  startScore: 10, wrongSubmitCost: 1, hintCost: 1, finalAttemptScore: 1,
+  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1,
 };
 
 function newSession(names = ['p1', 'p2', 'p3', 'p4']) {
@@ -226,6 +226,75 @@ describe('정보 은닉', () => {
   });
 });
 
+describe('대기 화면 낙서판', () => {
+  const LINE: Array<[number, number]> = [[10, 10], [200, 300]];
+
+  beforeEach(() => {
+    s.start('p1');      // p1이 출제자, 나머지는 대기 화면
+    sent = [];
+  });
+
+  const doodlesTo = (id: string) => msgsTo(id).filter((m) => m.t === 'doodleStroke');
+
+  it('기다리는 사람끼리 낙서가 오간다', () => {
+    s.addDoodle('p2', LINE);
+    expect(doodlesTo('p3').length).toBe(1);
+    expect(doodlesTo('p4').length).toBe(1);
+    // 그린 사람에게도 간다 — 화면을 서버 상태로 맞춰두면 새로고침해도 어긋나지 않는다
+    expect(doodlesTo('p2').length).toBe(1);
+  });
+
+  it('출제자에게는 낙서가 가지 않는다', () => {
+    s.addDoodle('p2', LINE);
+    expect(doodlesTo('p1').length).toBe(0);
+  });
+
+  it('출제자는 낙서판에 그릴 수 없다 — 자기 캔버스가 따로 있다', () => {
+    s.addDoodle('p1', LINE);
+    expect(doodlesTo('p2').length).toBe(0);
+  });
+
+  it('추론이 시작되면 더 이상 낙서를 받지 않는다', () => {
+    drawStar('p1');
+    s.drawDone('p1');
+    sent = [];
+    s.addDoodle('p2', LINE);
+    expect(doodlesTo('p3').length).toBe(0);
+  });
+
+  it('내 낙서만 지운다 — 남의 낙서는 남는다', () => {
+    s.addDoodle('p2', LINE);
+    s.addDoodle('p3', LINE);
+    sent = [];
+    s.clearDoodle('p2');
+    const board = msgsTo('p3').filter((m) => m.t === 'doodleBoard').at(-1) as Extract<ServerMsg, { t: 'doodleBoard' }>;
+    expect(board.strokes.length).toBe(1);
+    expect(board.strokes[0].by).toBe('p3');
+  });
+
+  it('돌아온 사람은 지금까지의 낙서판을 통째로 받는다', () => {
+    s.addDoodle('p2', LINE);
+    s.disconnect('p3');
+    sent = [];
+    s.join('p3', 'p3');
+    const board = msgsTo('p3').filter((m) => m.t === 'doodleBoard').at(-1) as Extract<ServerMsg, { t: 'doodleBoard' }>;
+    expect(board.strokes.length).toBe(1);
+  });
+
+  it('라운드가 바뀌면 낙서판이 비워진다', () => {
+    s.addDoodle('p2', LINE);
+    drawStar('p1');
+    s.drawDone('p1');
+    while (s.phase === 'guessing') clock.fire();
+    s.next('p1');                       // 2라운드 — 출제자는 p2, p1은 대기 쪽이다
+    sent = [];
+    s.disconnect('p1');
+    s.join('p1', 'p1');
+    const board = msgsTo('p1').filter((m) => m.t === 'doodleBoard').at(-1) as Extract<ServerMsg, { t: 'doodleBoard' }>;
+    expect(board.strokes.length).toBe(0);
+  });
+});
+
 describe('추론 루프 — 개인 점수제', () => {
   let word: string;
 
@@ -251,46 +320,67 @@ describe('추론 루프 — 개인 점수제', () => {
     expect(deltaOf('p2')).toBe(10);
   });
 
-  it('힌트를 받으면 조각이 나만 늘고 점수가 깎인다', () => {
-    s.hint('p3');                 // 방 상태를 한 번 흘려보낸다
+  it('회차가 넘어가면 조각이 한 장씩 자동으로 늘고 점수가 깎인다', () => {
+    s.skip('p3');                 // 방 상태를 한 번 흘려보낸다 (p3만으로는 정족수가 안 찬다)
     expect(scoreOf('p2')).toBe(10);
-    s.hint('p2');
+    clock.fire();                 // 2회차로
     expect(scoreOf('p2')).toBe(9);
-    expect(scoreOf('p3')).toBe(9);  // p3는 자기가 받은 만큼만 깎였다
+    expect(scoreOf('p3')).toBe(9);
     const mine = msgsTo('p2').filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
     expect(mine.slices.length).toBe(2);
-    // 아무것도 안 한 사람은 조각도 점수도 그대로다
-    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p4')!.sliceCount).toBe(1);
-    expect(scoreOf('p4')).toBe(10);
+    // 아무것도 안 한 사람에게도 똑같이 한 장이 더 간다 — 이제 선택이 아니다
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p4')!.sliceCount).toBe(2);
   });
 
-  it('힌트는 회차당 한 번뿐이다', () => {
-    s.hint('p2');
-    s.hint('p2');
-    expect(scoreOf('p2')).toBe(9);
+  it('사람마다 다른 조각을 받는다 — 같은 조각을 주면 게임이 무너진다', () => {
+    clock.fire();
+    const of = (id: string) => {
+      const m = msgsTo(id).filter((x) => x.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
+      return m.slices.map((x) => x.id);
+    };
+    for (const id of ['p2', 'p3', 'p4']) expect(new Set(of(id)).size).toBe(2);
   });
 
-  it('1회차에 틀리고 힌트도 받았으면 2회차 정답은 8점', () => {
+  it('아직 못 맞힌 사람이 전부 스킵을 누르면 남은 시간을 안 기다린다', () => {
+    s.skip('p2'); s.skip('p3');
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    s.skip('p4');
+    expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(2);
+  });
+
+  it('스킵을 누르면 적어둔 답이 채점되지 않는다', () => {
+    s.answer('p2', '오답');
+    s.skip('p2');
+    clock.fire();
+    expect(scoreOf('p2')).toBe(9);   // 회차 -1만. 오답 -1은 없다
+  });
+
+  it('스킵을 누른 뒤에 온 답은 받지 않는다', () => {
+    s.skip('p2');
+    s.answer('p2', word);
+    clock.fire();
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.solved).toBe(false);
+  });
+
+  it('1회차에 틀리면 2회차 정답은 8점', () => {
     s.answer('p2', '엉뚱한답');
-    s.hint('p2');
-    clock.fire();               // 1회차 종료 — 오답 -1, 힌트 -1
+    clock.fire();               // 1회차 종료 — 오답 -1, 회차 -1
     s.answer('p2', word);
     finish();
     expect(deltaOf('p2')).toBe(8);
   });
 
-  it('제출은 안 하고 힌트만 받았으면 2회차 정답은 9점', () => {
-    s.hint('p2');
+  it('아무것도 안 냈으면 2회차 정답은 9점', () => {
     clock.fire();
     s.answer('p2', word);
     finish();
     expect(deltaOf('p2')).toBe(9);
   });
 
-  it('1~4회차를 전부 쓰면 5회차 정답은 2점', () => {
+  it('1~4회차를 전부 틀리면 5회차 정답은 2점', () => {
     for (let i = 0; i < 4; i++) {
       s.answer('p2', '오답');
-      s.hint('p2');
       clock.fire();
     }
     s.answer('p2', word);
@@ -310,13 +400,14 @@ describe('추론 루프 — 개인 점수제', () => {
     expect(s.phase).toBe('roundEnd');
   });
 
-  it('맞힌 사람은 더 제출할 수 없고 힌트도 못 받는다', () => {
+  it('맞힌 사람은 더 제출할 수도 스킵할 수도 없다', () => {
     s.answer('p2', word);
     clock.fire();
     const before = scoreOf('p2');
-    s.hint('p2');
+    s.skip('p2');
     s.answer('p2', '아무거나');
     expect(scoreOf('p2')).toBe(before);
+    expect(msgsOfType('room').at(-1)!.players.find((p) => p.id === 'p2')!.skipped).toBe(false);
   });
 
   it('마지막 회차는 조립판이고, 거기서 맞히면 1점이다', () => {
@@ -339,7 +430,6 @@ describe('추론 루프 — 개인 점수제', () => {
   });
 
   it('조립판 조각은 회전이 풀려 제자리에 있다', () => {
-    s.hint('p2');
     for (let i = 0; i < 5; i++) clock.fire();
     const asm = (msgsTo('p2').filter((m) => m.t === 'assembled').at(-1)) as Extract<ServerMsg, { t: 'assembled' }>;
     // 내가 본 조각만, 각자 자기 섹터 번호를 달고 온다
@@ -355,8 +445,8 @@ describe('추론 루프 — 개인 점수제', () => {
     expect(deltaOf('p1')).toBe(0);
   });
 
-  it('출제자는 힌트도 답도 낼 수 없다', () => {
-    s.hint('p1');
+  it('출제자는 스킵도 답도 낼 수 없다', () => {
+    s.skip('p1');
     s.answer('p1', word);
     clock.fire();
     const rows = msgsOfType('attemptResult').at(-1)!.answers;
@@ -776,7 +866,7 @@ describe('라운드 사이 상태 청소 (수정 6)', () => {
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.answer('p2', '아무거나');
-    s.hint('p3');
+    s.skip('p3');
     for (let _i = 0; _i < TEST_RULES.maxAttempts; _i++) clock.fire();
     s.next('p1');
     const room = msgsOfType('room').at(-1)!;
