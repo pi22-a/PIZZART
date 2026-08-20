@@ -68,6 +68,11 @@ export function drawSlice(el: HTMLCanvasElement, strokes: Point[][], sliceCount:
   ctx.restore();
 }
 
+/** 이 아래로 내려가면 색이 바뀐다. 회차가 20초라 절반쯤에서 조여준다. */
+export const URGENT_SECONDS = 10;
+/** 팔레트의 주황(--sauce)은 도는 부채꼴이 이미 쓰고 있어 겹친다. 더 붉은 쪽으로 뗀다. */
+export const URGENT_COLOR = '#ff5c47';
+
 /**
  * 회전 안내. 작은 원 안에서 부채꼴 하나가 둘레를 계속 돌아다닌다.
  *
@@ -76,7 +81,12 @@ export function drawSlice(el: HTMLCanvasElement, strokes: Point[][], sliceCount:
  *
  * 돌려주는 함수를 부르면 멈춘다.
  */
-export function startSpinHint(el: HTMLCanvasElement, sliceCount: number): () => void {
+export function startSpinHint(
+  el: HTMLCanvasElement,
+  sliceCount: number,
+  /** 남은 초. null이면 숫자를 그리지 않는다. 매 프레임 물어본다. */
+  secondsLeft: () => number | null = () => null,
+): () => void {
   const ctx = el.getContext('2d')!;
   let raf = 0;
   let stopped = false;
@@ -105,6 +115,29 @@ export function startSpinHint(el: HTMLCanvasElement, sliceCount: number): () => 
     ctx.closePath();
     ctx.fillStyle = '#e0803a';
     ctx.fill();
+
+    // 남은 시간을 원 한가운데에 크게 얹는다. 위쪽 알약의 작은 글씨보다
+    // 여기가 눈이 계속 머무는 자리다 — 조각을 노려보는 동안 시야에 같이 들어온다.
+    const left = secondsLeft();
+    if (left !== null) {
+      const urgent = left <= URGENT_SECONDS;
+      // 마지막 10초는 초마다 살짝 커졌다 돌아온다. 색만으로는 눈치채기 어렵다.
+      const pulse = urgent ? 1 + 0.12 * Math.abs(Math.sin((t / 1000) * Math.PI)) : 1;
+      ctx.save();
+      ctx.translate(50, 50);
+      ctx.scale(pulse, pulse);
+      // 숫자가 부채꼴 위에 겹쳐도 읽히도록 바탕을 한 겹 깐다
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(28,23,18,.82)';
+      ctx.fill();
+      ctx.fillStyle = urgent ? URGENT_COLOR : '#f6efe2';
+      ctx.font = 'bold 34px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(left), 0, 2);
+      ctx.restore();
+    }
 
     ctx.restore();
     raf = requestAnimationFrame(frame);

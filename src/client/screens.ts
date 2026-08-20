@@ -94,7 +94,8 @@ export function renderSlices(
     drawSlice(c, s.strokes, sliceCount);
   }
   stopSpin?.();
-  stopSpin = startSpinHint($('spinHint'), sliceCount);
+  // 남은 초를 매 프레임 물어보게 넘긴다 — countdown이 갱신하는 값을 그대로 읽는다.
+  stopSpin = startSpinHint($('spinHint'), sliceCount, () => secondsLeftNow);
 }
 
 export function stopSpinHint(): void {
@@ -150,14 +151,18 @@ export function renderRanking(rows: Array<{ playerId: string; name: string; scor
  *
  * 같은 마감으로 다시 불려도(방 상태는 자주 온다) 이미 지나간 초를 다시 알리지 않는다.
  */
+/** 지금 남은 초. 회전 안내 원이 매 프레임 읽어간다. 없으면 null. */
+let secondsLeftNow: number | null = null;
+
 export function countdown(deadline: number | null, onSecond?: (left: number) => void): void {
   if (deadline !== lastDeadline) {
     lastDeadline = deadline;
     lastLeft = -1;
   }
   const tick = () => {
-    if (deadline === null) { setTag('timeTag', ''); return; }
+    if (deadline === null) { setTag('timeTag', ''); secondsLeftNow = null; return; }
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    secondsLeftNow = left;
     setTag('timeTag', `${left}초`);
     if (left !== lastLeft) {
       lastLeft = left;
@@ -185,7 +190,12 @@ function escape(s: string): string {
  */
 export function renderWatch(
   el: HTMLElement,
-  watching: Array<{ playerId: string; slices: Point[][][]; solved: boolean }>,
+  watching: Array<{
+    playerId: string;
+    slices: Point[][][];
+    solved: boolean;
+    history: Array<{ attempt: number; text: string; skipped: boolean; correct: boolean }>;
+  }>,
   sliceCount: number,
   names: Map<string, string>,
 ): void {
@@ -202,6 +212,19 @@ export function renderWatch(
     const strip = document.createElement('div');
     strip.className = 'watch-slices';
     row.appendChild(strip);
+
+    // 회차마다 뭐라고 냈는지. 회차가 끝날 때만 쌓이므로 여기 보이는 것은 이미 지난 회차다.
+    const log = document.createElement('div');
+    log.className = 'watch-log';
+    log.innerHTML = w.history.length === 0
+      ? '<span class="watch-none">아직 없음</span>'
+      : w.history.map((h) => {
+          const what = h.skipped ? '스킵' : h.text ? escape(h.text) : '안 씀';
+          const cls = h.correct ? 'ok' : h.skipped || !h.text ? 'none' : '';
+          return `<span class="watch-item ${cls}"><b>${h.attempt}</b> ${what}</span>`;
+        }).join('');
+    row.appendChild(log);
+
     el.appendChild(row);
 
     // 붙인 뒤에 그려야 clientWidth가 잡힌다

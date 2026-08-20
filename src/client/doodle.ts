@@ -9,9 +9,10 @@ import { drawStrokes, fitRect } from './ink';
  * 같이 갈기게 둔다. 게임 판정과는 아무 상관이 없는 판이라, 원형 캔버스처럼
  * 원 밖을 막거나 좌표를 숨길 이유도 없다.
  *
- * 사람마다 색이 다르다 — 여럿이 겹쳐 그리면 누가 뭘 그렸는지 구분이 안 된다.
+ * 색은 각자 고른다. 아무것도 안 고르면 id에서 뽑은 색이 기본값이라,
+ * 여럿이 겹쳐 그려도 처음부터 구분이 된다.
  */
-const COLORS = [
+export const COLORS = [
   '#e0803a', '#6fb6e8', '#83cf7d', '#e6cf63', '#d98fbf',
   '#7fd6cc', '#f0937a', '#a99ae8', '#c3d17e',
 ];
@@ -26,6 +27,8 @@ export function doodleColor(id: string): string {
 export interface DoodleStroke {
   by: string;
   points: Point[];
+  /** 그린 사람이 고른 색. 예전 획에는 없을 수 있어 없으면 id에서 뽑는다. */
+  color?: string;
 }
 
 export class DoodleBoard {
@@ -54,7 +57,7 @@ export class DoodleBoard {
       this.current = null;
       // 점 하나짜리는 서버가 버린다. 화면에도 남기지 않아야 내 화면과 남의 화면이 같다.
       if (done.length >= 2) {
-        this.strokes.push({ by: this.meId(), points: done });
+        this.strokes.push({ by: this.meId(), points: done, color: this.getColor() });
         this.strokeFn?.(done);
       }
       this.draw();
@@ -66,6 +69,11 @@ export class DoodleBoard {
 
   onStroke(fn: (points: Point[]) => void): void { this.strokeFn = fn; }
 
+  /** 지금 고른 색. 처음에는 내 id에서 뽑은 색으로 시작한다. */
+  private color = '';
+  setColor(c: string): void { this.color = c; }
+  getColor(): string { return this.color || doodleColor(this.meId()); }
+
   /** 남이 그은 획 하나가 도착했다. 내가 그은 것은 이미 화면에 있으므로 버린다. */
   add(stroke: DoodleStroke): void {
     if (stroke.by === this.meId()) return;
@@ -75,7 +83,7 @@ export class DoodleBoard {
 
   /** 판 전체를 서버가 준 것으로 맞춘다 (새로 들어왔거나 누가 자기 낙서를 지웠을 때). */
   setBoard(strokes: DoodleStroke[]): void {
-    this.strokes = strokes.map((s) => ({ by: s.by, points: s.points.slice() }));
+    this.strokes = strokes.map((s) => ({ by: s.by, points: s.points.slice(), color: s.color }));
     this.draw();
   }
 
@@ -118,7 +126,7 @@ export class DoodleBoard {
       ? [...this.strokes, { by: this.meId(), points: this.current }]
       : this.strokes;
     for (const s of all) {
-      drawStrokes(ctx, [s.points], { color: doodleColor(s.by), width: 10 });
+      drawStrokes(ctx, [s.points], { color: s.color ?? doodleColor(s.by), width: 10 });
     }
     ctx.restore();
   }

@@ -8,7 +8,7 @@ import {
   renderTopics,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
 } from './screens';
-import { DoodleBoard } from './doodle';
+import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 
@@ -56,7 +56,29 @@ drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
  * 내 id는 늦게 정해지므로(joined 메시지) 값이 아니라 함수로 넘긴다.
  */
 const doodle = new DoodleBoard($('doodleCanvas') as HTMLCanvasElement, () => youId);
-doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points }));
+doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points, color: doodle.getColor() }));
+
+// 낙서 색 고르기. 처음 칸은 내 id에서 뽑힌 기본색이라 아무것도 안 골라도 남과 구분된다.
+function buildDoodleColors(): void {
+  const box = $('doodleColors');
+  if (box.childElementCount > 0) return;
+  for (const c of DOODLE_COLORS) {
+    const b = document.createElement('button');
+    b.style.background = c;
+    b.title = c;
+    b.addEventListener('click', () => {
+      doodle.setColor(c);
+      for (const el of box.querySelectorAll('button')) el.classList.remove('on');
+      b.classList.add('on');
+    });
+    box.appendChild(b);
+  }
+  // 기본색을 골라둔 상태로 보여준다 — 아무것도 안 켜져 있으면 뭘 쓰는지 알 수 없다.
+  const mine = doodle.getColor();
+  for (const el of box.querySelectorAll('button')) {
+    if ((el as HTMLElement).style.background && (el as HTMLButtonElement).title === mine) el.classList.add('on');
+  }
+}
 // 자동재생 정책 때문에 사람이 한 번 누르기 전에는 소리가 안 난다. 첫 조작에서 깨운다.
 armAudio();
 const muteBtn = $('muteBtn') as HTMLButtonElement;
@@ -256,7 +278,7 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'word') { setTag('wordTag', m.word); return; }
   if (m.t === 'canvas') { drawCanvas.render(m.strokes); return; }
 
-  if (m.t === 'doodleStroke') { doodle.add({ by: m.by, points: m.points }); return; }
+  if (m.t === 'doodleStroke') { doodle.add({ by: m.by, points: m.points, color: m.color }); return; }
   if (m.t === 'doodleBoard') { doodle.setBoard(m.strokes); return; }
 
   if (m.t === 'slices') {
@@ -346,6 +368,7 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
     // 판을 먼저 띄우고 나서 비운다. 반대로 하면 아직 숨겨진 캔버스에 그려
     // 폭 0으로 뭉개지고, 그 뒤로 아무도 다시 그려주지 않아 빈 판이 된다.
     $('doodleWrap').style.display = '';
+    buildDoodleColors();
     show('wait');
     // 라운드가 바뀌면 낙서판도 새 판이다. 서버도 라운드 시작에서 비운다.
     doodle.clear();

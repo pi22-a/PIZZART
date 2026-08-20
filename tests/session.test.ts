@@ -237,7 +237,7 @@ describe('대기 화면 낙서판', () => {
   const doodlesTo = (id: string) => msgsTo(id).filter((m) => m.t === 'doodleStroke');
 
   it('기다리는 사람끼리 낙서가 오간다', () => {
-    s.addDoodle('p2', LINE);
+    s.addDoodle('p2', LINE, '#6fb6e8');
     expect(doodlesTo('p3').length).toBe(1);
     expect(doodlesTo('p4').length).toBe(1);
     // 그린 사람에게도 간다 — 화면을 서버 상태로 맞춰두면 새로고침해도 어긋나지 않는다
@@ -245,12 +245,12 @@ describe('대기 화면 낙서판', () => {
   });
 
   it('출제자에게는 낙서가 가지 않는다', () => {
-    s.addDoodle('p2', LINE);
+    s.addDoodle('p2', LINE, '#6fb6e8');
     expect(doodlesTo('p1').length).toBe(0);
   });
 
   it('출제자는 낙서판에 그릴 수 없다 — 자기 캔버스가 따로 있다', () => {
-    s.addDoodle('p1', LINE);
+    s.addDoodle('p1', LINE, '#6fb6e8');
     expect(doodlesTo('p2').length).toBe(0);
   });
 
@@ -258,13 +258,13 @@ describe('대기 화면 낙서판', () => {
     drawStar('p1');
     s.drawDone('p1');
     sent = [];
-    s.addDoodle('p2', LINE);
+    s.addDoodle('p2', LINE, '#6fb6e8');
     expect(doodlesTo('p3').length).toBe(0);
   });
 
   it('내 낙서만 지운다 — 남의 낙서는 남는다', () => {
-    s.addDoodle('p2', LINE);
-    s.addDoodle('p3', LINE);
+    s.addDoodle('p2', LINE, '#6fb6e8');
+    s.addDoodle('p3', LINE, '#6fb6e8');
     sent = [];
     s.clearDoodle('p2');
     const board = msgsTo('p3').filter((m) => m.t === 'doodleBoard').at(-1) as Extract<ServerMsg, { t: 'doodleBoard' }>;
@@ -273,7 +273,7 @@ describe('대기 화면 낙서판', () => {
   });
 
   it('돌아온 사람은 지금까지의 낙서판을 통째로 받는다', () => {
-    s.addDoodle('p2', LINE);
+    s.addDoodle('p2', LINE, '#6fb6e8');
     s.disconnect('p3');
     sent = [];
     s.join('p3', 'p3');
@@ -282,7 +282,7 @@ describe('대기 화면 낙서판', () => {
   });
 
   it('라운드가 바뀌면 낙서판이 비워진다', () => {
-    s.addDoodle('p2', LINE);
+    s.addDoodle('p2', LINE, '#6fb6e8');
     drawStar('p1');
     s.drawDone('p1');
     while (s.phase === 'guessing') clock.fire();
