@@ -122,7 +122,8 @@ wss.on('connection', (socket, req) => {
         .filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
         .map(([x, y]) => [clamp(Math.round(x), 0, DOODLE_W), clamp(Math.round(y), 0, DOODLE_H)] as Point);
       if (clean.length < 2) return;
-      session.addDoodle(id, clean);
+      // 색은 세션에서 형식을 검사한다. 여기서는 문자열인지만 본다.
+      session.addDoodle(id, clean, typeof msg.color === 'string' ? msg.color : '');
       return;
     }
 

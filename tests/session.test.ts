@@ -1114,3 +1114,74 @@ describe('현황판은 사람별로 보여준다', () => {
     expect(boardTo('p3')).toBeUndefined();
   });
 });
+
+describe('현황판에 회차별 답 기록이 쌓인다', () => {
+  let wordOfRound: string;
+
+  beforeEach(() => {
+    s.start('p1');
+    wordOfRound = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    drawStar('p1');
+    s.drawDone('p1');
+    sent = [];
+  });
+
+  const board = () =>
+    msgsTo('p1').filter((m) => m.t === 'board').at(-1) as Extract<ServerMsg, { t: 'board' }>;
+  const historyOf = (id: string) => board().watching.find((w) => w.playerId === id)!.history;
+
+  it('회차가 끝나야 남는다 — 치는 도중에는 안 보인다', () => {
+    s.answer('p2', '파스타');
+    expect(board()?.watching.find((w) => w.playerId === 'p2')?.history ?? []).toEqual([]);
+    clock.fire();
+    expect(historyOf('p2')).toEqual([{ attempt: 1, text: '파스타', skipped: false, correct: false }]);
+  });
+
+  it('안 쓴 사람은 빈 문자열로 남는다', () => {
+    clock.fire();
+    expect(historyOf('p3')[0].text).toBe('');
+  });
+
+  it('스킵을 누른 사람은 스킵으로 남는다', () => {
+    s.skip('p2'); s.skip('p3'); s.skip('p4');
+    expect(historyOf('p2')[0].skipped).toBe(true);
+  });
+
+  it('회차마다 한 줄씩 쌓인다', () => {
+    s.answer('p2', '파스타'); clock.fire();
+    s.answer('p2', '라면');   clock.fire();
+    expect(historyOf('p2').map((h) => h.text)).toEqual(['파스타', '라면']);
+    expect(historyOf('p2').map((h) => h.attempt)).toEqual([1, 2]);
+  });
+
+  it('맞힌 답도 정답으로 남는다', () => {
+    s.answer('p2', wordOfRound);
+    clock.fire();
+    expect(historyOf('p2').at(-1)).toMatchObject({ text: wordOfRound, correct: true });
+  });
+
+  it('새 라운드가 시작되면 기록이 지워진다', () => {
+    s.answer('p2', '파스타');
+    while (s.phase === 'guessing') clock.fire();
+    s.next('p1');
+    drawStar(s.drawerId); s.drawDone(s.drawerId);
+    const b = msgsTo(s.drawerId).filter((m) => m.t === 'board').at(-1) as Extract<ServerMsg, { t: 'board' }>;
+    for (const w of b.watching) expect(w.history).toEqual([]);
+  });
+});
+
+describe('낙서 색', () => {
+  beforeEach(() => { s.start('p1'); sent = []; });
+
+  it('고른 색이 그대로 전달된다', () => {
+    s.addDoodle('p2', [[10, 10], [20, 20]], '#e0803a');
+    const st = msgsTo('p3').filter((m) => m.t === 'doodleStroke').at(-1) as Extract<ServerMsg, { t: 'doodleStroke' }>;
+    expect(st.color).toBe('#e0803a');
+  });
+
+  it('형식이 아닌 색은 기본색으로 바꾼다 — 아무 문자열이나 CSS로 흘리면 화면이 깨진다', () => {
+    s.addDoodle('p2', [[10, 10], [20, 20]], 'red; background:url(x)');
+    const st = msgsTo('p3').filter((m) => m.t === 'doodleStroke').at(-1) as Extract<ServerMsg, { t: 'doodleStroke' }>;
+    expect(st.color).toBe('#f6efe2');
+  });
+});

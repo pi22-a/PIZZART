@@ -202,6 +202,7 @@ export class Session {
     this.wrongSubmits.clear();
     this.skippedThisAttempt.clear();
     this.solved.clear();
+    this.answerLog.clear();
     this.phase = 'drawing';
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
@@ -275,6 +276,12 @@ export class Session {
   protected wrongSubmits = new Map<string, number>();
 /** 이번 회차를 넘기겠다고 누른 사람. 아직 못 맞힌 사람이 전부 누르면 회차가 끝난다 */
   protected skippedThisAttempt = new Set<string>();
+  /**
+   * 회차마다 누가 뭐라고 냈는가. 회차가 끝날 때만 쌓는다 —
+   * 실시간으로 흘리면 통화 중인 출제자가 반응해버려 정답이 샌다.
+   */
+  protected answerLog = new Map<string, Array<{ attempt: number; text: string; skipped: boolean; correct: boolean }>>();
+
   /** 이미 맞혀서 점수가 확정된 사람 → 그 점수 */
   protected solved = new Map<string, number>();
   protected answers = new Map<string, string>();
@@ -284,22 +291,25 @@ export class Session {
    * 대기 화면 낙서판. 출제자가 그리는 동안만 살아 있고 라운드마다 지워진다.
    * 판정에 쓰이지 않으므로 검증은 좌표 범위와 개수 상한뿐이다.
    */
-  protected doodle: Array<{ by: string; points: Point[] }> = [];
+  protected doodle: Array<{ by: string; points: Point[]; color: string }> = [];
 
   /** 낙서 획 상한. 넘치면 오래된 것부터 버린다 — 판이 멈추는 것보다 낫다. */
   private static readonly DOODLE_MAX = 600;
 
-  addDoodle(playerId: string, points: Point[]): void {
+  addDoodle(playerId: string, points: Point[], color: string): void {
     if (this.phase !== 'drawing') return;
     if (playerId === this.drawerId) return;  // 출제자는 자기 캔버스가 따로 있다
     if (!this.players.some((p) => p.id === playerId)) return;
     if (points.length < 2) return;
-    this.doodle.push({ by: playerId, points });
+    // 색은 그리는 사람이 고른다. 판정과 무관한 낙서라 그대로 믿되, 형식만 본다 —
+    // 아무 문자열이나 CSS로 흘러가면 화면이 깨진다.
+    const safe = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#f6efe2';
+    this.doodle.push({ by: playerId, points, color: safe });
     if (this.doodle.length > Session.DOODLE_MAX) this.doodle.shift();
     // 기다리는 사람들끼리만 본다. 출제자에게 보내봐야 그릴 화면이 다르다.
     for (const p of this.players) {
       if (p.id === this.drawerId) continue;
-      this.send(p.id, { t: 'doodleStroke', by: playerId, points });
+      this.send(p.id, { t: 'doodleStroke', by: playerId, points, color: safe });
     }
   }
 
@@ -413,6 +423,16 @@ export class Session {
       if (text.length === 0) continue;
       if (judge(text, this.word)) this.solved.set(id, this.scoreFor(id));
       else this.wrongSubmits.set(id, (this.wrongSubmits.get(id) ?? 0) + 1);
+    }
+
+    // 이번 회차에 각자 뭘 했는지 남긴다. 출제자 현황판이 회차별로 되짚어 볼 자료다.
+    for (const id of this.seen.keys()) {
+      const text = this.answers.get(id) ?? '';
+      const skipped = this.skippedThisAttempt.has(id);
+      if (this.solved.has(id) && text.length === 0 && !skipped) continue; // 이미 맞힌 뒤에는 안 남긴다
+      const log = this.answerLog.get(id) ?? [];
+      log.push({ attempt: this.attempt, text, skipped, correct: text.length > 0 && judge(text, this.word) });
+      this.answerLog.set(id, log);
     }
 
     const rows = this.answerRows();
@@ -588,7 +608,7 @@ export class Session {
       case 'drawDone': return this.drawDone(playerId);
       case 'answer': return this.answer(playerId, msg.text);
       case 'skip': return this.skip(playerId);
-      case 'doodle': return this.addDoodle(playerId, msg.points);
+      case 'doodle': return this.addDoodle(playerId, msg.points, msg.color);
       case 'doodleClear': return this.clearDoodle(playerId);
       case 'next': return this.next(playerId);
       default: return;
@@ -696,6 +716,7 @@ export class Session {
         playerId: id,
         slices: [...this.seen.get(id)!].sort((a, b) => a - b).map((i) => this.slices[i].strokes),
         solved: this.solved.has(id),
+        history: this.answerLog.get(id) ?? [],
       })),
     };
     // 출제자와, 먼저 맞혀 할 일이 없어진 사람에게. 둘 다 이미 답을 안다.

@@ -33,7 +33,7 @@ export type ClientMsg =
   /** 이번 회차를 넘긴다. 아직 못 맞힌 사람이 전부 누르면 다음 회차로 간다. */
   | { t: 'skip' }
   /** 대기 화면 낙서 한 획. 게임 판정과 무관한 심심풀이라 검증만 하고 그대로 흘린다. */
-  | { t: 'doodle'; points: Point[] }
+  | { t: 'doodle'; points: Point[]; color: string }
   /** 내가 그린 낙서만 지운다. 남의 낙서는 건드리지 않는다. */
   | { t: 'doodleClear' }
   | { t: 'next' }
@@ -102,7 +102,16 @@ export type ServerMsg =
        * 이미 위를 향하게 돌아간 상태다 — 합쳐서 한 판으로 보여주면 "그림의 절반이
        * 나가 있다"는 사실만 남고, 누가 어떤 조각으로 헤매는지가 사라진다.
        */
-      watching: Array<{ playerId: string; slices: Point[][][]; solved: boolean }>;
+      watching: Array<{
+        playerId: string;
+        slices: Point[][][];
+        solved: boolean;
+        /**
+         * 회차마다 뭐라고 냈는가. 회차가 끝날 때만 쌓인다 — 치는 즉시 보여주면
+         * 통화 중인 출제자가 반응해버려 힌트가 샌다.
+         */
+        history: Array<{ attempt: number; text: string; skipped: boolean; correct: boolean }>;
+      }>;
     }
   /** 시도 하나가 끝났다. 답이 동시에 공개된다. */
   | { t: 'attemptResult'; attempt: number; answers: AnswerRow[] }
@@ -130,8 +139,8 @@ export type ServerMsg =
    * 대기 화면 낙서판. 출제자가 그리는 동안 기다리는 사람들이 같이 갈기는 판이다.
    * 낙서는 제시어·조각과 아무 관련이 없어 전원에게 그대로 보내도 새는 것이 없다.
    */
-  | { t: 'doodleStroke'; by: string; points: Point[] }
+  | { t: 'doodleStroke'; by: string; points: Point[]; color: string }
   /** 낙서판 전체 — 새로 들어왔거나 누가 자기 낙서를 지웠을 때 한 번에 맞춘다. */
-  | { t: 'doodleBoard'; strokes: Array<{ by: string; points: Point[] }> }
+  | { t: 'doodleBoard'; strokes: Array<{ by: string; points: Point[]; color: string }> }
   | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
   | { t: 'error'; msg: string };
