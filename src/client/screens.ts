@@ -175,3 +175,40 @@ let lastLeft = -1;
 function escape(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 }
+
+/**
+ * 출제자·이미 맞힌 사람이 보는 현황판. 맞히는 사람마다 한 줄씩, 그 사람이 실제로
+ * 보고 있는 조각을 그대로 그린다.
+ *
+ * 예전에는 모두의 조각을 원판 하나에 합쳐 보여줬다. 그러면 "그림의 절반이 나가 있다"는
+ * 사실만 남고, 정작 재미있는 것 — 누가 어떤 조각 하나로 헤매고 있는지 — 이 사라진다.
+ */
+export function renderWatch(
+  el: HTMLElement,
+  watching: Array<{ playerId: string; slices: Point[][][]; solved: boolean }>,
+  sliceCount: number,
+  names: Map<string, string>,
+): void {
+  el.innerHTML = '';
+  for (const w of watching) {
+    const row = document.createElement('div');
+    row.className = w.solved ? 'watch-row done' : 'watch-row';
+
+    const tag = document.createElement('div');
+    tag.className = 'watch-name';
+    tag.textContent = `${names.get(w.playerId) ?? '?'}${w.solved ? ' — 맞힘' : ` · ${w.slices.length}조각`}`;
+    row.appendChild(tag);
+
+    const strip = document.createElement('div');
+    strip.className = 'watch-slices';
+    row.appendChild(strip);
+    el.appendChild(row);
+
+    // 붙인 뒤에 그려야 clientWidth가 잡힌다
+    for (const strokes of w.slices) {
+      const c = document.createElement('canvas');
+      strip.appendChild(c);
+      drawSlice(c, strokes, sliceCount);
+    }
+  }
+}

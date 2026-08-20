@@ -1070,3 +1070,47 @@ describe('주제 고르기', () => {
     }
   });
 });
+
+describe('현황판은 사람별로 보여준다', () => {
+  let wordOfRound: string;
+
+  beforeEach(() => {
+    s.start('p1');
+    wordOfRound = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    drawStar('p1');
+    s.drawDone('p1');
+    sent = [];
+  });
+
+  const boardTo = (id: string) =>
+    msgsTo(id).filter((m) => m.t === 'board').at(-1) as Extract<ServerMsg, { t: 'board' }> | undefined;
+
+  it('출제자는 맞히는 사람마다 한 줄씩 받는다', () => {
+    clock.fire();
+    const b = boardTo('p1')!;
+    expect(b.watching.map((w) => w.playerId).sort()).toEqual(['p2', 'p3', 'p4']);
+  });
+
+  it('각 줄에는 그 사람이 실제로 들고 있는 조각만 들어간다', () => {
+    clock.fire();
+    const b = boardTo('p1')!;
+    for (const w of b.watching) {
+      const mine = msgsTo(w.playerId).filter((m) => m.t === 'slices').at(-1) as Extract<ServerMsg, { t: 'slices' }>;
+      expect(w.slices.length).toBe(mine.slices.length);
+    }
+  });
+
+  it('맞힌 사람은 맞혔다고 표시된다', () => {
+    // beforeEach가 sent를 비우기 전에 나간 word 메시지를 라운드 시작 시점에서 되찾는다
+    const word = wordOfRound;
+    s.answer('p2', word);
+    clock.fire();
+    const b = boardTo('p1')!;
+    expect(b.watching.find((w) => w.playerId === 'p2')!.solved).toBe(true);
+  });
+
+  it('맞히는 사람에게는 현황판이 가지 않는다', () => {
+    clock.fire();
+    expect(boardTo('p3')).toBeUndefined();
+  });
+});

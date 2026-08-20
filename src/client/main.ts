@@ -5,7 +5,8 @@ import type { PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking,
-  renderTopics, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
+  renderTopics,
+  renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
 } from './screens';
 import { DoodleBoard } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
@@ -277,14 +278,17 @@ function onMsg(m: ServerMsg): void {
   }
 
   if (m.t === 'board') {
-    const note = `${m.sliceCount}조각 중 ${m.visible.length}조각이 나가 있습니다 — 밝은 부분만 보입니다`;
+    const left = m.watching.filter((w) => !w.solved).length;
+    const note = left > 0
+      ? `${left}명이 아직 맞히는 중입니다 — 각자 지금 보고 있는 조각입니다`
+      : '모두 맞혔습니다';
     // 출제자는 대기 화면에서, 먼저 맞힌 사람은 추론 화면 안에서 같은 현황판을 본다.
     $('boardWrap').style.display = '';
-    drawBoard($('boardCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.visible);
+    renderWatch($('boardWatch'), m.watching, m.sliceCount, names);
     $('boardNote').textContent = note;
     if (iSolved) {
       $('solvedWrap').style.display = '';
-      drawBoard($('solvedBoard') as HTMLCanvasElement, m.drawing, m.sliceCount, m.visible);
+      renderWatch($('solvedWatch'), m.watching, m.sliceCount, names);
       $('solvedNote').textContent = note;
     }
     return;

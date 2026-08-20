@@ -93,7 +93,17 @@ export type ServerMsg =
    * 지금 남들에게 어떤 조각이 나가 있는지 보여준다. 정답을 아는 사람들이라 원본을 실어도
    * 새는 것이 없고, 할 일이 없어진 그 시간이 남을 지켜보는 시간이 된다.
    */
-  | { t: 'board'; sliceCount: number; drawing: Point[][]; visible: number[] }
+  | {
+      t: 'board';
+      sliceCount: number;
+      drawing: Point[][];
+      /**
+       * 맞히는 사람마다 지금 무엇을 보고 있는가. 조각은 그 사람이 보는 그대로,
+       * 이미 위를 향하게 돌아간 상태다 — 합쳐서 한 판으로 보여주면 "그림의 절반이
+       * 나가 있다"는 사실만 남고, 누가 어떤 조각으로 헤매는지가 사라진다.
+       */
+      watching: Array<{ playerId: string; slices: Point[][][]; solved: boolean }>;
+    }
   /** 시도 하나가 끝났다. 답이 동시에 공개된다. */
   | { t: 'attemptResult'; attempt: number; answers: AnswerRow[] }
   /** 라운드 종료. 여기서 처음으로 원본과 섹터 번호가 내려간다. */

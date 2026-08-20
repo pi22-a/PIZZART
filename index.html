@@ -67,6 +67,13 @@
   .lobby-name label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
   .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid #3d3227; }
   .lobby-start button { font-size:18px; padding:14px 28px; }
+  /* 현황판: 맞히는 사람마다 한 줄, 그 줄에 그 사람이 보고 있는 조각들. */
+  .watch-row { display:flex; align-items:center; gap:12px; padding:6px 0;
+               border-bottom:1px solid #2b2118; }
+  .watch-row.done { opacity:.45; }
+  .watch-name { min-width:110px; font-size:13px; font-weight:700; color:var(--crust); }
+  .watch-slices { display:flex; gap:6px; flex-wrap:wrap; }
+  .watch-slices canvas { width:72px; }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
   /* 조각마다 캔버스+라벨을 묶는 칸. 내 조각과 공개된 조각을 한눈에 구별해야 한다 —
      안 그러면 다들 같은 그림을 받았다고 착각한다(설명하고 맞히는 게 게임의 전부인데). */
@@ -174,8 +181,8 @@
     <!-- 출제자는 그리고 나면 할 일이 없다. 남들이 지금 어떤 조각을 보고 헤매는지
          보여주면 그 시간이 구경거리가 된다. 맞히는 사람에게는 절대 안 나간다. -->
     <div id="boardWrap" style="display:none">
-      <div style="max-width:340px"><canvas id="boardCanvas"></canvas></div>
       <p class="muted" id="boardNote"></p>
+      <div id="boardWatch"></div>
     </div>
   </section>
 
@@ -216,7 +223,7 @@
         <p class="muted" id="spectateNote"></p>
         <div id="solvedWrap" style="display:none">
           <p class="muted" id="solvedNote"></p>
-          <div style="max-width:300px"><canvas id="solvedBoard"></canvas></div>
+          <div id="solvedWatch"></div>
         </div>
         <ul class="answers" id="lastAnswers"></ul>
       </div>

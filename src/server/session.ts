@@ -688,13 +688,15 @@ export class Session {
 
   protected sendBoard(): void {
     if (this.phase !== 'guessing') return;
-    const out = new Set<number>();
-    for (const seen of this.seen.values()) for (const i of seen) out.add(i);
     const msg: ServerMsg = {
       t: 'board',
       sliceCount: this.slices.length,
       drawing: this.strokes,
-      visible: [...out].sort((a, b) => a - b),
+      watching: [...this.seen.keys()].map((id) => ({
+        playerId: id,
+        slices: [...this.seen.get(id)!].sort((a, b) => a - b).map((i) => this.slices[i].strokes),
+        solved: this.solved.has(id),
+      })),
     };
     // 출제자와, 먼저 맞혀 할 일이 없어진 사람에게. 둘 다 이미 답을 안다.
     this.send(this.drawerId, msg);
