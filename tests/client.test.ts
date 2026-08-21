@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join as pjoin, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ClientMsg, ServerMsg } from '../src/shared/protocol';
+import type { ChatLine, ClientMsg, ServerMsg } from '../src/shared/protocol';
 
 const root = pjoin(dirname(fileURLToPath(import.meta.url)), '..');
 const indexHtml = readFileSync(pjoin(root, 'index.html'), 'utf8');
@@ -777,5 +777,80 @@ describe('로비 인원은 관전자를 빼고 센다', () => {
       ],
     }));
     expect($('lobbyNote').textContent).toBe('참가자 3/4 · 관전 1명 — 1명 더 모이면 시작할 수 있습니다');
+  });
+});
+
+describe('이야기판', () => {
+  const line = (over: Partial<ChatLine> = {}): ChatLine => ({
+    id: Math.random().toString(36), by: 'x', name: '친구', color: '#6fb6e8',
+    text: '아 그게 그거였어?', round: 0, word: '낙타', ...over,
+  });
+
+  it('아무도 안 썼으면 빈 상자 대신 한 줄을 둔다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver({ t: 'chatLog', lines: [] });
+    expect($('roundChatLog').textContent).toContain('아직 아무도 말하지 않았습니다');
+  });
+
+  it('결과 화면과 최종 화면이 같은 로그를 그린다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver({ t: 'chat', line: line({ text: '낙타였구나' }) });
+    expect($('roundChatLog').textContent).toContain('낙타였구나');
+    expect($('finalChatLog').textContent).toContain('낙타였구나');
+  });
+
+  it('라운드가 바뀌는 자리에 구분선을 넣는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver({ t: 'chatLog', lines: [
+      line({ round: 0, word: '우산', text: '가' }),
+      line({ round: 0, word: '우산', text: '나' }),
+      line({ round: 1, word: '낙타', text: '다' }),
+      line({ round: -1, word: '', text: '라' }),
+    ] });
+    const seps = [...$('roundChatLog').querySelectorAll('.sep')].map((e) => e.textContent);
+    expect(seps).toEqual(['라운드 1 · 우산', '라운드 2 · 낙타', '최종']);
+  });
+
+  it('한 사람이 이어서 쓴 줄이 전부 남는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver({ t: 'chat', line: line({ text: '한마디' }) });
+    deliver({ t: 'chat', line: line({ text: '두마디' }) });
+    deliver({ t: 'chat', line: line({ text: '세마디' }) });
+    const log = $('roundChatLog').textContent ?? '';
+    expect(log).toContain('한마디');
+    expect(log).toContain('두마디');
+    expect(log).toContain('세마디');
+  });
+
+  it('보내면 입력칸을 비운다 — 남아 있으면 또 보낸 줄 안다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const box = $<HTMLInputElement>('roundChatInput');
+    box.value = '재밌었다';
+    $('roundChatSend').click();
+    expect(live.out.filter((m) => m.t === 'chat').length).toBe(1);
+    expect((live.out.at(-1) as { text: string }).text).toBe('재밌었다');
+    expect(box.value).toBe('');
+  });
+
+  it('빈 칸으로는 보내지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    $<HTMLInputElement>('roundChatInput').value = '   ';
+    $('roundChatSend').click();
+    expect(live.out.filter((m) => m.t === 'chat').length).toBe(0);
+  });
+
+  it('이름과 글은 그대로 새어 나가지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver({ t: 'chat', line: line({ name: '<img>', text: '<script>x</script>' }) });
+    expect($('roundChatLog').querySelector('img')).toBeNull();
+    expect($('roundChatLog').querySelector('script')).toBeNull();
+    expect($('roundChatLog').textContent).toContain('<script>x</script>');
   });
 });

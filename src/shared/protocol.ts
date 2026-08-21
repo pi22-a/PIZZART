@@ -57,9 +57,29 @@ export type ClientMsg =
   | { t: 'doodleClear' }
   /** 낙서 색을 고른다. 남이 쓰는 색은 서버가 거절한다. */
   | { t: 'doodleColor'; color: string }
+  /** 결과·최종 화면에서만. 다른 단계에서는 서버가 버린다. */
+  | { t: 'chat'; text: string }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };
+
+/**
+ * 결과·최종 화면에서 주고받는 한 줄.
+ *
+ * 이름과 색을 보낼 때 박아둔다. id만 두면 나간 사람의 줄이 이름 없는 줄이 된다 —
+ * 로비로 돌아갈 때 명단에서 지우기(prune) 때문이다.
+ */
+export interface ChatLine {
+  id: string;
+  by: string;
+  name: string;
+  color: string;
+  text: string;
+  /** 어느 라운드에서 나온 말인가. 최종 화면에서 나온 것은 -1 */
+  round: number;
+  /** 그 라운드의 제시어. 구분선에 쓴다 */
+  word: string;
+}
 
 export interface AnswerRow {
   playerId: string;
@@ -170,5 +190,9 @@ export type ServerMsg =
   | { t: 'doodleStroke'; by: string; points: Point[]; color: string }
   /** 낙서판 전체 — 새로 들어왔거나 누가 자기 낙서를 지웠을 때 한 번에 맞춘다. */
   | { t: 'doodleBoard'; strokes: Array<{ by: string; points: Point[]; color: string }> }
+  /** 한 줄이 새로 올라왔다 */
+  | { t: 'chat'; line: ChatLine }
+  /** 지금까지의 이야기 전부. 들어오거나 돌아온 사람에게 한 번에 보낸다. */
+  | { t: 'chatLog'; lines: ChatLine[] }
   | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
   | { t: 'error'; msg: string };

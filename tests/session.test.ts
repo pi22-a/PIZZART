@@ -1426,3 +1426,118 @@ describe('제출과 스킵은 서로를 지운다', () => {
     expect(msgsOfType('room').at(-1)!.attempt).toBe(2);   // 시간을 안 흘렸는데 넘어갔다
   });
 });
+
+describe('이야기 — 결과·최종 화면에서만', () => {
+  const chats = () => msgsOfType('chat');
+  const drawStar = (id: string) => s.addStroke(id, [[300, 200], [400, 300], [200, 400], [300, 200]]);
+  /** 결과 화면까지 간다 */
+  const toRoundEnd = () => {
+    s.start('p1');
+    drawStar('p1');
+    s.drawDone('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+  };
+
+  beforeEach(() => { newSession(); });
+
+  it('로비에서는 받지 않는다', () => {
+    s.chat('p2', '안녕');
+    expect(chats().length).toBe(0);
+  });
+
+  it('맞히는 중에는 받지 않는다 — 한 줄이면 점수가 무너진다', () => {
+    // 그 자리에는 정답을 아는 사람이 셋 있다: 출제자, 관전자, 먼저 맞힌 사람.
+    s.start('p1');
+    drawStar('p1');
+    s.drawDone('p1');
+    s.chat('p1', '낙타야');
+    expect(chats().length).toBe(0);
+  });
+
+  it('결과 화면에서는 받아서 전원에게 보낸다', () => {
+    toRoundEnd();
+    sent = [];
+    s.chat('p2', '아 그게 그거였어?');
+    const line = (chats().at(-1) as Extract<ServerMsg, { t: 'chat' }>).line;
+    expect(line.text).toBe('아 그게 그거였어?');
+    expect(line.name).toBe('p2');
+    expect(line.color).not.toBe('');
+    expect(new Set(sent.filter((e) => e.msg.t === 'chat').map((e) => e.to)).size).toBe(4);
+  });
+
+  it('한 사람이 몇 마디든 이어서 쓸 수 있다', () => {
+    toRoundEnd();
+    sent = [];
+    s.chat('p2', '한마디');
+    s.chat('p2', '두마디');
+    s.chat('p2', '세마디');
+    // 한 줄이 네 명에게 각각 가므로, 한 사람이 받은 것만 본다.
+    const texts = msgsTo('p3').filter((m) => m.t === 'chat')
+      .map((m) => (m as Extract<ServerMsg, { t: 'chat' }>).line.text);
+    expect(texts).toEqual(['한마디', '두마디', '세마디']);
+  });
+
+  it('빈 줄과 공백만 있는 줄은 버린다', () => {
+    toRoundEnd();
+    sent = [];
+    s.chat('p2', '   ');
+    s.chat('p2', '');
+    expect(chats().length).toBe(0);
+  });
+
+  it('100자를 넘으면 자른다', () => {
+    toRoundEnd();
+    sent = [];
+    s.chat('p2', 'ㅋ'.repeat(300));
+    expect((chats().at(-1) as Extract<ServerMsg, { t: 'chat' }>).line.text.length).toBe(100);
+  });
+
+  it('라운드가 넘어가도 지난 이야기가 남는다', () => {
+    toRoundEnd();
+    s.chat('p2', '1라운드 소감');
+    s.next('p1');
+    drawStar('p2');
+    s.drawDone('p2');
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    sent = [];
+    s.join('p2', 'p2');   // 되돌려 받는 것으로 로그를 확인한다
+    const log = msgsTo('p2').find((m) => m.t === 'chatLog') as Extract<ServerMsg, { t: 'chatLog' }>;
+    expect(log.lines.map((l) => l.text)).toEqual(['1라운드 소감']);
+    expect(log.lines[0].round).toBe(0);
+  });
+
+  it('돌아온 사람은 지금까지의 이야기를 통째로 받는다', () => {
+    toRoundEnd();
+    s.chat('p2', '가');
+    s.chat('p3', '나');
+    s.disconnect('p2');
+    sent = [];
+    s.join('p2', 'p2');
+    const log = msgsTo('p2').find((m) => m.t === 'chatLog') as Extract<ServerMsg, { t: 'chatLog' }>;
+    expect(log.lines.map((l) => l.text)).toEqual(['가', '나']);
+  });
+
+  it('한 판 더를 하면 이야기도 비워진다', () => {
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (msgsOfType('room').at(-1)!.phase === 'lobby') toRoundEnd();
+      else { s.next('p1'); drawStar(s.drawerId); s.drawDone(s.drawerId);
+             for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire(); }
+    }
+    s.chat('p2', '재밌었다');
+    s.again('p1');
+    sent = [];
+    s.join('p2', 'p2');
+    expect(msgsTo('p2').some((m) => m.t === 'chatLog')).toBe(false);
+  });
+
+  it('최종 화면에서 쓴 말은 어느 라운드에도 안 붙는다', () => {
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (msgsOfType('room').at(-1)!.phase === 'lobby') toRoundEnd();
+      else { s.next('p1'); drawStar(s.drawerId); s.drawDone(s.drawerId);
+             for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire(); }
+    }
+    sent = [];
+    s.chat('p2', '한 판 더 하자');
+    expect((chats().at(-1) as Extract<ServerMsg, { t: 'chat' }>).line.round).toBe(-1);
+  });
+});

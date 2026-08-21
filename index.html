@@ -76,6 +76,25 @@
   /* 인원 알약 줄 바로 아래에 화면 내용(조각 액자, 그리기 버튼 등)이 틈 없이 붙어 있었다.
      화면마다 따로 손보는 대신 .screen 하나에 위쪽 여백을 줘서 전 화면이 한 번에 떨어지게 한다. */
   .screen { margin-top:16px; }
+  /* 이야기 — 정답이 공개된 화면에만 있다. */
+  .chat { margin:14px 0 16px; max-width:520px; }
+  .chat-head { font-size:11px; letter-spacing:.14em; opacity:.45; margin-bottom:6px; }
+  .chat-log { background:var(--field); border:1px solid var(--line); border-radius:10px;
+              padding:10px 12px; font-size:13.5px; line-height:1.65;
+              max-height:var(--chat-h, 132px); overflow-y:auto;
+              display:flex; flex-direction:column; gap:3px; }
+  .chat-log .who { font-weight:700; margin-right:6px; }
+  /* 어느 라운드의 이야기였는지 갈라준다. 최종 화면에서 판 전체가 되짚어진다. */
+  .chat-log .sep { display:flex; align-items:center; gap:8px; margin:7px 0 4px;
+                   font-size:10px; letter-spacing:.12em; opacity:.42; }
+  .chat-log .sep::after { content:''; flex:1; height:1px; background:currentColor; opacity:.3; }
+  .chat-log .empty { opacity:.4; }
+  .chat-row { margin-bottom:0; margin-top:8px; }
+  .chat-row input { flex:1; min-width:0; }
+  /* 최종 화면은 시간이 없는 화면이라 더 길게 편다. */
+  #s-final .chat { max-width:640px; }
+  #s-final .chat-log { --chat-h:220px; }
+
   .answers { list-style:none; padding:0; margin:8px 0; }
   .answers li { padding:6px 10px; background:var(--panel); border-radius:8px; margin-bottom:6px; }
   .answers li.ok { background:#2f4a2a; color:#f6efe2; }
@@ -327,6 +346,17 @@
       <div class="col">
         <h1 id="revealWord"></h1>
         <ul class="answers" id="revealAnswers"></ul>
+        <!-- 정답이 공개된 뒤에만 열린다. 회차 중에는 정답을 아는 사람(출제자·관전자·
+             먼저 맞힌 사람)이 한 줄만 흘려도 점수가 통째로 무너진다. -->
+        <div class="chat">
+          <div class="chat-head">이야기</div>
+          <div class="chat-log" id="roundChatLog"></div>
+          <div class="bar chat-row">
+            <input id="roundChatInput" placeholder="소감 한마디" maxlength="100" />
+            <button id="roundChatSend" class="ghost">보내기</button>
+          </div>
+        </div>
+        <!-- 다음 버튼은 이야기 아래다. 위에 두면 읽기도 전에 눌러버린다. -->
         <button id="nextBtn">다음</button>
       </div>
     </div>
@@ -335,6 +365,16 @@
   <section class="screen" id="s-final">
     <h1>최종 결과</h1>
     <ul class="answers" id="ranking"></ul>
+        <!-- 정답이 공개된 뒤에만 열린다. 회차 중에는 정답을 아는 사람(출제자·관전자·
+             먼저 맞힌 사람)이 한 줄만 흘려도 점수가 통째로 무너진다. -->
+        <div class="chat">
+          <div class="chat-head">이야기</div>
+          <div class="chat-log" id="finalChatLog"></div>
+          <div class="bar chat-row">
+            <input id="finalChatInput" placeholder="소감 한마디" maxlength="100" />
+            <button id="finalChatSend" class="ghost">보내기</button>
+          </div>
+        </div>
     <button id="againBtn">한 판 더</button>
     <p class="muted" id="againNote"></p>
   </section>

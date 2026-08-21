@@ -1,13 +1,13 @@
 import { Net } from './net';
 import { CircleCanvas } from './canvas';
 import type { Point } from '../shared/drawing';
-import type { PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { ChatLine, PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking,
   renderTopics,
   syncClock,
-  renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots,
+  renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots, renderChat,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
@@ -225,6 +225,31 @@ answerInput.addEventListener('keydown', (e: KeyboardEvent) => {
 });
 $('answerSubmitBtn').addEventListener('click', submitAnswer);
 
+/**
+ * 결과·최종 화면의 이야기. 한 판 내내 이어지는 하나의 로그를 두 화면이 같이 그린다.
+ * 어느 화면에 있든 같은 내용이 보여야 해서 둘 다 매번 다시 그린다.
+ */
+let chatLines: ChatLine[] = [];
+function paintChat(): void {
+  renderChat('roundChatLog', chatLines);
+  renderChat('finalChatLog', chatLines);
+}
+
+function wireChat(inputId: string, sendId: string): void {
+  const box = $(inputId) as HTMLInputElement;
+  const send = () => {
+    const text = box.value.trim();
+    if (text.length === 0) return;
+    net.send({ t: 'chat', text });
+    // 비우는 것이 곧 "나갔다"는 신호다. 남아 있으면 또 보낸 줄 알고 다시 누른다.
+    box.value = '';
+  };
+  box.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') send(); });
+  $(sendId).addEventListener('click', send);
+}
+wireChat('roundChatInput', 'roundChatSend');
+wireChat('finalChatInput', 'finalChatSend');
+
 // 관전 고르기. 로비에서만 먹힌다 — 서버가 다시 확인한다.
 $('playBtn').addEventListener('click', () => net.send({ t: 'setSpectator', on: false }));
 $('watchBtn').addEventListener('click', () => net.send({ t: 'setSpectator', on: true }));
@@ -415,6 +440,9 @@ function onMsg(m: ServerMsg): void {
     restoreFocus();
     return;
   }
+
+  if (m.t === 'chatLog') { chatLines = m.lines; paintChat(); return; }
+  if (m.t === 'chat') { chatLines = [...chatLines, m.line]; paintChat(); return; }
 
   if (m.t === 'attemptResult') {
     renderAnswers('lastAnswers', m.answers, names);

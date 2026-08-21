@@ -1,5 +1,5 @@
 import type { Point } from '../shared/drawing';
-import type { AnswerRow, PlayerInfo } from '../shared/protocol';
+import type { AnswerRow, ChatLine, PlayerInfo } from '../shared/protocol';
 import { drawSlice, startSpinHint } from './slice-view';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -279,4 +279,33 @@ export function renderWatch(
       drawSlice(c, strokes, sliceCount);
     }
   }
+}
+
+/**
+ * 결과·최종 화면의 이야기판. 두 화면이 같은 로그를 그린다.
+ *
+ * 라운드가 바뀌는 자리에 구분선을 넣는다. 로그가 한 판 내내 이어지므로,
+ * 최종 화면에서는 이 구분선이 그 판 전체를 되짚는 눈금이 된다.
+ */
+export function renderChat(boxId: string, lines: ChatLine[]): void {
+  const box = $(boxId);
+  if (lines.length === 0) {
+    box.innerHTML = '<div class="empty">아직 아무도 말하지 않았습니다</div>';
+    return;
+  }
+  // 바닥에 붙어 있었으면 새 줄이 와도 계속 바닥에 둔다. 위를 읽고 있었으면 건드리지 않는다.
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+
+  let lastRound = Number.NaN;
+  const html: string[] = [];
+  for (const l of lines) {
+    if (l.round !== lastRound) {
+      lastRound = l.round;
+      const label = l.round < 0 ? '최종' : `라운드 ${l.round + 1}${l.word ? ` · ${escape(l.word)}` : ''}`;
+      html.push(`<div class="sep">${label}</div>`);
+    }
+    html.push(`<div><span class="who" style="color:${escape(l.color)}">${escape(l.name)}</span>${escape(l.text)}</div>`);
+  }
+  box.innerHTML = html.join('');
+  if (atBottom) box.scrollTop = box.scrollHeight;
 }

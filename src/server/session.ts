@@ -4,7 +4,7 @@ import { insideCircle } from '../shared/drawing';
 import { slice, sliceCount, type Slice } from '../shared/slicer';
 import { rotate } from '../shared/geometry';
 import { CENTER } from '../shared/drawing';
-import type { ClientMsg, Phase, PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { ChatLine, ClientMsg, Phase, PlayerInfo, ServerMsg } from '../shared/protocol';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
@@ -75,6 +75,20 @@ export class Session {
 
   /** 이번 게임에 이미 나온 제시어. 같은 판에서 두 번 나오면 정답을 흘리는 셈이다. */
   private usedWords = new Set<string>();
+
+  /**
+   * 결과·최종 화면에서 오간 이야기. 한 판 내내 이어지고 새 판에서 비워진다.
+   *
+   * 라운드마다 비우지 않는 이유: 비우면 결과 화면을 넘기는 순간 방금 나눈 말이 사라지고,
+   * 최종 화면의 이야기칸이 매번 빈 채로 시작해서 아무도 첫 줄을 안 쓴다.
+   * 이어두면 최종 화면이 그 판 전체의 반응 기록이 된다.
+   */
+  protected chatLog: ChatLine[] = [];
+
+  /** 이야기 줄 상한. 넘치면 오래된 것부터 버린다 — 낙서판과 같은 이유다. */
+  private static readonly CHAT_MAX = 200;
+  /** 한 줄 길이 상한. 답이 40자니 그보다 넉넉하되 화면을 밀어낼 만큼은 아니게. */
+  private static readonly CHAT_LEN = 100;
 
   private readonly scheduler: Scheduler;
   private readonly pick: (n: number) => number;
@@ -159,6 +173,11 @@ export class Session {
     if (this.phase === 'final' && this.lastFinal) {
       this.send(id, this.lastFinal);
     }
+    // 이야기는 화면에 상관없이 돌려준다. 결과 화면에서 새로고침한 사람만
+    // 남들이 나눈 말을 못 보는 일이 없어야 한다.
+    if (this.chatLog.length > 0) {
+      this.send(id, { t: 'chatLog', lines: this.chatLog });
+    }
   }
 
   /**
@@ -204,6 +223,7 @@ export class Session {
     this.order = live.map((p) => p.id);
     this.round = 0;
     this.usedWords.clear();
+    this.chatLog = [];
     this.doodleColors.clear();
     for (const p of this.players) p.score = 0;
     this.beginRound();
@@ -242,9 +262,9 @@ export class Session {
 
     // 낙서 색을 미리 배정한다. 그릴 때 배정하면 남의 팔레트에는 그 사람이 첫 획을
     // 긋기 전까지 그 색이 비어 보이고, 그 틈에 같은 색을 골라버린다.
-    for (const p of this.players) {
-      if (!this.knowsAnswer(p.id)) this.ensureDoodleColor(p.id);
-    }
+    // 맞히는 사람만이 아니라 전원에게 준다. 낙서에는 안 쓰지만 결과 화면의
+    // 이야기에서 이름 색으로 쓰이므로, 출제자와 관전자만 색이 비면 안 된다.
+    for (const p of this.players) this.ensureDoodleColor(p.id);
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
     this.setDeadline(this.rules.drawSeconds, () => this.endDrawing());
@@ -430,6 +450,36 @@ export class Session {
     this.answers.set(playerId, String(text).slice(0, 40));
     this.broadcastRoom();
     this.maybeEndAttempt();
+  }
+
+  /**
+   * 결과·최종 화면에서 한마디 남긴다.
+   *
+   * 이 두 화면에서만 받는다. 회차 중에는 방 안에 정답을 아는 사람이 셋 있고
+   * (출제자·관전자·먼저 맞힌 사람), 그중 하나가 한 줄 치면 나머지가 공짜로 점수를 가져간다.
+   * 화면에서 감추는 것으로는 못 막는다 — 브라우저 콘솔로 그대로 보낼 수 있다.
+   */
+  chat(playerId: string, text: string): void {
+    if (this.phase !== 'roundEnd' && this.phase !== 'final') return;
+    const p = this.players.find((x) => x.id === playerId);
+    if (!p) return;
+    const clean = String(text).trim().slice(0, Session.CHAT_LEN);
+    if (clean.length === 0) return;
+
+    const line: ChatLine = {
+      id: randomUUID(),
+      by: playerId,
+      // 이름과 색을 지금 박아둔다. 나중에 명단에서 지워져도 줄은 그대로 읽혀야 한다.
+      name: p.name,
+      color: this.ensureDoodleColor(playerId),
+      text: clean,
+      // 최종 화면에서 나온 말은 어느 라운드에도 속하지 않는다.
+      round: this.phase === 'final' ? -1 : this.round,
+      word: this.phase === 'final' ? '' : this.word,
+    };
+    this.chatLog.push(line);
+    if (this.chatLog.length > Session.CHAT_MAX) this.chatLog.shift();
+    this.broadcast({ t: 'chat', line });
   }
 
   /**
@@ -650,6 +700,7 @@ export class Session {
     this.attempt = 1;
     this.answers.clear();
     this.usedWords.clear();
+    this.chatLog = [];
     this.lastFinal = null;
     this.lastRoundEnd = null;
     for (const p of this.players) p.score = 0;
@@ -723,6 +774,7 @@ export class Session {
       case 'doodle': return this.addDoodle(playerId, msg.points, msg.color);
       case 'doodleClear': return this.clearDoodle(playerId);
       case 'doodleColor': return this.setDoodleColor(playerId, msg.color);
+      case 'chat': return this.chat(playerId, msg.text);
       case 'next': return this.next(playerId);
       default: return;
     }

@@ -8,6 +8,13 @@ import { DOODLE_W, DOODLE_H } from '../shared/drawing';
 const PORT = Number(process.env.PORT ?? 8080);
 const STROKES_PER_SECOND = 40;
 /**
+ * 이야기 줄의 초당 상한.
+ *
+ * 획 예산을 같이 쓰지 않는다. 획은 초당 40개가 정상이지만 사람이 1초에 40줄을 칠 일은
+ * 없으므로, 같은 예산을 주면 도배를 막는 값이 사실상 없는 것과 같다.
+ */
+const CHATS_PER_SECOND = 3;
+/**
  * 살아있는지 확인하는 주기. 한 번 걸러도 답이 없으면 끊긴 것으로 본다.
  *
  * 15초였을 때는 회차(20초)마다 검사가 한 번씩 도는 셈이라, 잠깐 렉이 걸린 사람이
@@ -23,6 +30,7 @@ interface Conn {
   /** 세션이 아는 플레이어 id. join에서 cid를 확인한 뒤 확정된다. */
   actorId: string;
   strokeBudget: number;
+  chatBudget: number;
   /** 지난 ping에 답이 왔는가 */
   alive: boolean;
 }
@@ -52,7 +60,10 @@ const wss = new WebSocketServer({ port: PORT });
 
 // 스트로크 메시지 초당 상한을 매초 리필한다
 setInterval(() => {
-  for (const c of conns.values()) c.strokeBudget = STROKES_PER_SECOND;
+  for (const c of conns.values()) {
+    c.strokeBudget = STROKES_PER_SECOND;
+    c.chatBudget = CHATS_PER_SECOND;
+  }
 }, 1000);
 
 /**
@@ -74,7 +85,10 @@ setInterval(() => {
 wss.on('connection', (socket, req) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const room = (url.searchParams.get('room') ?? '').trim().toUpperCase() || 'LOBBY';
-  const conn: Conn = { socket, room, actorId: randomUUID(), strokeBudget: STROKES_PER_SECOND, alive: true };
+  const conn: Conn = {
+    socket, room, actorId: randomUUID(),
+    strokeBudget: STROKES_PER_SECOND, chatBudget: CHATS_PER_SECOND, alive: true,
+  };
   conns.add(conn);
   socket.on('pong', () => { conn.alive = true; });
   // 소켓 오류에 듣는 사람이 없으면 EventEmitter가 그대로 던져 서버 전체가 죽는다.
@@ -108,6 +122,14 @@ wss.on('connection', (socket, req) => {
     }
 
     const id = conn.actorId;
+
+    if (msg.t === 'chat') {
+      if (conn.chatBudget-- <= 0) return;
+      if (typeof msg.text !== 'string') return;
+      // 길이와 단계 확인은 세션이 한다. 여기서는 형식과 빈도만 본다.
+      session.chat(id, msg.text);
+      return;
+    }
 
     if (msg.t === 'stroke') {
       if (conn.strokeBudget-- <= 0) return;
