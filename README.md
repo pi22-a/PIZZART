@@ -120,6 +120,10 @@ node scripts/fake-player.mjs 방코드 봇1 --draw --answer=피자 --skip
 npm test
 ```
 
+## 버전 기록
+
+[CHANGELOG.md](CHANGELOG.md) — 버전마다 무엇이 바뀌었고 왜 바꿨는지.
+
 ## 설계 문서
 
 - [설계](docs/superpowers/specs/2026-08-10-pizza-design.md)
