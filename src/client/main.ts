@@ -8,6 +8,7 @@ import {
   renderTopics,
   syncClock,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots, renderChat,
+  flashHost, toast,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
@@ -44,6 +45,13 @@ let hostId = '';
 let names = new Map<string, string>();
 let sliceCount = 8;
 let lastPhase = '';
+/**
+ * 직전에 알고 있던 방장. 방장이 나에게 넘어온 순간을 잡는 데만 쓴다.
+ *
+ * 빈 문자열로 시작하는 것이 중요하다 — 처음 들어와서 내가 방장이 되는 것은
+ * "넘어온" 것이 아니고, 새로고침으로 돌아온 것도 마찬가지다. 둘 다 알릴 일이 아니다.
+ */
+let lastHostId = '';
 let lastWatch = false;
 let lastRound = -1;
 let iSolved = false;
@@ -298,6 +306,20 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'joined') { youId = m.youId; return; }
 
   if (m.t === 'room') {
+    /*
+     * 방장이 나에게 넘어왔다.
+     *
+     * 프로토콜에 새 메시지를 만들지 않는다 — room이 이미 hostId를 실어 보내므로
+     * 바뀌었는지는 여기서 안다. 그래서 넘어오는 길이 몇 개든(방장이 관전을 켜거나,
+     * 끊기거나) 알림은 한 자리에서만 처리된다.
+     */
+    const tookOver = lastHostId !== '' && lastHostId !== m.hostId && m.hostId === youId;
+    lastHostId = m.hostId;
+    if (tookOver) {
+      flashHost(youId);
+      // 무엇이 달라졌는지까지 적는다. "방장이 되었습니다"만으로는 뭘 해야 하는지 모른다.
+      toast('👑 <b>방장이 되었습니다</b><br>이제 시작·다음 버튼을 누를 수 있습니다');
+    }
     hostId = m.hostId;
     names = new Map(m.players.map((p) => [p.id, p.name]));
     syncClock(m.now);

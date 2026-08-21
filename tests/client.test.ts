@@ -854,3 +854,54 @@ describe('이야기판', () => {
     expect($('roundChatLog').textContent).toContain('<script>x</script>');
   });
 });
+
+describe('방장이 넘어오면 알린다', () => {
+  const hosted = (hostId: string) => room({ phase: 'lobby', hostId });
+
+  it('나에게 넘어오면 팝업과 왕관 강조가 뜬다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(hosted('d'));                       // 처음에는 남이 방장
+    expect($('toast').classList.contains('on')).toBe(false);
+
+    deliver(hosted('me'));                      // 넘어왔다
+    expect($('toast').classList.contains('on')).toBe(true);
+    expect($('toast').textContent).toContain('방장이 되었습니다');
+    expect($('players').querySelector('.justhost')).not.toBeNull();
+  });
+
+  it('처음 들어와서 방장이 되는 것은 알리지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(hosted('me'));
+    expect($('toast').classList.contains('on')).toBe(false);
+  });
+
+  it('남에게 넘어간 것은 알리지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(hosted('me'));
+    deliver(hosted('d'));
+    expect($('toast').classList.contains('on')).toBe(false);
+  });
+
+  it('방 상태가 또 와도 왕관 강조가 계속 깜빡이지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(hosted('d'));
+    deliver(hosted('me'));
+    expect($('players').querySelector('.justhost')).not.toBeNull();
+    deliver(hosted('me'));                      // 같은 방장으로 한 번 더
+    expect($('players').querySelector('.justhost')).toBeNull();
+  });
+
+  it('팝업은 스스로 사라진다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(hosted('d'));
+    deliver(hosted('me'));
+    expect($('toast').classList.contains('on')).toBe(true);
+    vi.advanceTimersByTime(6000);
+    expect($('toast').classList.contains('on')).toBe(false);
+  });
+});

@@ -1541,3 +1541,64 @@ describe('이야기 — 결과·최종 화면에서만', () => {
     expect((chats().at(-1) as Extract<ServerMsg, { t: 'chat' }>).line.round).toBe(-1);
   });
 });
+
+describe('방장이 관전을 켜면 방장을 넘긴다', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+  beforeEach(() => { newSession(['p1', 'p2', 'p3', 'p4', 'p5']); });
+
+  it('참여 중인 사람에게 넘어간다', () => {
+    expect(roomNow().hostId).toBe('p1');
+    s.setSpectator('p1', true);
+    expect(roomNow().hostId).not.toBe('p1');
+    const next = roomNow().players.find((p) => p.id === roomNow().hostId)!;
+    expect(next.spectator).toBe(false);
+  });
+
+  it('관전자에게는 안 넘긴다', () => {
+    // 구경하러 온 사람 뒤에 시작·다음 버튼이 잠기면 전원이 그 사람을 기다린다.
+    s.setSpectator('p2', true);
+    s.setSpectator('p1', true);
+    expect(roomNow().hostId).not.toBe('p1');
+    expect(roomNow().hostId).not.toBe('p2');
+  });
+
+  it('넘길 사람이 없으면 그대로 둔다 — 아무도 못 누르는 것보다 낫다', () => {
+    for (const id of ['p2', 'p3', 'p4', 'p5']) s.setSpectator(id, true);
+    s.setSpectator('p1', true);
+    expect(roomNow().hostId).toBe('p1');
+  });
+
+  it('참여로 되돌려도 방장을 돌려받지 않는다', () => {
+    s.setSpectator('p1', true);
+    const taken = roomNow().hostId;
+    s.setSpectator('p1', false);
+    expect(roomNow().hostId).toBe(taken);
+  });
+});
+
+describe('방장은 늘 참여 중인 사람에게 넘어간다', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+
+  it('로비에서 방장이 나가면 관전자를 건너뛴다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4']);
+    s.setSpectator('p2', true);
+    s.disconnect('p1');
+    expect(roomNow().hostId).toBe('p3');
+  });
+
+  it('게임 중에 방장이 끊겨도 관전자를 건너뛴다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p2', true);
+    s.start('p1');
+    s.disconnect('p1');
+    expect(roomNow().hostId).toBe('p3');
+  });
+
+  it('참여자가 아무도 안 남으면 관전자라도 세운다', () => {
+    // 아무도 못 누르는 방이 되는 것보다는 낫다.
+    newSession(['p1', 'p2']);
+    s.setSpectator('p2', true);
+    s.disconnect('p1');
+    expect(roomNow().hostId).toBe('p2');
+  });
+});

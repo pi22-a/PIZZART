@@ -53,6 +53,37 @@
   .players .p.off { opacity:.4; }
   .players .p.me { outline:2px solid var(--fg); }
   .players .p.drawer { outline:2px solid var(--sauce); }
+  /*
+   * 방장이 나에게 넘어온 순간.
+   *
+   * 팝업은 몇 초 뒤 사라지므로, 그 사이에 딴 데를 보고 있었으면 못 본다.
+   * 왕관 알약이 잠깐 빛나 있으면 뒤늦게 눈이 가도 "아 내가 방장이구나"가 남는다.
+   */
+  .players .p.justhost { animation:crown 2.6s ease-out 2; }
+  @keyframes crown {
+    0%   { box-shadow:0 0 0 0 var(--sauce); }
+    25%  { box-shadow:0 0 0 5px color-mix(in srgb, var(--sauce) 55%, transparent); }
+    100% { box-shadow:0 0 0 0 transparent; }
+  }
+
+  /* 작은 팝업. 화면 위에 떠 있되 아무것도 가리지 않고, 클릭도 통과시킨다. */
+  #toast {
+    position:fixed; left:50%; bottom:24px; transform:translate(-50%, 16px);
+    z-index:50; pointer-events:none; opacity:0;
+    max-width:min(420px, calc(100vw - 32px));
+    background:var(--panel); color:var(--fg); border:1px solid var(--sauce);
+    border-radius:12px; padding:12px 18px; font-size:14px; line-height:1.5;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  #toast.on { opacity:1; transform:translate(-50%, 0); }
+  #toast b { color:var(--sauce); }
+
+  /* 움직임을 원치 않는 사람에게는 움직이지 않고 그냥 나타난다. */
+  @media (prefers-reduced-motion: reduce) {
+    .players .p.justhost { animation:none; outline:2px solid var(--sauce); }
+    #toast { transition:none; transform:translate(-50%, 0); }
+  }
   /* 관전자는 정답을 아는 사람이다. 통화 중에 흘릴 수 있는 사람이 누구인지
      나머지가 알아야 하므로 출제자와 마찬가지로 눈에 띄게 둔다. */
   .players .p.spectator { outline:2px dashed var(--crust); opacity:.75; }
@@ -151,6 +182,8 @@
 </style>
 </head>
 <body>
+<!-- 방장이 넘어왔을 때만 뜬다. 소리는 안 낸다 — 남의 방에서 갑자기 소리가 나면 곤란하다. -->
+<div id="toast" role="status" aria-live="polite"></div>
 <div id="app">
   <!--
     상단바에는 "문제가 생겨야 보는 것"만 남긴다.

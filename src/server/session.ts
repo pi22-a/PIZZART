@@ -203,7 +203,25 @@ export class Session {
     const p = this.players.find((x) => x.id === playerId);
     if (!p || p.spectator === on) return;
     p.spectator = on;
+    if (on) this.handOverHostIfWatching();
     this.broadcastRoom();
+  }
+
+  /**
+   * 방장이 관전을 켜면 참여 중인 사람에게 방장을 넘긴다.
+   *
+   * 시작·다음 버튼은 방장만 누른다. 구경하러 온 사람 뒤에 그 버튼이 잠기면,
+   * 결과 화면마다 그 사람이 눌러주기를 전원이 기다린다 — 판을 안 하는 사람이
+   * 판을 진행시켜야 하는 자리가 된다.
+   *
+   * 넘길 사람이 없으면(전원 관전) 그대로 둔다. 아무도 못 누르는 것보다 낫다.
+   */
+  private handOverHostIfWatching(): void {
+    const host = this.players.find((p) => p.id === this.hostId);
+    if (!host?.spectator) return;
+    // 관전자끼리 주고받아봐야 달라지는 것이 없으므로 참여자가 있을 때만 넘긴다.
+    const next = this.players.find((p) => p.connected && !p.spectator);
+    if (next) this.hostId = next.id;
   }
 
   start(playerId: string): void {
@@ -732,7 +750,7 @@ export class Session {
       // 로비에서는 자리를 그냥 비운다. 표시만 해두면 링크를 열었다 닫을 때마다
       // 유령이 쌓여 방이 영구히 죽는다.
       this.players.splice(idx, 1);
-      if (this.hostId === playerId) this.hostId = this.players[0]?.id ?? '';
+      if (this.hostId === playerId) this.hostId = this.pickHost();
     } else {
       this.players[idx].connected = false;
       // 방장이 게임 도중(로비가 아닐 때) 끊기면 hostId를 그대로 두지 않는다.
@@ -742,7 +760,7 @@ export class Session {
       // 원래 방장이 돌아와도 이 자리를 돌려주지 않는다: join()은 hostId가
       // 비어 있을 때만 새로 채우므로, 넘어간 방장을 몰래 바꿔치기하지 않는다.
       if (this.hostId === playerId) {
-        this.hostId = this.players.find((p) => p.connected)?.id ?? '';
+        this.hostId = this.pickHost();
       }
     }
     this.broadcastRoom();
@@ -787,11 +805,23 @@ export class Session {
     return this.players.filter((p) => p.connected).length;
   }
 
+  /**
+   * 방장을 넘길 사람을 고른다.
+   *
+   * 참여 중인 사람이 먼저다 — 시작·다음 버튼이 구경하러 온 사람 뒤에 잠기면
+   * 결과 화면마다 전원이 그 사람을 기다린다. 판을 안 하는 사람이 판을 진행시키는 자리가 된다.
+   * 참여자가 하나도 없으면 관전자라도 세운다. 아무도 못 누르는 것보다 낫다.
+   */
+  private pickHost(): string {
+    const live = this.players.filter((p) => p.connected);
+    return (live.find((p) => !p.spectator) ?? live[0])?.id ?? '';
+  }
+
   /** 끊긴 사람을 명단에서 지운다. 로비로 돌아갈 때와 한 판 더에서만 부른다. */
   private prune(): void {
     this.players = this.players.filter((p) => p.connected);
     if (!this.players.some((p) => p.id === this.hostId)) {
-      this.hostId = this.players[0]?.id ?? '';
+      this.hostId = this.pickHost();
     }
   }
 

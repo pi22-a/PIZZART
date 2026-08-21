@@ -15,12 +15,20 @@ export function setTag(id: string, text: string): void {
   $(id).textContent = text;
 }
 
+/**
+ * 방금 방장이 된 사람. 다음 renderPlayers에서 그 알약을 한 번 빛나게 한다.
+ * 한 번 쓰고 지운다 — 방 상태는 자주 오므로 안 지우면 계속 깜빡인다.
+ */
+let flashHostId = '';
+export function flashHost(id: string): void { flashHostId = id; }
+
 export function renderPlayers(players: PlayerInfo[], youId: string, hostId: string = '', phase: string = ''): void {
   $('players').innerHTML = players
     .map((p) => {
       const meClass = p.id === youId ? ' me' : '';
       const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : '',
-                   p.spectator ? 'spectator' : '', meClass].filter(Boolean).join(' ');
+                   p.spectator ? 'spectator' : '',
+                   p.id === flashHostId ? 'justhost' : '', meClass].filter(Boolean).join(' ');
       const mark = p.answered ? ' ✎' : p.skipped ? ' ⏩' : '';
       const host = p.id === hostId ? '👑' : '';
       // 관전자는 점수가 없다. 0점을 붙이면 꼴찌로 읽힌다.
@@ -30,6 +38,7 @@ export function renderPlayers(players: PlayerInfo[], youId: string, hostId: stri
         + `${host}${escape(p.name)}${score}${mark}${watch}</span>`;
     })
     .join('');
+  flashHostId = '';
 }
 
 export function renderLobbyNote(
@@ -308,4 +317,19 @@ export function renderChat(boxId: string, lines: ChatLine[]): void {
   }
   box.innerHTML = html.join('');
   if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+/**
+ * 작은 팝업. 몇 초 뒤 스스로 사라지고, 클릭을 통과시켜 아무것도 막지 않는다.
+ *
+ * 소리는 내지 않는다. 이 게임은 대개 통화를 켜고 하므로 남의 방에서 갑자기
+ * 소리가 나면 곤란하다 — 초읽기 소리에 끄는 스위치를 달아둔 것과 같은 이유다.
+ */
+let toastTimer = 0;
+export function toast(html: string, ms = 5000): void {
+  const box = $('toast');
+  box.innerHTML = html;
+  box.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => box.classList.remove('on'), ms);
 }
