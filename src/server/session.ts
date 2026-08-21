@@ -307,7 +307,7 @@ export class Session {
    */
   protected doodle: Array<{ by: string; points: Point[]; color: string }> = [];
 
-  /** 사람 → 그 사람이 쓰는 낙서 색. 같은 색을 두 사람이 쓰면 누구 선인지 구분이 안 된다. */
+  /** 사람 → 그 사람이 쓰는 낙서 색. 겹쳐도 된다 — 지우기는 색이 아니라 사람으로 가른다. */
   protected doodleColors = new Map<string, string>();
 
   /** 고를 수 있는 낙서 색. 클라이언트의 팔레트와 같은 목록이어야 한다. */
@@ -319,8 +319,9 @@ export class Session {
   /**
    * 아직 색이 없는 사람에게 남는 색을 하나 준다.
    *
-   * 예전에는 id를 해시해서 뽑았는데, 아홉 색뿐이라 사람이 늘면 같은 색이 겹쳤다.
-   * 겹치면 남이 자기 낙서를 지울 때 내 그림이 지워진 것처럼 보인다.
+   * 처음에 서로 다른 색을 주는 것은 그래야 누가 뭘 그렸는지 한눈에 보이기 때문이지,
+   * 겹치면 안 되기 때문이 아니다. 겹쳐도 안전하다 — clearDoodle을 보라.
+   * 색이 다 나가면 첫 색부터 다시 쓴다.
    */
   protected ensureDoodleColor(playerId: string): string {
     const had = this.doodleColors.get(playerId);
@@ -331,12 +332,16 @@ export class Session {
     return free;
   }
 
-  /** 색을 고른다. 남이 이미 쓰는 색이면 아무 일도 일어나지 않는다. */
+  /**
+   * 색을 고른다. 남이 쓰는 색이어도 된다.
+   *
+   * 예전에는 남이 쓰는 색을 막았다. "같은 색을 쓰면 남이 지울 때 내 것도 지워진다"는
+   * 제보 때문이었는데, 확인해 보니 지우기는 처음부터 색이 아니라 사람으로 가르고 있었다
+   * (clearDoodle). 겹친 색을 보고 그렇게 보였을 뿐 실제로 지워진 적은 없다.
+   * 없는 위험을 막느라 색 아홉 개를 선착순으로 잠가둔 셈이라 풀었다.
+   */
   setDoodleColor(playerId: string, color: string): void {
     if (!Session.DOODLE_PALETTE.includes(color)) return;
-    for (const [id, c] of this.doodleColors) {
-      if (c === color && id !== playerId) return; // 이미 임자가 있다
-    }
     this.doodleColors.set(playerId, color);
     this.broadcastRoom();
   }

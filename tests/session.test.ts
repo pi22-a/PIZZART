@@ -1212,7 +1212,7 @@ describe('현황판에 회차별 답 기록이 쌓인다', () => {
   });
 });
 
-describe('낙서 색은 한 사람당 하나', () => {
+describe('낙서 색', () => {
   beforeEach(() => { s.start('p1'); });
 
   const colorOf = (id: string) =>
@@ -1234,18 +1234,29 @@ describe('낙서 색은 한 사람당 하나', () => {
   });
 
   it('팔레트에 없는 색은 무시하고 배정된 색을 쓴다', () => {
-    // 두 사람이 같은 색을 쓰면 누구 선인지 구분이 안 되고, 한쪽이 자기 낙서를 지울 때
-    // 다른 쪽은 자기 그림이 지워졌다고 오해한다. 그래서 색은 서버가 정한다.
+    // 색은 남의 화면에 그대로 들어가는 값이라 목록 밖은 받지 않는다.
     s.addDoodle('p2', [[10, 10], [20, 20]], 'red; background:url(x)');
     expect(Session.DOODLE_PALETTE).toContain(strokeColor('p3'));
   });
 
-  it('남이 쓰는 색은 뺏을 수 없다', () => {
+  it('남이 쓰는 색도 고를 수 있다', () => {
     const p2Color = colorOf('p2');
-    const before = colorOf('p3');
     s.setDoodleColor('p3', p2Color);
-    expect(colorOf('p3')).toBe(before);
-    expect(colorOf('p2')).toBe(p2Color);
+    expect(colorOf('p3')).toBe(p2Color);
+    expect(colorOf('p2')).toBe(p2Color); // 뺏기는 것이 아니라 같이 쓴다
+  });
+
+  it('색이 같아도 지우기는 사람 단위다 — 색을 풀어줄 수 있는 근거다', () => {
+    const c = colorOf('p2');
+    s.setDoodleColor('p3', c);
+    s.addDoodle('p2', [[10, 10], [20, 20]], c);
+    s.addDoodle('p3', [[30, 30], [40, 40]], c);
+    sent = [];
+    s.clearDoodle('p2');
+    const board = msgsTo('p4').filter((m) => m.t === 'doodleBoard').at(-1) as Extract<ServerMsg, { t: 'doodleBoard' }>;
+    expect(board.strokes.length).toBe(1);
+    expect(board.strokes[0].by).toBe('p3');
+    expect(board.strokes[0].color).toBe(c);
   });
 
   it('아무도 안 쓰는 색은 고를 수 있다', () => {

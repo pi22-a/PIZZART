@@ -112,15 +112,23 @@ function renderDoodleColors(players: PlayerInfo[]): void {
     }
   }
   const mine = players.find((p) => p.id === youId)?.doodleColor ?? '';
-  const taken = new Map(players.filter((p) => p.doodleColor).map((p) => [p.doodleColor, p.name]));
+  // 색은 겹쳐도 된다. 누가 쓰는지는 막으려고가 아니라 알려주려고 모은다 —
+  // 굳이 남과 같은 색을 고르겠다면 그건 고른 사람 마음이다.
+  const users = new Map<string, string[]>();
+  for (const p of players) {
+    if (!p.doodleColor || p.id === youId) continue;
+    users.set(p.doodleColor, [...(users.get(p.doodleColor) ?? []), p.name]);
+  }
   if (mine) doodle.setColor(mine);
   for (const el of box.querySelectorAll('button')) {
     const b = el as HTMLButtonElement;
     const c = b.dataset.color!;
-    const owner = taken.get(c);
+    const others = users.get(c);
     b.classList.toggle('on', c === mine);
-    b.disabled = owner !== undefined && c !== mine;
-    b.title = c === mine ? '내 색' : owner ? `${owner} 님이 쓰는 색` : '이 색으로 바꾸기';
+    b.disabled = false;
+    b.title = others
+      ? `${others.join(', ')} 님이 쓰는 색${c === mine ? ' (나도 이 색)' : ''}`
+      : c === mine ? '내 색' : '이 색으로 바꾸기';
   }
 }
 // 자동재생 정책 때문에 사람이 한 번 누르기 전에는 소리가 안 난다. 첫 조작에서 깨운다.
