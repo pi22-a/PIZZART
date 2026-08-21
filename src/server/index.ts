@@ -7,8 +7,15 @@ import { DOODLE_W, DOODLE_H } from '../shared/drawing';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STROKES_PER_SECOND = 40;
-/** 살아있는지 확인하는 주기. 한 번 걸러도 답이 없으면 끊긴 것으로 본다. */
-const HEARTBEAT_MS = 15000;
+/**
+ * 살아있는지 확인하는 주기. 한 번 걸러도 답이 없으면 끊긴 것으로 본다.
+ *
+ * 15초였을 때는 회차(20초)마다 검사가 한 번씩 도는 셈이라, 잠깐 렉이 걸린 사람이
+ * 회차마다 끊겼다 붙었다 했다. 유령을 늦게 알아채는 대가를 치르더라도
+ * 멀쩡한 사람을 끊지 않는 쪽이 낫다 — 유령은 방장 승계와 인원 계산만 잠시 흐리지만,
+ * 끊긴 사람은 그 회차를 통째로 잃는다.
+ */
+const HEARTBEAT_MS = 30000;
 
 interface Conn {
   socket: WebSocket;
