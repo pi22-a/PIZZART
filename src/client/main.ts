@@ -48,6 +48,23 @@ let lastPhase = '';
 let lastRound = -1;
 let iSolved = false;
 let lastAttempt = -1;
+/** 회차가 넘어갔으니 입력칸에 커서를 돌려줘야 한다 — 화면 상태가 다 정해진 뒤에 쓴다. */
+let refocusAfterRender = false;
+
+/**
+ * 회차가 넘어가면 커서가 풀려서 매번 입력칸을 다시 눌러야 했다.
+ *
+ * 비활성 여부가 room 처리 끝에서야 정해지므로, 회차 전환 시점에 바로 focus()를 부르면
+ * 그 뒤 disabled 처리에 묻힌다. 그래서 표시만 해두고 여기서 준다.
+ */
+function restoreFocus(): void {
+  if (!refocusAfterRender) return;
+  // 아직 잠겨 있으면 표시를 남겨둔다. room이 조각(slices)보다 먼저 오므로 이 시점에는
+  // 아직 조각을 못 받아 입력칸이 잠겨 있고, 여기서 표시를 지워버리면 영영 커서가 안 온다.
+  if (answerInput.disabled || !$('s-guess').classList.contains('on')) return;
+  refocusAfterRender = false;
+  answerInput.focus();
+}
 let drawerId = '';
 /** 이번 시도에 내 조각을 받았는가. 못 받았으면 이 라운드는 관전이다. */
 let hasSlices = false;
@@ -162,25 +179,22 @@ $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));
 $('undoBtn').addEventListener('click', () => net.send({ t: 'undo' }));
 $('nextBtn').addEventListener('click', () => net.send({ t: 'next' }));
 $('againBtn').addEventListener('click', () => net.send({ t: 'again' }));
-// 스킵은 "이번 회차는 접는다"는 뜻이다. 예전 힌트받기와 정반대로, 적어둔 답을
-// 밀어 보내지 않는다 — 대기 중이던 답이 나가면 스킵으로 점수를 지키려던 사람이
-// 그 답으로 채점돼 점수를 잃는다. 서버도 같은 이유로 스킵한 사람의 답을 지운다.
-$('skipBtn').addEventListener('click', () => {
-  clearTimeout(answerTimer);
-  answerTimer = 0;
-  net.send({ t: 'skip' });
-});
+// 스킵은 "이번 회차는 접는다"는 뜻이다. 적어둔 답을 밀어 보내지 않는다 —
+// 스킵으로 점수를 지키려던 사람이 그 답으로 채점되면 안 된다.
+// 서버도 같은 이유로 스킵한 사람의 답을 지운다.
+$('skipBtn').addEventListener('click', () => net.send({ t: 'skip' }));
 
 const answerInput = $('answerInput') as HTMLInputElement;
-let answerTimer = 0;
+/**
+ * 치는 것만으로는 제출되지 않는다. 제출은 버튼이나 엔터로만 한다.
+ *
+ * 예전에는 250ms마다 자동으로 보냈다. 그래서 "고양"까지 치다가 회차가 끝나면 그게
+ * 오답 제출로 채점돼 1점이 깎였다 — 낼 생각도 없던 답이었는데.
+ */
 answerInput.addEventListener('input', () => {
   // 제출 뒤에 글자를 고치면 "제출됨" 표시가 지금 값과 어긋난 거짓말이 된다 — 바로 지운다.
   markAnswerSaved(false);
-  clearTimeout(answerTimer);
-  answerTimer = window.setTimeout(() => {
-    answerTimer = 0;
-    net.send({ t: 'answer', text: answerInput.value });
-  }, 250);
+  markAnswerPending(answerInput.value.trim().length > 0);
 });
 // 엔터는 모두의 반사 신경이다. 여기서 안 받으면 아무 일도 안 일어난 것처럼 보인다.
 // 제출 버튼과 똑같이 즉시 반영 + 확인 표시까지 간다.
@@ -189,28 +203,28 @@ answerInput.addEventListener('keydown', (e: KeyboardEvent) => {
 });
 $('answerSubmitBtn').addEventListener('click', submitAnswer);
 
-/** 디바운스 대기 중인 답을 지금 당장 보낸다 (넘기기 직전에 쓰는 조용한 경로) */
-function flushAnswer(): void {
-  if (!answerTimer) return;
-  clearTimeout(answerTimer);
-  answerTimer = 0;
-  net.send({ t: 'answer', text: answerInput.value });
-}
-
 /**
- * 제출 버튼과 엔터가 공유하는 경로. flushAnswer와 달리 대기 중인 디바운스가 없어도
- * (예: 아무것도 안 고친 채 다시 눌렀을 때) 무조건 보내고, "제출됨" 확인을 켠다 —
+ * 제출 버튼과 엔터가 공유하는 경로. 무조건 보내고 "제출됨" 확인을 켠다 —
  * 답은 최종이 아니라 지금 서버에 저장된 값이라는 뜻이라, 다시 고치면 확인은 다시 꺼진다.
  */
 function submitAnswer(): void {
-  clearTimeout(answerTimer);
-  answerTimer = 0;
   net.send({ t: 'answer', text: answerInput.value });
   markAnswerSaved(true);
 }
 
 function markAnswerSaved(saved: boolean): void {
+  if (saved) markAnswerPending(false);
   $('answerSavedNote').textContent = saved ? '제출됨 ✓' : '';
+}
+
+/**
+ * 쓰기만 하고 아직 안 낸 상태를 알려준다.
+ *
+ * 자동 제출을 없앴으므로, 적어놓고 제출을 안 누르면 아무 일도 안 일어난다.
+ * 그걸 모르면 "냈는데 왜 무응답이지?"가 된다.
+ */
+function markAnswerPending(pending: boolean): void {
+  $('answerSavedNote').textContent = pending ? '아직 제출 안 함 — 엔터나 제출' : '';
 }
 
 /**
@@ -257,12 +271,17 @@ function onMsg(m: ServerMsg): void {
       renderAnswers('lastAnswers', [], names);
     }
 
-    // 시도 번호가 바뀌면 입력창을 비운다(Finding 4). phase는 시도마다 바뀌지 않는다.
+    // 회차가 바뀌었다. 쓰던 글자는 그대로 둔다 — 치는 도중에 회차가 넘어가면 글자가
+    // 사라져 처음부터 다시 쳐야 했다. 이제 제출은 버튼·엔터로만 하므로 남겨둬도
+    // 실수로 다시 나가지 않는다.
     if (m.attempt !== lastAttempt) {
       lastAttempt = m.attempt;
-      answerInput.value = '';
-      markAnswerSaved(false); // 지난 시도의 "제출됨"이 새 시도까지 이어지면 거짓말이다
+      markAnswerSaved(false); // 지난 회차의 "제출됨"이 새 회차까지 이어지면 거짓말이다
+      markAnswerPending(answerInput.value.trim().length > 0);
       hasSlices = false;
+      // 커서는 여기서 주면 안 된다. 입력칸의 비활성 여부가 이 아래에서 정해지므로
+      // 지금 focus()를 부르면 그 뒤 disabled 처리에 묻힌다. 표시만 해두고 끝에서 준다.
+      refocusAfterRender = true;
     }
 
     if (m.phase === 'lobby') {
@@ -303,6 +322,7 @@ function onMsg(m: ServerMsg): void {
         : `시도 ${m.attempt}/${m.maxAttempts} — 다음 회차로 넘어가면 조각이 하나 늘고 1점 깎입니다`;
       renderSkipTally(m.players, youId);
     }
+    restoreFocus();
     return;
   }
 
@@ -321,6 +341,9 @@ function onMsg(m: ServerMsg): void {
     $('sliceBox').style.display = '';
     $('assembledWrap').style.display = 'none';
     renderSlices(m.slices, sliceCount);
+    // 조각이 도착해야 입력칸이 열린다. 회차 전환 때 미뤄둔 커서를 지금 준다.
+    setSpectating(false);
+    restoreFocus();
     setSpectating(false);
     return;
   }

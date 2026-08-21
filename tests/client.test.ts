@@ -544,14 +544,16 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     expect(live.out.filter((m) => m.t === 'answer').length).toBe(1);
   });
 
-  it('디바운스로만 자동 저장됐을 때는 확인이 뜨지 않는다', async () => {
+  it('치기만 해서는 제출되지 않는다', async () => {
+    // 예전에는 250ms마다 자동으로 보냈다. 그래서 "고양"까지 치다가 회차가 끝나면
+    // 그게 오답 제출로 채점돼 1점이 깎였다 — 낼 생각도 없던 답이었는데.
     await guessing();
     const input = $<HTMLInputElement>('answerInput');
-    input.value = '코끼리';
+    input.value = '코끼';
     input.dispatchEvent(new Event('input'));
-    vi.advanceTimersByTime(300);
-    expect(live.out.filter((m) => m.t === 'answer').length).toBe(1); // 자동 저장 자체는 나갔다
-    expect($('answerSavedNote').textContent).toBe(''); // 확인 표시는 명시적 제출에서만
+    vi.advanceTimersByTime(1000);
+    expect(live.out.filter((m) => m.t === 'answer').length).toBe(0);
+    expect($('answerSavedNote').textContent).toContain('아직 제출 안 함');
   });
 
   it('제출 뒤 글자를 고치면 확인이 사라진다 — 화면이 거짓말하면 안 된다', async () => {
@@ -564,10 +566,10 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
 
     input.value = '코끼리다';
     input.dispatchEvent(new Event('input'));
-    expect($('answerSavedNote').textContent).toBe('');
+    expect($('answerSavedNote').textContent).toContain('아직 제출 안 함');
   });
 
-  it('새 시도가 시작되면 지난 시도의 확인 표시가 넘어오지 않는다', async () => {
+  it('새 회차가 시작되면 지난 회차의 확인 표시가 넘어오지 않는다', async () => {
     await guessing();
     const input = $<HTMLInputElement>('answerInput');
     input.value = '코끼리';
@@ -576,7 +578,19 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
 
     deliver(room({ attempt: 2 }));
-    expect($('answerSavedNote').textContent).toBe('');
+    expect($('answerSavedNote').textContent).not.toBe('제출됨 ✓');
+  });
+
+  it('회차가 넘어가도 쓰던 글자가 지워지지 않는다', async () => {
+    // 치는 도중에 회차가 넘어가면 글자가 사라져 처음부터 다시 쳐야 했다.
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '코끼';
+    input.dispatchEvent(new Event('input'));
+
+    deliver(room({ attempt: 2 }));
+    expect(input.value).toBe('코끼');
+    expect($('answerSavedNote').textContent).toContain('아직 제출 안 함');
   });
 });
 
