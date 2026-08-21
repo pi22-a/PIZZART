@@ -634,9 +634,17 @@ export class Session {
       }
     }
     this.broadcastRoom();
-    // 누가 사라진 이 순간, 남은 사람이 전부 답을 내둔 상태일 수 있다.
-    // 방금 나간 사람을 기다리며 타이머를 다 태우면 안 된다.
-    this.maybeEndAttempt();
+    // 방금 나간 사람이 이미 답을 냈거나 스킵을 눌렀다면, 그를 기다릴 이유가 없으니
+    // 남은 사람들 기준으로 회차를 마무리할 수 있는지 본다.
+    //
+    // 반대로 아직 아무것도 안 한 채 끊겼다면 기다려준다. 회차는 20초뿐이고,
+    // 잠깐 끊긴 사람의 기회를 그 자리에서 빼앗는 것이 몇 초 더 기다리는 것보다 나쁘다.
+    // 실제로 연결이 불안정한 사람이 회차마다 기회를 잃는 일이 있었다.
+    // 단, 맞히는 사람이 하나도 안 남았다면 기다릴 대상 자체가 없으니 바로 정리한다.
+    const acted = this.answers.has(playerId) || this.skippedThisAttempt.has(playerId);
+    if (acted || this.guessers().length === 0) {
+      this.maybeEndAttempt();
+    }
   }
 
   handle(playerId: string, msg: ClientMsg): void {
@@ -796,6 +804,7 @@ export class Session {
       attempt: this.attempt,
       maxAttempts: this.rules.maxAttempts,
       deadline: this.deadline,
+      now: Date.now(),
       minPlayers: this.rules.minPlayers,
       topics: this.topics.map((t) => t.topic),
       selectedTopic: this.selectedTopic,

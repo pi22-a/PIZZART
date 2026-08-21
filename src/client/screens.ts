@@ -154,6 +154,17 @@ export function renderRanking(rows: Array<{ playerId: string; name: string; scor
 /** 지금 남은 초. 회전 안내 원이 매 프레임 읽어간다. 없으면 null. */
 let secondsLeftNow: number | null = null;
 
+/**
+ * 내 시계와 서버 시계의 차이. 남은 시간을 잴 때 빼준다.
+ *
+ * 이게 없으면 기기 시계가 어긋난 사람만 혼자 시간이 빨리 가서, 아직 시간이 남았는데
+ * 화면에서는 0이 되고 답을 낼 기회를 잃는다. 실제로 겪은 일이다.
+ */
+let clockSkew = 0;
+export function syncClock(serverNow: number): void {
+  clockSkew = Date.now() - serverNow;
+}
+
 export function countdown(deadline: number | null, onSecond?: (left: number) => void): void {
   if (deadline !== lastDeadline) {
     lastDeadline = deadline;
@@ -161,7 +172,7 @@ export function countdown(deadline: number | null, onSecond?: (left: number) => 
   }
   const tick = () => {
     if (deadline === null) { setTag('timeTag', ''); secondsLeftNow = null; return; }
-    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const left = Math.max(0, Math.ceil((deadline - (Date.now() - clockSkew)) / 1000));
     secondsLeftNow = left;
     setTag('timeTag', `${left}초`);
     if (left !== lastLeft) {

@@ -1,4 +1,14 @@
 import type { Point } from '../shared/drawing';
+
+/**
+ * 지금 밝은 모드인가.
+ *
+ * 캔버스는 CSS 변수를 못 쓰므로 색을 코드가 직접 골라야 한다. 안 그러면 밝은 모드에서
+ * 흰 글씨가 흰 배경에 얹혀 통째로 사라진다 — 실제로 회차 숫자가 그랬다.
+ */
+export function isLight(): boolean {
+  return document.documentElement.dataset.theme === 'light';
+}
 import { CANVAS } from '../shared/drawing';
 
 /**

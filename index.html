@@ -5,16 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>PIZZA</title>
 <style>
-  :root { --ink:#2b2118; --dough:#f6efe2; --crust:#d9c9a8; --sauce:#e0803a; }
+  /*
+   * 색은 전부 여기서 나온다. 밝은 모드는 --bg와 글자색만 뒤집는다 —
+   * 피자 자체(반죽 크림색 + 진한 잉크)는 어느 배경에서도 종이처럼 읽히므로 그대로 둔다.
+   */
+  :root {
+    --ink:#2b2118; --dough:#f6efe2; --crust:#d9c9a8; --sauce:#e0803a;
+    --bg:#1c1712; --fg:#f6efe2; --panel:#2b2118; --line:#3d3227; --field:#241d16;
+  }
+  :root[data-theme="light"] {
+    --bg:#e9e0cf; --fg:#2b2118; --panel:#f3ece0; --line:#cbbba0; --field:#fffdf8;
+    --crust:#8a7550;
+  }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
-         background:#1c1712; color:var(--dough); display:flex; justify-content:center; }
+         background:var(--bg); color:var(--fg); display:flex; justify-content:center; }
   #app { width:min(920px, 100vw); padding:16px; }
   .screen { display:none; }
   .screen.on { display:block; }
   h1 { font-size:20px; margin:0 0 12px; letter-spacing:.2em; }
   .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:14px; }
-  .pill { background:#2b2118; border:1px solid #3d3227; border-radius:999px; padding:4px 12px; }
+  .pill { background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 12px; }
   .pill.big { font-size:20px; padding:8px 18px; }
   .pill.word { background:var(--sauce); color:#1c1712; font-weight:700; }
   .pill:empty { display:none; }
@@ -25,10 +36,10 @@
      "내가 눌렀나?"를 매번 세어봐야 해서 부족하다. */
   button#skipBtn.pressed { background:var(--crust); }
   button#skipBtn.pressed::after { content:' ✓'; }
-  button.ghost { background:#2b2118; color:var(--dough); border:1px solid #3d3227; }
+  button.ghost { background:var(--panel); color:var(--fg); border:1px solid var(--line); }
   button.icon { padding:4px 10px; font-size:14px; line-height:1.4; }
-  input { font:inherit; padding:10px 14px; border-radius:10px; border:1px solid #3d3227;
-          background:#241d16; color:var(--dough); }
+  input { font:inherit; padding:10px 14px; border-radius:10px; border:1px solid var(--line);
+          background:var(--field); color:var(--fg); }
   canvas { width:100%; aspect-ratio:1; touch-action:none; }
   /* 낙서판은 여럿이 동시에 갈기는 판이라 가로로 넓다. 정사각형 기본값을 덮어쓴다. */
   #doodleCanvas { aspect-ratio:2 / 1; cursor:crosshair; border-radius:12px; }
@@ -38,22 +49,22 @@
   .col { flex:1 1 320px; min-width:280px; }
   .hint { width:88px; height:88px; }
   .players { display:flex; gap:8px; flex-wrap:wrap; font-size:13px; }
-  .players .p { background:#2b2118; border-radius:8px; padding:6px 10px; }
+  .players .p { background:var(--panel); border-radius:8px; padding:6px 10px; }
   .players .p.off { opacity:.4; }
-  .players .p.me { outline:2px solid var(--dough); }
+  .players .p.me { outline:2px solid var(--fg); }
   .players .p.drawer { outline:2px solid var(--sauce); }
   /* 인원 알약 줄 바로 아래에 화면 내용(조각 액자, 그리기 버튼 등)이 틈 없이 붙어 있었다.
      화면마다 따로 손보는 대신 .screen 하나에 위쪽 여백을 줘서 전 화면이 한 번에 떨어지게 한다. */
   .screen { margin-top:16px; }
   .answers { list-style:none; padding:0; margin:8px 0; }
-  .answers li { padding:6px 10px; background:#2b2118; border-radius:8px; margin-bottom:6px; }
-  .answers li.ok { background:#2f4a2a; }
+  .answers li { padding:6px 10px; background:var(--panel); border-radius:8px; margin-bottom:6px; }
+  .answers li.ok { background:#2f4a2a; color:#f6efe2; }
   .muted { opacity:.6; font-size:13px; }
   /* 로비를 이름 입력 → 인원 현황 → 시작, 세 블록으로 눈이 순서대로 훑도록 나눈다.
      이름 저장과 시작은 서로 다른 행동이라 한 줄에 붙여두면 하나의 흐름처럼 읽힌다. */
   /* 규칙은 접어둔다 — 로비는 이름 치고 인원 세는 곳이지 읽는 곳이 아니다.
      대신 친구를 기다리는 동안 펼쳐 읽을 수 있어야 한다. */
-  .rules { margin:12px 0 16px; border:1px solid #3d3227; border-radius:10px; padding:10px 14px; }
+  .rules { margin:12px 0 16px; border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
   .rules summary { cursor:pointer; font-weight:700; color:var(--crust); }
   .rules[open] summary { margin-bottom:8px; }
   .rules ol, .rules ul { margin:6px 0; padding-left:20px; }
@@ -62,30 +73,30 @@
   .rules-score { color:var(--sauce); }
   .rules, .rules p, .rules li { font-size:13px; opacity:.85; }
   .lobby-topic label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
-  .lobby-topic button { padding:8px 16px; background:#2b2118; color:var(--dough); border:1px solid #3d3227; }
+  .lobby-topic button { padding:8px 16px; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
   .lobby-topic button.on { background:var(--sauce); color:#1c1712; border-color:var(--sauce); }
   .lobby-name label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
-  .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid #3d3227; }
+  .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
   .lobby-start button { font-size:18px; padding:14px 28px; }
   /* 현황판: 맞히는 사람마다 한 줄, 그 줄에 그 사람이 보고 있는 조각들. */
   .watch-row { display:flex; align-items:center; gap:12px; padding:6px 0;
-               border-bottom:1px solid #2b2118; }
+               border-bottom:1px solid var(--line); }
   .watch-row.done { opacity:.45; }
   .watch-name { min-width:110px; font-size:13px; font-weight:700; color:var(--crust); }
   .watch-slices { display:flex; gap:6px; flex-wrap:wrap; }
   .watch-slices canvas { width:72px; }
   /* 회차별 답 기록. 조각 옆에 붙어 "1회차엔 파스타, 2회차엔 라면"이 한눈에 보인다. */
   .watch-log { display:flex; gap:6px; flex-wrap:wrap; font-size:12px; }
-  .watch-item { background:#2b2118; border-radius:6px; padding:3px 8px; }
+  .watch-item { background:var(--panel); border-radius:6px; padding:3px 8px; }
   .watch-item b { color:var(--crust); font-weight:700; margin-right:2px; }
-  .watch-item.ok { background:#2f4a2a; }
+  .watch-item.ok { background:#2f4a2a; color:#f6efe2; }
   .watch-item.none { opacity:.45; }
   .watch-none { opacity:.4; font-size:12px; }
   /* 낙서 색 고르기 */
   .doodle-colors { display:inline-flex; gap:6px; }
   .doodle-colors button { width:24px; height:24px; padding:0; border-radius:50%;
                           border:2px solid transparent; cursor:pointer; }
-  .doodle-colors button.on { border-color:var(--dough); }
+  .doodle-colors button.on { border-color:var(--fg); }
   /* 임자가 있는 색. 고를 수 없다는 걸 눌러보기 전에 알아야 한다. */
   .doodle-colors button:disabled { opacity:.28; cursor:not-allowed; }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
@@ -110,6 +121,8 @@
     <span class="pill" id="netTag">연결 중</span>
     <!-- 초읽기 소리 스위치. 남의 방에서 갑자기 삐 소리가 나면 곤란한 사람이 있다. -->
     <button id="muteBtn" class="ghost icon" title="초읽기 소리 끄기">🔊</button>
+    <!-- 밝은 화면을 원하는 사람이 있다. 고른 값은 이 브라우저에 남는다. -->
+    <button id="themeBtn" class="ghost icon" title="밝게 보기">🌙</button>
   </div>
   <div class="players" id="players"></div>
 

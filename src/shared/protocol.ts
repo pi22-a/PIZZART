@@ -71,6 +71,13 @@ export type ServerMsg =
       maxAttempts: number;
       /** 지금 단계가 끝나는 시각 (epoch ms). 타이머가 없으면 null */
       deadline: number | null;
+      /**
+       * 이 메시지를 보낸 서버 시각 (epoch ms).
+       *
+       * 남은 시간을 deadline − Date.now()로 재면 기기 시계가 어긋난 사람만
+       * 혼자 시간이 빨리 가거나 늦게 간다. 서버 시각을 같이 보내 그 차이를 상쇄한다.
+       */
+      now: number;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
       /** 고를 수 있는 주제 목록 */

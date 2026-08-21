@@ -6,6 +6,7 @@ import {
   show, setTag, renderPlayers, renderSlices, renderAnswers,
   renderRanking,
   renderTopics,
+  syncClock,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
@@ -13,6 +14,23 @@ import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/**
+ * 밝게/어둡게. 고른 값은 이 브라우저에 남는다.
+ * 피자 캔버스는 어느 쪽에서도 종이처럼 읽히므로 배경과 글자색만 바꾼다.
+ */
+const themeBtn = $('themeBtn') as HTMLButtonElement;
+function applyTheme(light: boolean): void {
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  themeBtn.textContent = light ? '☀️' : '🌙';
+  themeBtn.title = light ? '어둡게 보기' : '밝게 보기';
+}
+applyTheme(localStorage.getItem('pizza-theme') === 'light');
+themeBtn.addEventListener('click', () => {
+  const light = document.documentElement.dataset.theme !== 'light';
+  localStorage.setItem('pizza-theme', light ? 'light' : 'dark');
+  applyTheme(light);
+});
 
 const params = new URLSearchParams(location.search);
 const room = (params.get('room') ?? 'LOBBY').toUpperCase();
@@ -213,6 +231,7 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'room') {
     hostId = m.hostId;
     names = new Map(m.players.map((p) => [p.id, p.name]));
+    syncClock(m.now);
     renderPlayers(m.players, youId, hostId, m.phase);
     // 색은 서버가 정하고 room으로 내려온다. 남이 색을 바꿔도 바로 팔레트에 반영돼야
     // "임자 있는 색"을 눌러보는 일이 없다.

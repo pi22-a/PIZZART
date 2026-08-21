@@ -1,6 +1,6 @@
 import type { Point } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
-import { drawStrokes, fitCanvas } from './ink';
+import { drawStrokes, fitCanvas, isLight } from './ink';
 
 /**
  * 조각을 캔버스에 채우는 여유율. 1이면 바운딩 박스가 캔버스에 꽉 맞는다.
@@ -57,7 +57,7 @@ export function drawSlice(el: HTMLCanvasElement, strokes: Point[][], sliceCount:
   ctx.fillStyle = '#f6efe2';
   ctx.fill();
   ctx.lineWidth = 4;
-  ctx.strokeStyle = '#d9c9a8';
+  ctx.strokeStyle = isLight() ? '#a8977c' : '#d9c9a8';
   ctx.stroke();
 
   // 잉크는 조각 밖으로 새지 않게 잘라 그린다
@@ -102,22 +102,17 @@ export function startSpinHint(
 
     ctx.beginPath();
     ctx.arc(50, 50, 44, 0, Math.PI * 2);
-    ctx.strokeStyle = '#cbbfa8';
+    ctx.strokeStyle = isLight() ? '#8a7550' : '#cbbfa8';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 8초에 한 바퀴, 조각 단위로 툭툭 끊어 돈다
-    const step = (Math.PI * 2) / sliceCount;
-    const at = Math.floor((t / 800) % sliceCount) * step + half;
-    ctx.beginPath();
-    ctx.moveTo(50, 50);
-    ctx.arc(50, 50, 42, at - half, at + half);
-    ctx.closePath();
-    ctx.fillStyle = '#e0803a';
-    ctx.fill();
 
     // 남은 시간을 원 한가운데에 크게 얹는다. 위쪽 알약의 작은 글씨보다
     // 여기가 눈이 계속 머무는 자리다 — 조각을 노려보는 동안 시야에 같이 들어온다.
+    //
+    // 숫자를 먼저 그리고 부채꼴을 그 위에 덮는다. 반대로 하면 숫자에 가려 부채꼴이
+    // 안 보이는데, 이 원은 원래 "조각이 어느 방향이었는지 알 수 없다"를 말하는 그림이라
+    // 조각이 보이지 않으면 존재 이유가 없다.
     const left = secondsLeft();
     if (left !== null) {
       const urgent = left <= URGENT_SECONDS;
@@ -126,18 +121,27 @@ export function startSpinHint(
       ctx.save();
       ctx.translate(50, 50);
       ctx.scale(pulse, pulse);
-      // 숫자가 부채꼴 위에 겹쳐도 읽히도록 바탕을 한 겹 깐다
-      ctx.beginPath();
-      ctx.arc(0, 0, 26, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(28,23,18,.82)';
-      ctx.fill();
-      ctx.fillStyle = urgent ? URGENT_COLOR : '#f6efe2';
-      ctx.font = 'bold 34px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = urgent ? URGENT_COLOR : (isLight() ? '#2b2118' : '#f6efe2');
+      ctx.font = 'bold 40px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(left), 0, 2);
       ctx.restore();
     }
+
+    // 8초에 한 바퀴, 조각 단위로 툭툭 끊어 돈다.
+    // 숫자 위에 덮이므로 반투명하게 둔다 — 완전히 가리면 시간을 못 읽는다.
+    const step = (Math.PI * 2) / sliceCount;
+    const at = Math.floor((t / 800) % sliceCount) * step + half;
+    ctx.save();
+    ctx.globalAlpha = 0.82;
+    ctx.beginPath();
+    ctx.moveTo(50, 50);
+    ctx.arc(50, 50, 42, at - half, at + half);
+    ctx.closePath();
+    ctx.fillStyle = '#e0803a';
+    ctx.fill();
+    ctx.restore();
 
     ctx.restore();
     raf = requestAnimationFrame(frame);

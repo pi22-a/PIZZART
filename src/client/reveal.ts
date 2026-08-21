@@ -1,7 +1,12 @@
 import type { Point } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import { slice } from '../shared/slicer';
-import { drawStrokes, fitCanvas } from './ink';
+import { drawStrokes, fitCanvas, isLight } from './ink';
+
+/** 아직 아무도 못 본 칸의 색. 밝은 모드에서 새까맣게 두면 배경에서 튄다. */
+const emptyFill = () => (isLight() ? '#cbbba0' : '#241d16');
+/** 조각 경계선. 배경이 밝으면 선도 진해져야 보인다. */
+const edge = () => (isLight() ? '#a8977c' : '#3d3227');
 
 const DUR = 1400;
 
@@ -53,7 +58,7 @@ export function revealRound(
       ctx.moveTo(CENTER[0], CENTER[1]);
       ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, -Math.PI / 2 - step / 2, -Math.PI / 2 + step / 2);
       ctx.closePath();
-      ctx.strokeStyle = p.index === mine ? '#e0803a' : '#d9c9a8';
+      ctx.strokeStyle = p.index === mine ? '#e0803a' : (isLight() ? '#a8977c' : '#d9c9a8');
       ctx.lineWidth = p.index === mine ? 6 : 2;
       ctx.stroke();
 
@@ -98,9 +103,9 @@ export function drawBoard(
     ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, i * step, (i + 1) * step);
     ctx.closePath();
     // 나가 있는 조각만 반죽 색으로 밝게, 나머지는 배경에 가깝게 눕힌다
-    ctx.fillStyle = out.has(i) ? '#f6efe2' : '#2b2118';
+    ctx.fillStyle = out.has(i) ? '#f6efe2' : emptyFill();
     ctx.fill();
-    ctx.strokeStyle = '#3d3227';
+    ctx.strokeStyle = edge();
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.clip();
@@ -136,9 +141,9 @@ export function drawAssembled(
     ctx.moveTo(CENTER[0], CENTER[1]);
     ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, i * step, (i + 1) * step);
     ctx.closePath();
-    ctx.fillStyle = have.has(i) ? '#f6efe2' : '#241d16';
+    ctx.fillStyle = have.has(i) ? '#f6efe2' : emptyFill();
     ctx.fill();
-    ctx.strokeStyle = '#3d3227';
+    ctx.strokeStyle = edge();
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.clip();

@@ -843,17 +843,29 @@ describe('결과 화면이 스스로 완결적이다 (수정 4)', () => {
 describe('넘기기 정족수 재확인 (수정 5)', () => {
   beforeEach(() => { s.start('p1'); });
 
-  it('사람이 끊기면 남은 사람의 답만으로 회차가 끝난다', () => {
+  it('이미 답을 낸 사람이 끊기면 남은 사람 기준으로 회차가 끝난다', () => {
     // 맞히는 사람 셋 중 둘이 답을 냈다. 남은 한 명이 끊기면 그를 기다릴 이유가 없으므로
     // 아무도 다시 아무것도 하지 않아도 회차가 끝나야 한다.
     s.start('p1');
     drawStar('p1'); s.drawDone('p1');
     s.answer('p2', '가');
     s.answer('p3', '나');
-    sent = [];
-    expect(msgsOfType('attemptResult').length).toBe(0);
-    s.disconnect('p4'); // 마지막 한 명이 사라지면 그를 기다릴 이유가 없다
+    s.answer('p4', '다');   // p4도 답을 냈다
+    // 셋이 다 냈으므로 이 시점에 이미 회차가 끝난다
     expect(msgsOfType('attemptResult').length).toBeGreaterThan(0);
+    sent = [];
+    s.disconnect('p4');
+    expect(s.phase).not.toBe('lobby');
+  });
+
+  it('아직 아무것도 안 한 사람이 끊기면 기다려준다 — 잠깐 끊긴 사람의 기회를 뺏지 않는다', () => {
+    drawStar('p1'); s.drawDone('p1');
+    s.answer('p2', '가');
+    s.answer('p3', '나');
+    sent = [];
+    s.disconnect('p4');  // p4는 답도 스킵도 안 했다
+    expect(msgsOfType('attemptResult').length).toBe(0);
+    expect(s.phase).toBe('guessing');
   });
 
   it('맞히는 사람이 전부 끊기면 라운드를 접는다', () => {
