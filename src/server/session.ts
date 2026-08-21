@@ -171,6 +171,7 @@ export class Session {
     this.order = live.map((p) => p.id);
     this.round = 0;
     this.usedWords.clear();
+    this.doodleColors.clear();
     for (const p of this.players) p.score = 0;
     this.beginRound();
   }
@@ -204,6 +205,12 @@ export class Session {
     this.solved.clear();
     this.answerLog.clear();
     this.phase = 'drawing';
+
+    // 낙서 색을 미리 배정한다. 그릴 때 배정하면 남의 팔레트에는 그 사람이 첫 획을
+    // 긋기 전까지 그 색이 비어 보이고, 그 틈에 같은 색을 골라버린다.
+    for (const p of this.players) {
+      if (p.id !== this.drawerId) this.ensureDoodleColor(p.id);
+    }
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
     this.setDeadline(this.rules.drawSeconds, () => this.endDrawing());
@@ -293,6 +300,40 @@ export class Session {
    */
   protected doodle: Array<{ by: string; points: Point[]; color: string }> = [];
 
+  /** 사람 → 그 사람이 쓰는 낙서 색. 같은 색을 두 사람이 쓰면 누구 선인지 구분이 안 된다. */
+  protected doodleColors = new Map<string, string>();
+
+  /** 고를 수 있는 낙서 색. 클라이언트의 팔레트와 같은 목록이어야 한다. */
+  static readonly DOODLE_PALETTE = [
+    '#e0803a', '#6fb6e8', '#83cf7d', '#e6cf63', '#d98fbf',
+    '#7fd6cc', '#f0937a', '#a99ae8', '#c3d17e',
+  ];
+
+  /**
+   * 아직 색이 없는 사람에게 남는 색을 하나 준다.
+   *
+   * 예전에는 id를 해시해서 뽑았는데, 아홉 색뿐이라 사람이 늘면 같은 색이 겹쳤다.
+   * 겹치면 남이 자기 낙서를 지울 때 내 그림이 지워진 것처럼 보인다.
+   */
+  protected ensureDoodleColor(playerId: string): string {
+    const had = this.doodleColors.get(playerId);
+    if (had) return had;
+    const taken = new Set(this.doodleColors.values());
+    const free = Session.DOODLE_PALETTE.find((c) => !taken.has(c)) ?? Session.DOODLE_PALETTE[0];
+    this.doodleColors.set(playerId, free);
+    return free;
+  }
+
+  /** 색을 고른다. 남이 이미 쓰는 색이면 아무 일도 일어나지 않는다. */
+  setDoodleColor(playerId: string, color: string): void {
+    if (!Session.DOODLE_PALETTE.includes(color)) return;
+    for (const [id, c] of this.doodleColors) {
+      if (c === color && id !== playerId) return; // 이미 임자가 있다
+    }
+    this.doodleColors.set(playerId, color);
+    this.broadcastRoom();
+  }
+
   /** 낙서 획 상한. 넘치면 오래된 것부터 버린다 — 판이 멈추는 것보다 낫다. */
   private static readonly DOODLE_MAX = 600;
 
@@ -301,9 +342,10 @@ export class Session {
     if (playerId === this.drawerId) return;  // 출제자는 자기 캔버스가 따로 있다
     if (!this.players.some((p) => p.id === playerId)) return;
     if (points.length < 2) return;
-    // 색은 그리는 사람이 고른다. 판정과 무관한 낙서라 그대로 믿되, 형식만 본다 —
-    // 아무 문자열이나 CSS로 흘러가면 화면이 깨진다.
-    const safe = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#f6efe2';
+    // 색은 서버가 들고 있는 그 사람 색을 쓴다. 클라이언트가 보낸 값을 그대로 믿으면
+    // 남의 색을 흉내 내 그릴 수 있고, 그러면 누구 선인지 구분이 안 된다.
+    if (color) this.setDoodleColor(playerId, color);
+    const safe = this.ensureDoodleColor(playerId);
     this.doodle.push({ by: playerId, points, color: safe });
     if (this.doodle.length > Session.DOODLE_MAX) this.doodle.shift();
     // 기다리는 사람들끼리만 본다. 출제자에게 보내봐야 그릴 화면이 다르다.
@@ -610,6 +652,7 @@ export class Session {
       case 'skip': return this.skip(playerId);
       case 'doodle': return this.addDoodle(playerId, msg.points, msg.color);
       case 'doodleClear': return this.clearDoodle(playerId);
+      case 'doodleColor': return this.setDoodleColor(playerId, msg.color);
       case 'next': return this.next(playerId);
       default: return;
     }
@@ -740,6 +783,7 @@ export class Session {
       solved: this.solved.has(p.id),
       sliceCount: this.seen.get(p.id)?.size ?? 0,
       pendingScore: this.solved.get(p.id) ?? this.scoreFor(p.id),
+      doodleColor: this.doodleColors.get(p.id) ?? '',
     }));
     this.broadcast({
       t: 'room',

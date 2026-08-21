@@ -18,6 +18,13 @@ export interface PlayerInfo {
   sliceCount: number;
   /** 지금 맞히면 받을 점수. 이미 맞혔으면 확정된 점수 */
   pendingScore: number;
+  /**
+   * 이 사람이 쓰는 낙서 색.
+   *
+   * 두 사람이 같은 색을 쓰면 누가 그린 선인지 구분이 안 된다. 그 상태에서 한쪽이
+   * 자기 낙서를 지우면 다른 쪽은 자기 그림이 지워졌다고 오해한다 — 실제로 겪은 일이다.
+   */
+  doodleColor: string;
 }
 
 export type ClientMsg =
@@ -36,6 +43,8 @@ export type ClientMsg =
   | { t: 'doodle'; points: Point[]; color: string }
   /** 내가 그린 낙서만 지운다. 남의 낙서는 건드리지 않는다. */
   | { t: 'doodleClear' }
+  /** 낙서 색을 고른다. 남이 쓰는 색은 서버가 거절한다. */
+  | { t: 'doodleColor'; color: string }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };

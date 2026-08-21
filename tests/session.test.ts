@@ -1170,18 +1170,53 @@ describe('현황판에 회차별 답 기록이 쌓인다', () => {
   });
 });
 
-describe('낙서 색', () => {
-  beforeEach(() => { s.start('p1'); sent = []; });
+describe('낙서 색은 한 사람당 하나', () => {
+  beforeEach(() => { s.start('p1'); });
+
+  const colorOf = (id: string) =>
+    msgsOfType('room').at(-1)!.players.find((p) => p.id === id)!.doodleColor;
+  const strokeColor = (to: string) =>
+    (msgsTo(to).filter((m) => m.t === 'doodleStroke').at(-1) as Extract<ServerMsg, { t: 'doodleStroke' }>).color;
+
+  /** 라운드 시작에 p2·p3·p4가 앞쪽 색을 가져가므로, 아무도 안 쓰는 색을 찾아 쓴다. */
+  const freeColor = () => {
+    const taken = new Set(msgsOfType('room').at(-1)!.players.map((p) => p.doodleColor));
+    return Session.DOODLE_PALETTE.find((c) => !taken.has(c))!;
+  };
 
   it('고른 색이 그대로 전달된다', () => {
-    s.addDoodle('p2', [[10, 10], [20, 20]], '#e0803a');
-    const st = msgsTo('p3').filter((m) => m.t === 'doodleStroke').at(-1) as Extract<ServerMsg, { t: 'doodleStroke' }>;
-    expect(st.color).toBe('#e0803a');
+    const c = freeColor();
+    s.setDoodleColor('p2', c);
+    s.addDoodle('p2', [[10, 10], [20, 20]], c);
+    expect(strokeColor('p3')).toBe(c);
   });
 
-  it('형식이 아닌 색은 기본색으로 바꾼다 — 아무 문자열이나 CSS로 흘리면 화면이 깨진다', () => {
+  it('팔레트에 없는 색은 무시하고 배정된 색을 쓴다', () => {
+    // 두 사람이 같은 색을 쓰면 누구 선인지 구분이 안 되고, 한쪽이 자기 낙서를 지울 때
+    // 다른 쪽은 자기 그림이 지워졌다고 오해한다. 그래서 색은 서버가 정한다.
     s.addDoodle('p2', [[10, 10], [20, 20]], 'red; background:url(x)');
-    const st = msgsTo('p3').filter((m) => m.t === 'doodleStroke').at(-1) as Extract<ServerMsg, { t: 'doodleStroke' }>;
-    expect(st.color).toBe('#f6efe2');
+    expect(Session.DOODLE_PALETTE).toContain(strokeColor('p3'));
+  });
+
+  it('남이 쓰는 색은 뺏을 수 없다', () => {
+    const p2Color = colorOf('p2');
+    const before = colorOf('p3');
+    s.setDoodleColor('p3', p2Color);
+    expect(colorOf('p3')).toBe(before);
+    expect(colorOf('p2')).toBe(p2Color);
+  });
+
+  it('아무도 안 쓰는 색은 고를 수 있다', () => {
+    const c = freeColor();
+    s.setDoodleColor('p2', c);
+    expect(colorOf('p2')).toBe(c);
+  });
+
+  it('라운드가 시작되면 기다리는 사람 전원이 서로 다른 색을 미리 받는다', () => {
+    // 그릴 때 배정하면, 첫 획을 긋기 전까지 남의 팔레트에는 그 색이 비어 보인다.
+    const cs = [colorOf('p2'), colorOf('p3'), colorOf('p4')];
+    expect(cs.every((c) => c !== '')).toBe(true);
+    expect(new Set(cs).size).toBe(3);
   });
 });
+

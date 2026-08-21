@@ -86,6 +86,8 @@
   .doodle-colors button { width:24px; height:24px; padding:0; border-radius:50%;
                           border:2px solid transparent; cursor:pointer; }
   .doodle-colors button.on { border-color:var(--dough); }
+  /* 임자가 있는 색. 고를 수 없다는 걸 눌러보기 전에 알아야 한다. */
+  .doodle-colors button:disabled { opacity:.28; cursor:not-allowed; }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
   /* 조각마다 캔버스+라벨을 묶는 칸. 내 조각과 공개된 조각을 한눈에 구별해야 한다 —
      안 그러면 다들 같은 그림을 받았다고 착각한다(설명하고 맞히는 게 게임의 전부인데). */
@@ -185,7 +187,7 @@
     <div class="doodle" id="doodleWrap" style="display:none">
       <div class="bar">
         <b>같이 낙서하기</b>
-        <span class="muted">기다리는 사람끼리 그립니다 · 색을 골라 쓰세요</span>
+        <span class="muted">기다리는 사람끼리 그립니다 · 색은 한 사람당 하나입니다</span>
         <span class="doodle-colors" id="doodleColors"></span>
         <button id="doodleClearBtn" class="ghost">내 낙서 지우기</button>
       </div>

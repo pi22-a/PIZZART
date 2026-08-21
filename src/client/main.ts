@@ -58,25 +58,34 @@ drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
 const doodle = new DoodleBoard($('doodleCanvas') as HTMLCanvasElement, () => youId);
 doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points, color: doodle.getColor() }));
 
-// 낙서 색 고르기. 처음 칸은 내 id에서 뽑힌 기본색이라 아무것도 안 골라도 남과 구분된다.
-function buildDoodleColors(): void {
+/**
+ * 낙서 색 고르기.
+ *
+ * 색은 한 사람당 하나다. 두 사람이 같은 색을 쓰면 누가 그린 선인지 구분이 안 되고,
+ * 그 상태에서 한쪽이 자기 낙서를 지우면 다른 쪽은 자기 그림이 지워졌다고 오해한다.
+ * 그래서 임자가 있는 색은 아예 못 고르게 막는다. 색은 서버가 정한다.
+ */
+function renderDoodleColors(players: PlayerInfo[]): void {
   const box = $('doodleColors');
-  if (box.childElementCount > 0) return;
-  for (const c of DOODLE_COLORS) {
-    const b = document.createElement('button');
-    b.style.background = c;
-    b.title = c;
-    b.addEventListener('click', () => {
-      doodle.setColor(c);
-      for (const el of box.querySelectorAll('button')) el.classList.remove('on');
-      b.classList.add('on');
-    });
-    box.appendChild(b);
+  if (box.childElementCount === 0) {
+    for (const c of DOODLE_COLORS) {
+      const b = document.createElement('button');
+      b.style.background = c;
+      b.dataset.color = c;
+      b.addEventListener('click', () => net.send({ t: 'doodleColor', color: c }));
+      box.appendChild(b);
+    }
   }
-  // 기본색을 골라둔 상태로 보여준다 — 아무것도 안 켜져 있으면 뭘 쓰는지 알 수 없다.
-  const mine = doodle.getColor();
+  const mine = players.find((p) => p.id === youId)?.doodleColor ?? '';
+  const taken = new Map(players.filter((p) => p.doodleColor).map((p) => [p.doodleColor, p.name]));
+  if (mine) doodle.setColor(mine);
   for (const el of box.querySelectorAll('button')) {
-    if ((el as HTMLElement).style.background && (el as HTMLButtonElement).title === mine) el.classList.add('on');
+    const b = el as HTMLButtonElement;
+    const c = b.dataset.color!;
+    const owner = taken.get(c);
+    b.classList.toggle('on', c === mine);
+    b.disabled = owner !== undefined && c !== mine;
+    b.title = c === mine ? '내 색' : owner ? `${owner} 님이 쓰는 색` : '이 색으로 바꾸기';
   }
 }
 // 자동재생 정책 때문에 사람이 한 번 누르기 전에는 소리가 안 난다. 첫 조작에서 깨운다.
@@ -205,6 +214,9 @@ function onMsg(m: ServerMsg): void {
     hostId = m.hostId;
     names = new Map(m.players.map((p) => [p.id, p.name]));
     renderPlayers(m.players, youId, hostId, m.phase);
+    // 색은 서버가 정하고 room으로 내려온다. 남이 색을 바꿔도 바로 팔레트에 반영돼야
+    // "임자 있는 색"을 눌러보는 일이 없다.
+    if (m.phase === 'drawing') renderDoodleColors(m.players);
     setTag('roundTag', m.phase === 'lobby' ? '' : `라운드 ${m.round + 1}/${m.totalRounds}`);
     setTag('topicTag', m.topic ? `주제 ${m.topic}` : '');
     // 소리는 시간이 도는 단계에서만 낸다. 결과 화면처럼 마감이 없는 곳은 조용하다.
@@ -368,7 +380,6 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
     // 판을 먼저 띄우고 나서 비운다. 반대로 하면 아직 숨겨진 캔버스에 그려
     // 폭 0으로 뭉개지고, 그 뒤로 아무도 다시 그려주지 않아 빈 판이 된다.
     $('doodleWrap').style.display = '';
-    buildDoodleColors();
     show('wait');
     // 라운드가 바뀌면 낙서판도 새 판이다. 서버도 라운드 시작에서 비운다.
     doodle.clear();
