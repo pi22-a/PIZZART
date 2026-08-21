@@ -1273,3 +1273,156 @@ describe('낙서 색', () => {
   });
 });
 
+
+describe('관전 자리', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+  const info = (id: string) => roomNow().players.find((p) => p.id === id)!;
+
+  beforeEach(() => { newSession(['p1', 'p2', 'p3', 'p4', 'p5']); });
+
+  it('로비에서 관전을 고를 수 있다', () => {
+    s.setSpectator('p5', true);
+    expect(info('p5').spectator).toBe(true);
+  });
+
+  it('시작한 뒤에는 관전을 켜지도 끄지도 못한다', () => {
+    s.setSpectator('p5', true);
+    s.start('p1');
+    s.setSpectator('p5', false);
+    expect(info('p5').spectator).toBe(true);   // 못 껐다
+    s.setSpectator('p4', true);
+    expect(info('p4').spectator).toBe(false);  // 못 켰다
+  });
+
+  it('관전자는 조각을 받지 않고 출제 차례도 안 온다', () => {
+    s.setSpectator('p5', true);
+    s.start('p1');
+    expect(roomNow().totalRounds).toBe(4);     // p5는 순번에 없다
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    expect(msgsTo('p5').filter((m) => m.t === 'slices').length).toBe(0);
+    expect(info('p5').sliceCount).toBe(0);
+  });
+
+  it('관전자는 제시어와 그려지는 원본을 본다', () => {
+    s.setSpectator('p5', true);
+    sent = [];
+    s.start('p1');
+    const word = msgsTo('p5').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>;
+    expect(word).toBeDefined();
+    expect(word.word.length).toBeGreaterThan(0);
+
+    sent = [];
+    s.addStroke('p1', [[300, 200], [400, 300]]);
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1) as Extract<ServerMsg, { t: 'canvas' }>;
+    expect(canvas.strokes.length).toBe(1);
+  });
+
+  it('관전자는 추론 중에 현황판을 받는다', () => {
+    s.setSpectator('p5', true);
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    sent = [];
+    s.drawDone('p1');
+    expect(msgsTo('p5').filter((m) => m.t === 'board').length).toBeGreaterThan(0);
+  });
+
+  it('관전자는 낙서판에 그릴 수 없고 남의 낙서도 안 받는다', () => {
+    // 정답을 아는 사람이 대기 화면에 그리면 그것이 곧 정답을 알려주는 짓이다.
+    s.setSpectator('p5', true);
+    s.start('p1');
+    sent = [];
+    s.addDoodle('p5', [[10, 10], [20, 20]], '#6fb6e8');
+    expect(msgsOfType('doodleStroke').length).toBe(0);
+
+    sent = [];
+    s.addDoodle('p2', [[10, 10], [20, 20]], '#6fb6e8');
+    expect(msgsTo('p5').filter((m) => m.t === 'doodleStroke').length).toBe(0);
+    expect(msgsTo('p3').filter((m) => m.t === 'doodleStroke').length).toBe(1);
+  });
+
+  it('관전자만 남으면 시작할 수 없다', () => {
+    for (const id of ['p2', 'p3', 'p4', 'p5']) s.setSpectator(id, true);
+    sent = [];
+    s.start('p1');
+    expect(msgsTo('p1').some((m) => m.t === 'error')).toBe(true);
+    // 거절당하면 room을 다시 보내지 않으므로 세션을 직접 본다.
+    expect(s.phase).toBe('lobby');
+  });
+});
+
+describe('게임 도중 들어온 사람은 판이 끝날 때까지 관전이다', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+  const info = (id: string) => roomNow().players.find((p) => p.id === id)!;
+
+  beforeEach(() => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    s.join('p9', '늦둥이');   // 추론 중에 난입
+  });
+
+  it('난입자는 관전자로 앉는다', () => {
+    expect(info('p9').spectator).toBe(true);
+  });
+
+  it('다음 라운드가 와도 조각을 받지 못한다', () => {
+    // 예전에는 여기서 슬쩍 합류시켰다. 그러면 남들이 한 판을 다 도는 동안
+    // 이 사람만 출제 없이 맞히기만 한다.
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    s.next('p1');
+    s.addStroke('p2', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    sent = [];
+    s.drawDone('p2');
+    expect(msgsTo('p9').filter((m) => m.t === 'slices').length).toBe(0);
+    expect(info('p9').spectator).toBe(true);
+  });
+
+  it('판이 끝나 로비로 돌아오기 전에는 참여로 못 바꾼다', () => {
+    s.setSpectator('p9', false);
+    expect(info('p9').spectator).toBe(true);
+  });
+
+  it('한 판 더로 로비에 돌아오면 그때 참여로 바꾼다', () => {
+    while (roomNow().phase !== 'final') {
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+    s.again('p1');
+    expect(roomNow().phase).toBe('lobby');
+    s.setSpectator('p9', false);
+    expect(info('p9').spectator).toBe(false);
+  });
+});
+
+describe('제출과 스킵은 서로를 지운다', () => {
+  beforeEach(() => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+  });
+
+  it('답을 낸 뒤 스킵을 누르면 낸 답이 사라진다 — 화면이 스킵을 잠그는 이유다', () => {
+    const word = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    s.answer('p2', word);
+    s.skip('p2');
+    clock.fire();
+    const rows = msgsOfType('attemptResult').at(-1)!.answers;
+    expect(rows.find((r) => r.playerId === 'p2')!.correct).toBe(false);
+    expect(rows.find((r) => r.playerId === 'p2')!.text).toBe('');
+  });
+
+  it('답을 낸 사람은 서버 정족수에서 이미 마친 것으로 센다', () => {
+    // 그래서 스킵을 잠가도 회차가 늦게 끝나지 않는다. p2는 스킵을 안 눌렀는데도
+    // p3·p4가 누르는 순간 회차가 끝나야 한다 — 답을 낸 것이 곧 마친 것이다.
+    const word = (msgsTo('p1').find((m) => m.t === 'word') as Extract<ServerMsg, { t: 'word' }>).word;
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(1);
+    s.answer('p2', word);
+    s.skip('p3');
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(1);   // 아직 p4가 남았다
+    s.skip('p4');
+    expect(msgsOfType('room').at(-1)!.attempt).toBe(2);   // 시간을 안 흘렸는데 넘어갔다
+  });
+});

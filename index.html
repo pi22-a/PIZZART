@@ -28,7 +28,6 @@
   .pill { background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 12px; }
   .pill.big { font-size:20px; padding:8px 18px; }
   .pill.word { background:var(--sauce); color:#1c1712; font-weight:700; }
-  .pill:empty { display:none; }
   button { font:inherit; padding:10px 18px; border-radius:10px; border:0;
            background:var(--sauce); color:#1c1712; font-weight:700; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
@@ -37,6 +36,7 @@
   button#skipBtn.pressed { background:var(--crust); }
   button#skipBtn.pressed::after { content:' ✓'; }
   button.ghost { background:var(--panel); color:var(--fg); border:1px solid var(--line); }
+  button.ghost.on { background:var(--sauce); color:#1c1712; border-color:var(--sauce); }
   button.icon { padding:4px 10px; font-size:14px; line-height:1.4; }
   input { font:inherit; padding:10px 14px; border-radius:10px; border:1px solid var(--line);
           background:var(--field); color:var(--fg); }
@@ -53,6 +53,26 @@
   .players .p.off { opacity:.4; }
   .players .p.me { outline:2px solid var(--fg); }
   .players .p.drawer { outline:2px solid var(--sauce); }
+  /* 관전자는 정답을 아는 사람이다. 통화 중에 흘릴 수 있는 사람이 누구인지
+     나머지가 알아야 하므로 출제자와 마찬가지로 눈에 띄게 둔다. */
+  .players .p.spectator { outline:2px dashed var(--crust); opacity:.75; }
+
+  /* 상단바 — 남은 것은 전부 "가끔 보는 것"이라 조용해야 한다. */
+  .topbar { font-size:13px; }
+  .topbar .brand { letter-spacing:.28em; opacity:.45; font-size:12px; }
+  .topbar .spacer { margin-left:auto; }
+  .topbar .dots { letter-spacing:4px; color:var(--sauce); font-size:12px; }
+  .topbar .dots .off { color:var(--fg); opacity:.28; }
+  .pill.warn { background:#7a2f24; color:#f6efe2; border-color:#a03c2d; font-weight:700; }
+  .pill:empty { display:none; }
+  .dots:empty { display:none; }
+
+  /* 주제 — 화면에서 유일한 주황 알약이라 찾을 필요 없이 보인다. */
+  .ask { margin-bottom:8px; }
+  .pill.topic { background:var(--sauce); color:#1c1712; font-weight:700; font-size:17px; padding:5px 15px; }
+
+  /* 관전 중에는 캔버스가 구경거리지 그리는 곳이 아니다. */
+  #drawCanvas.watching { pointer-events:none; }
   /* 인원 알약 줄 바로 아래에 화면 내용(조각 액자, 그리기 버튼 등)이 틈 없이 붙어 있었다.
      화면마다 따로 손보는 대신 .screen 하나에 위쪽 여백을 줘서 전 화면이 한 번에 떨어지게 한다. */
   .screen { margin-top:16px; }
@@ -113,12 +133,22 @@
 </head>
 <body>
 <div id="app">
-  <div class="bar">
+  <!--
+    상단바에는 "문제가 생겨야 보는 것"만 남긴다.
+    예전에는 일곱 개가 전부 똑같은 알약이라 눈이 등급을 못 매겼고, 그래서 정작
+    계속 봐야 하는 주제가 나머지 여섯에 묻혔다. 주제는 조각 옆으로 내려갔고
+    (s-guess의 guessTopic), 시간은 힌트 원 안에 이미 있다.
+  -->
+  <div class="bar topbar">
+    <span class="brand">PIZZA</span>
+    <!-- 초대할 때만 필요하다. 로비에서만 뜬다. -->
     <span class="pill" id="roomTag"></span>
-    <span class="pill" id="roundTag"></span>
-    <span class="pill" id="topicTag"></span>
-    <span class="pill" id="timeTag"></span>
-    <span class="pill" id="netTag">연결 중</span>
+    <!-- 라운드는 읽는 것보다 세는 것이 빠르다. -->
+    <span class="dots" id="roundDots"></span>
+    <!-- 끊겼을 때만 뜬다. 늘 떠 있는 상태 표시는 신호가 될 수 없다 —
+         "연결됨"이 항상 있으면 "끊김"으로 바뀌어도 눈에 안 들어온다. -->
+    <span class="pill warn" id="netTag"></span>
+    <span class="spacer"></span>
     <!-- 초읽기 소리 스위치. 남의 방에서 갑자기 삐 소리가 나면 곤란한 사람이 있다. -->
     <button id="muteBtn" class="ghost icon" title="초읽기 소리 끄기">🔊</button>
     <!-- 밝은 화면을 원하는 사람이 있다. 고른 값은 이 브라우저에 남는다. -->
@@ -159,6 +189,9 @@
       <p>못 맞힌 채 마지막 <b>6회차</b>가 되면, 지금까지 본 조각을
         <b>제자리에 끼워</b> 보여줍니다. 거기서 맞히면 1점입니다.</p>
 
+      <p><b>관전</b>을 고르면 그리지도 맞히지도 않고 <b>정답을 보면서</b> 구경합니다.
+        시작 전에만 고를 수 있고, 게임 도중에 들어온 사람은 한 판이 끝날 때까지 관전입니다.</p>
+
       <p class="rules-score"><b>그린 사람의 점수는 이 마지막 조립판에서만 나옵니다.</b></p>
       <ul>
         <li>조립판에서 <b>한 명이라도 맞히면 +5점</b> (여러 명이 맞혀도 5점입니다)</li>
@@ -182,6 +215,17 @@
       <p class="muted" id="topicNote"></p>
     </div>
 
+    <!-- 관전은 여기서만 고른다. 시작 뒤에는 못 바꾸고, 도중에 들어온 사람은
+         판이 끝나 로비로 돌아오기 전까지 관전으로 묶인다. -->
+    <div class="lobby-topic">
+      <label>참여</label>
+      <div class="bar">
+        <button id="playBtn" class="ghost">참여</button>
+        <button id="watchBtn" class="ghost">관전</button>
+      </div>
+      <p class="muted" id="watchNote"></p>
+    </div>
+
     <p class="muted" id="lobbyNote"></p>
 
     <div class="lobby-start">
@@ -189,11 +233,14 @@
     </div>
   </section>
 
+  <!-- 관전자도 이 화면을 본다. 제시어와 그려지는 원본이 여기 다 있어서,
+       버튼만 감추고 캔버스 입력만 막으면 그대로 관전 화면이 된다. -->
   <section class="screen" id="s-draw">
     <div class="bar">
       <span class="pill big word" id="wordTag"></span>
       <button id="doneBtn">다 그렸다</button>
       <button id="undoBtn">되돌리기</button>
+      <span class="muted" id="drawWatchNote"></span>
     </div>
     <div style="max-width:520px"><canvas id="drawCanvas"></canvas></div>
   </section>
@@ -236,13 +283,21 @@
         </div>
       </div>
       <div class="col">
-        <p class="muted" id="guessLabel">무엇을 그린 걸까요</p>
+        <!-- 주제가 여기 있는 이유: 눈은 조각에 가 있지 화면 맨 위에 있지 않다.
+             답을 치기 직전에 지나가는 자리라야 실제로 읽힌다. -->
+        <div class="bar ask">
+          <span class="pill topic" id="guessTopic"></span>
+          <span class="muted" id="guessLabel">무엇을 그린 걸까요</span>
+        </div>
         <p class="pill big" id="scoreTag"></p>
         <div class="bar">
           <input id="answerInput" maxlength="40" />
           <button id="answerSubmitBtn">제출</button>
         </div>
         <p class="muted" id="answerSavedNote"></p>
+        <!-- 낸 답은 입력칸에서 지우고 여기로 옮긴다. 같은 오답을 또 내는 것은 막으면서
+             뭘 냈는지는 잊지 않게 한다. -->
+        <p class="muted" id="prevAnswer"></p>
 
         <p class="muted" id="guessNote"></p>
 
@@ -250,6 +305,7 @@
              답 입력 줄에 붙여두면 "이게 제출"로 오해하기 딱 좋아서 따로 줄을 뗐다. -->
         <div class="bar">
           <button id="skipBtn">라운드 스킵</button>
+          <span class="muted" id="skipLocked"></span>
           <span class="muted" id="skipTally"></span>
         </div>
         <p class="muted" id="skipNote">지금 조각으로 모르겠다면 눌러보세요.

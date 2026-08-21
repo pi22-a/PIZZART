@@ -7,7 +7,7 @@ import {
   renderRanking,
   renderTopics,
   syncClock,
-  renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally,
+  renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
@@ -34,7 +34,6 @@ themeBtn.addEventListener('click', () => {
 
 const params = new URLSearchParams(location.search);
 const room = (params.get('room') ?? 'LOBBY').toUpperCase();
-setTag('roomTag', `방 ${room}`);
 
 /** 새로고침해도 같은 자리로 돌아오게 하는 식별자 */
 let cid = sessionStorage.getItem('pizza-cid');
@@ -45,6 +44,7 @@ let hostId = '';
 let names = new Map<string, string>();
 let sliceCount = 8;
 let lastPhase = '';
+let lastWatch = false;
 let lastRound = -1;
 let iSolved = false;
 let lastAttempt = -1;
@@ -68,9 +68,23 @@ function restoreFocus(): void {
 let drawerId = '';
 /** 이번 시도에 내 조각을 받았는가. 못 받았으면 이 라운드는 관전이다. */
 let hasSlices = false;
+/** 내가 관전자인가. 서버가 room으로 알려준다 — 로비에서 고르거나, 도중에 들어와서 박힌다. */
+let iWatch = false;
+/**
+ * 이번 회차에 답을 냈는가.
+ *
+ * 두 가지에 쓴다. 회차가 넘어갈 때 낸 답을 지우는 데(안 낸 글자는 지키고 낸 답만 지운다),
+ * 그리고 스킵을 잠그는 데. 스킵은 적어둔 답을 서버에서 지우므로, 낸 뒤에 누르면
+ * 낸 답이 조용히 사라진다.
+ */
+let submittedThisAttempt = false;
+/** 지난 회차에 낸 답. 입력칸에서 지우는 대신 여기로 옮겨 보여준다. */
+let lastSubmitted = '';
 
 const net = new Net(room, onMsg);
-net.onStatus((ok) => setTag('netTag', ok ? '연결됨' : '끊김'));
+// 붙어 있을 때는 아무 말도 안 한다. 늘 떠 있는 상태 표시는 신호가 될 수 없다 —
+// "연결됨"이 항상 그 자리에 있으면 "끊김"으로 바뀌어도 눈에 안 들어온다.
+net.onStatus((ok) => setTag('netTag', ok ? '' : '끊김'));
 
 const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { interactive: true });
 /**
@@ -211,18 +225,26 @@ answerInput.addEventListener('keydown', (e: KeyboardEvent) => {
 });
 $('answerSubmitBtn').addEventListener('click', submitAnswer);
 
+// 관전 고르기. 로비에서만 먹힌다 — 서버가 다시 확인한다.
+$('playBtn').addEventListener('click', () => net.send({ t: 'setSpectator', on: false }));
+$('watchBtn').addEventListener('click', () => net.send({ t: 'setSpectator', on: true }));
+
 /**
  * 제출 버튼과 엔터가 공유하는 경로. 무조건 보내고 "제출됨" 확인을 켠다 —
  * 답은 최종이 아니라 지금 서버에 저장된 값이라는 뜻이라, 다시 고치면 확인은 다시 꺼진다.
  */
 function submitAnswer(): void {
+  if (answerInput.disabled) return;
   net.send({ t: 'answer', text: answerInput.value });
+  submittedThisAttempt = true;
+  lastSubmitted = answerInput.value.trim();
   markAnswerSaved(true);
 }
 
 function markAnswerSaved(saved: boolean): void {
   if (saved) markAnswerPending(false);
-  $('answerSavedNote').textContent = saved ? '제출됨 ✓' : '';
+  // 고쳐 낼 수 있다는 걸 알려야 한다. 모르면 입력칸을 열어둔 의미가 없다.
+  $('answerSavedNote').textContent = saved ? '제출됨 ✓ — 고쳐서 다시 내도 됩니다' : '';
 }
 
 /**
@@ -258,8 +280,11 @@ function onMsg(m: ServerMsg): void {
     // 색은 서버가 정하고 room으로 내려온다. 남이 색을 바꿔도 바로 팔레트에 반영돼야
     // "임자 있는 색"을 눌러보는 일이 없다.
     if (m.phase === 'drawing') renderDoodleColors(m.players);
-    setTag('roundTag', m.phase === 'lobby' ? '' : `라운드 ${m.round + 1}/${m.totalRounds}`);
-    setTag('topicTag', m.topic ? `주제 ${m.topic}` : '');
+    // 방 코드는 초대할 때만 필요하다. 게임이 돌기 시작하면 자리를 비운다.
+    setTag('roomTag', m.phase === 'lobby' ? `방 ${room}` : '');
+    renderRoundDots(m.round, m.phase === 'lobby' ? 0 : m.totalRounds);
+    // 주제는 상단이 아니라 조각 옆에 있다. 시선이 이미 가 있는 자리라야 읽힌다.
+    setTag('guessTopic', m.topic);
     // 소리는 시간이 도는 단계에서만 낸다. 결과 화면처럼 마감이 없는 곳은 조용하다.
     countdown(m.deadline, (left) => {
       if (m.phase === 'drawing' || m.phase === 'guessing') timeTick(left);
@@ -267,6 +292,7 @@ function onMsg(m: ServerMsg): void {
 
     const me = m.players.find((p) => p.id === youId);
     iSolved = me?.solved === true;
+    iWatch = me?.spectator === true;
     const iDraw = me?.isDrawer === true;
     const drawer = m.players.find((p) => p.isDrawer);
     if (drawer) drawerId = drawer.id;
@@ -275,6 +301,9 @@ function onMsg(m: ServerMsg): void {
     // 시도 사이에는 phase가 안 바뀌므로 라운드 번호를 트리거로 쓴다.
     if (m.round !== lastRound) {
       lastRound = m.round;
+      lastSubmitted = '';
+      submittedThisAttempt = false;
+      answerInput.value = '';
       hasSlices = false;
       renderAnswers('lastAnswers', [], names);
     }
@@ -284,6 +313,13 @@ function onMsg(m: ServerMsg): void {
     // 실수로 다시 나가지 않는다.
     if (m.attempt !== lastAttempt) {
       lastAttempt = m.attempt;
+      // 낸 답은 지우고 쓰다 만 글자는 지킨다.
+      //
+      // 글자를 지키기로 한 것은 "낼 생각이 없던 글자를 뺏지 말자"는 뜻이었지 낸 답까지
+      // 지키자는 것이 아니었다. 틀린 답이 그대로 남아 있으면 조각이 한 장 늘어난 화면에
+      // 이미 틀린 답이 준비돼 있는 셈이라, 무심코 다시 내면 1점을 더 잃는다.
+      if (submittedThisAttempt) answerInput.value = '';
+      submittedThisAttempt = false;
       markAnswerSaved(false); // 지난 회차의 "제출됨"이 새 회차까지 이어지면 거짓말이다
       markAnswerPending(answerInput.value.trim().length > 0);
       hasSlices = false;
@@ -295,6 +331,11 @@ function onMsg(m: ServerMsg): void {
     if (m.phase === 'lobby') {
       renderTopics(m.topics, m.selectedTopic, youId === hostId,
         (topic) => net.send({ t: 'setTopic', topic }));
+      $('playBtn').classList.toggle('on', !iWatch);
+      $('watchBtn').classList.toggle('on', iWatch);
+      $('watchNote').textContent = iWatch
+        ? '관전 중입니다 — 그리지도 맞히지도 않고 정답을 보면서 구경합니다'
+        : '관전을 고르면 정답을 보면서 구경만 합니다. 시작 뒤에는 바꿀 수 없습니다';
     }
     ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
     ($('nextBtn') as HTMLButtonElement).disabled = youId !== hostId;
@@ -305,8 +346,13 @@ function onMsg(m: ServerMsg): void {
       : `${names.get(hostId) ?? '방장'} 님이 눌러야 새 판이 시작됩니다`;
     renderLobbyNote(m.players, youId, hostId, m.minPlayers);
 
-    if (m.phase !== lastPhase) onPhase(m.phase, iDraw, m.players, m.topic);
+    // 관전 여부가 바뀌면 화면도 다시 잡아야 한다. 로비에서 관전을 켜고 시작하면
+    // phase만 보고는 s-guess로 갈 수 있다.
+    if (m.phase !== lastPhase || iWatch !== lastWatch) {
+      onPhase(m.phase, iDraw, m.players, m.topic);
+    }
     lastPhase = m.phase;
+    lastWatch = iWatch;
 
     if (m.phase === 'guessing') {
       const last = m.attempt >= m.maxAttempts;
@@ -323,8 +369,23 @@ function onMsg(m: ServerMsg): void {
       const mute = iSolved || skipped || !hasSlices;
       ($('answerSubmitBtn') as HTMLButtonElement).disabled = mute;
       answerInput.disabled = mute;
-      ($('skipBtn') as HTMLButtonElement).disabled = mute || last;
-      $('skipNote').style.display = iSolved || last ? 'none' : '';
+
+      // 답을 냈으면 스킵을 잠근다.
+      //
+      // 서버의 skip()은 적어둔 답을 지운다 — 스킵은 이번 회차를 접겠다는 뜻이니 맞는
+      // 동작인데, 답을 내고 나서 누르면 낸 답이 조용히 사라진다. 맞는 답이었어도 사라진다.
+      // 잠가도 잃는 것은 없다: 서버는 답을 냈거나 스킵을 누른 사람을 똑같이 "마쳤다"로
+      // 세므로, 제출한 사람은 이미 정족수에 들어가 있다.
+      const answered = me?.answered === true;
+      ($('skipBtn') as HTMLButtonElement).disabled = mute || last || answered;
+      $('skipNote').style.display = iSolved || last || answered ? 'none' : '';
+      // 잠긴 버튼만 덩그러니 두면 "왜 안 눌리지"가 된다. 끈 자리에 이유를 적는다.
+      $('skipLocked').textContent = answered && !iSolved && !last
+        ? '답을 냈습니다 · 회차가 끝나면 함께 공개됩니다'
+        : '';
+      $('prevAnswer').textContent = lastSubmitted && !iSolved
+        ? `지난 회차에 낸 답: ${lastSubmitted}`
+        : '';
       $('guessNote').textContent = last
         ? `시도 ${m.attempt}/${m.maxAttempts} — 마지막 기회입니다`
         : `시도 ${m.attempt}/${m.maxAttempts} — 다음 회차로 넘어가면 조각이 하나 늘고 1점 깎입니다`;
@@ -352,7 +413,6 @@ function onMsg(m: ServerMsg): void {
     // 조각이 도착해야 입력칸이 열린다. 회차 전환 때 미뤄둔 커서를 지금 준다.
     setSpectating(false);
     restoreFocus();
-    setSpectating(false);
     return;
   }
 
@@ -415,6 +475,33 @@ function onMsg(m: ServerMsg): void {
 
 function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: string): void {
   if (phase !== 'guessing') stopSpinHint();
+
+  // 관전자는 출제자와 같은 것을 본다. 그리는 동안은 제시어와 그려지는 원본을,
+  // 맞히는 동안은 남들이 무엇을 들고 헤매는지를. 화면은 출제자 것을 그대로 쓰고
+  // 그릴 수 있는 것만 잠근다.
+  const watching = $('drawCanvas').classList.contains('watching');
+  if (iWatch && phase !== 'lobby' && phase !== 'roundEnd' && phase !== 'final') {
+    $('doneBtn').style.display = 'none';
+    $('undoBtn').style.display = 'none';
+    $('drawCanvas').classList.add('watching');
+    $('doodleWrap').style.display = 'none';
+    if (phase === 'drawing') {
+      const drawer = players.find((p) => p.isDrawer);
+      $('drawWatchNote').textContent = `관전 중 — ${drawer?.name ?? '누군가'} 님이 그리는 중입니다`;
+      return show('draw');
+    }
+    $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
+    $('waitWho').textContent = '관전 중 — 모두가 이 그림을 맞히는 중입니다';
+    $('boardWrap').style.display = '';
+    return show('wait');
+  }
+  if (watching) {
+    // 관전을 껐다. 감춰둔 것을 되돌린다.
+    $('doneBtn').style.display = '';
+    $('undoBtn').style.display = '';
+    $('drawCanvas').classList.remove('watching');
+    $('drawWatchNote').textContent = '';
+  }
 
   if (phase === 'lobby') return show('lobby');
   if (phase === 'drawing') {

@@ -15,6 +15,13 @@ interface Player {
   name: string;
   connected: boolean;
   score: number;
+  /**
+   * 관전자. 조각을 받지 않고 출제 차례도 안 오며, 대신 출제자와 같은 것을 본다.
+   *
+   * 로비에서만 바꿀 수 있다. 그 제약 하나가 규칙 전부를 떠받친다 —
+   * 시작 전에 정하게 되고, 도중에 들어온 사람은 판이 끝나기 전에는 못 바꾼다.
+   */
+  spectator: boolean;
 }
 
 export interface SessionOpts {
@@ -111,7 +118,11 @@ export class Session {
         this.send(id, { t: 'error', msg: '방이 가득 찼습니다' });
         return;
       }
-      this.players.push({ id, name, connected: true, score: 0 });
+      // 게임이 도는 중에 들어왔으면 관전자로 앉힌다. 조각은 그림이 완성되던 순간에
+      // 이미 나뉘었으므로 이번 라운드에 낄 자리가 없고, 다음 라운드에 슬쩍 끼워주면
+      // 남들이 한 판을 다 도는 동안 이 사람만 출제 없이 맞히기만 하게 된다.
+      // 로비로 돌아올 때까지 관전이고, 그때 본인이 끈다.
+      this.players.push({ id, name, connected: true, score: 0, spectator: this.phase !== 'lobby' });
     }
     if (!this.hostId) this.hostId = id;
 
@@ -122,11 +133,12 @@ export class Session {
 
   /** 돌아온 사람에게 그 라운드에 이미 준 것을 그대로 돌려준다. 다시 계산하면 남들과 어긋난다. */
   private restore(id: string): void {
-    if (this.phase === 'drawing' && id === this.drawerId) {
+    // 출제자와 관전자는 같은 것을 본다. 돌아왔을 때도 같은 것을 되찾아야 한다.
+    if (this.phase === 'drawing' && this.knowsAnswer(id)) {
       this.send(id, { t: 'word', word: this.word });
       this.send(id, { t: 'canvas', strokes: this.strokes });
     }
-    if (this.phase === 'drawing' && id !== this.drawerId) {
+    if (this.phase === 'drawing' && !this.knowsAnswer(id)) {
       this.send(id, { t: 'doodleBoard', strokes: this.doodle });
     }
     if (this.phase === 'guessing' && this.seen.has(id)) {
@@ -135,7 +147,10 @@ export class Session {
       // 낱장을 들고 있고, 남들이 보는 조립판을 못 봐서 같은 화면이 아니게 된다.
       if (this.attempt >= this.rules.maxAttempts && !this.solved.has(id)) this.sendAssembled(id);
     }
-    if (this.phase === 'guessing' && id === this.drawerId) {
+    if (this.phase === 'guessing' && this.knowsAnswer(id)) {
+      // 제시어를 같이 보낸다. 추론 중에 들어온 관전자는 word를 받은 적이 없어서,
+      // 현황판만 주면 남들이 뭘 맞히려는지 모르는 채로 구경하게 된다.
+      this.send(id, { t: 'word', word: this.word });
       this.sendBoard();
     }
     if (this.phase === 'roundEnd' && this.lastRoundEnd) {
@@ -158,14 +173,32 @@ export class Session {
     this.broadcastRoom();
   }
 
+  /**
+   * 관전으로 돌리거나 참여로 돌아온다. 로비에서만.
+   *
+   * 여기서 자동으로 꺼주는 길은 어디에도 없다. 그것이 규칙이다 —
+   * 도중에 들어온 사람을 다음 라운드에 자동 합류시키면 예전으로 되돌아간다.
+   */
+  setSpectator(playerId: string, on: boolean): void {
+    if (this.phase !== 'lobby') return;
+    const p = this.players.find((x) => x.id === playerId);
+    if (!p || p.spectator === on) return;
+    p.spectator = on;
+    this.broadcastRoom();
+  }
+
   start(playerId: string): void {
     if (playerId !== this.hostId) return;
     if (this.phase !== 'lobby') return;
     // 살아있는 사람만 센다. 유령을 세면 "4인 게임"이 실제로는 두 명이 돌게 되고,
     // 순번에 유령이 끼면 beginRound가 건너뛰어 라운드 번호가 껑충 뛴다.
-    const live = this.players.filter((p) => p.connected);
+    // 관전자도 같은 이유로 뺀다 — 순번에 넣으면 안 그리는 사람 차례에서 라운드가 빈다.
+    const live = this.players.filter((p) => p.connected && !p.spectator);
     if (live.length < this.rules.minPlayers) {
-      this.send(playerId, { t: 'error', msg: `${this.rules.minPlayers}명 이상이어야 시작할 수 있습니다` });
+      this.send(playerId, {
+        t: 'error',
+        msg: `${this.rules.minPlayers}명 이상이어야 시작할 수 있습니다 (관전자는 세지 않습니다)`,
+      });
       return;
     }
     this.order = live.map((p) => p.id);
@@ -210,13 +243,18 @@ export class Session {
     // 낙서 색을 미리 배정한다. 그릴 때 배정하면 남의 팔레트에는 그 사람이 첫 획을
     // 긋기 전까지 그 색이 비어 보이고, 그 틈에 같은 색을 골라버린다.
     for (const p of this.players) {
-      if (p.id !== this.drawerId) this.ensureDoodleColor(p.id);
+      if (!this.knowsAnswer(p.id)) this.ensureDoodleColor(p.id);
     }
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
     this.setDeadline(this.rules.drawSeconds, () => this.endDrawing());
     this.broadcastRoom();
     this.send(this.drawerId, { t: 'word', word: this.word });
+    // 관전자는 출제자와 같은 것을 본다. 빈 캔버스부터 같이 보게 지금 한 번 보낸다.
+    for (const p of this.spectators()) {
+      this.send(p.id, { t: 'word', word: this.word });
+      this.send(p.id, { t: 'canvas', strokes: this.strokes });
+    }
   }
 
   addStroke(playerId: string, points: Point[]): void {
@@ -225,6 +263,7 @@ export class Session {
     const clean = points.filter(insideCircle);
     if (clean.length < 2) return;
     this.strokes.push(clean);
+    this.pushCanvasToSpectators();
   }
 
   undo(playerId: string): void {
@@ -232,6 +271,7 @@ export class Session {
     if (playerId !== this.drawerId) return;
     this.strokes.pop();
     this.send(playerId, { t: 'canvas', strokes: this.strokes });
+    this.pushCanvasToSpectators();
   }
 
   drawDone(playerId: string): void {
@@ -351,7 +391,9 @@ export class Session {
 
   addDoodle(playerId: string, points: Point[], color: string): void {
     if (this.phase !== 'drawing') return;
-    if (playerId === this.drawerId) return;  // 출제자는 자기 캔버스가 따로 있다
+    // 정답을 아는 사람은 낙서판에 못 그린다. 출제자는 자기 캔버스가 따로 있어서고,
+    // 관전자는 여기에 그리는 것이 곧 정답을 알려주는 짓이기 때문이다.
+    if (this.knowsAnswer(playerId)) return;
     if (!this.players.some((p) => p.id === playerId)) return;
     if (points.length < 2) return;
     // 색은 서버가 들고 있는 그 사람 색을 쓴다. 클라이언트가 보낸 값을 그대로 믿으면
@@ -360,9 +402,9 @@ export class Session {
     const safe = this.ensureDoodleColor(playerId);
     this.doodle.push({ by: playerId, points, color: safe });
     if (this.doodle.length > Session.DOODLE_MAX) this.doodle.shift();
-    // 기다리는 사람들끼리만 본다. 출제자에게 보내봐야 그릴 화면이 다르다.
+    // 기다리는 사람들끼리만 본다. 정답을 아는 쪽은 화면 자체가 다르다.
     for (const p of this.players) {
-      if (p.id === this.drawerId) continue;
+      if (this.knowsAnswer(p.id)) continue;
       this.send(p.id, { t: 'doodleStroke', by: playerId, points, color: safe });
     }
   }
@@ -373,7 +415,7 @@ export class Session {
     this.doodle = this.doodle.filter((s) => s.by !== playerId);
     if (this.doodle.length === before) return;
     for (const p of this.players) {
-      if (p.id === this.drawerId) continue;
+      if (this.knowsAnswer(p.id)) continue;
       this.send(p.id, { t: 'doodleBoard', strokes: this.doodle });
     }
   }
@@ -570,7 +612,7 @@ export class Session {
     // 사람이 빠져 최소 인원을 밑돌면 로비로 돌아가 기다린다. 점수는 그대로 둔다.
     // 시작하려면 minPlayers명이 필요하지만, 진행 중에는 한 명 빠지는 것까지는 버틴다 —
     // 그 정도로 로비로 튕기면 흔한 이탈 한 번에도 판이 깨진다.
-    if (this.connectedCount < this.rules.minPlayers - 1) {
+    if (this.activeCount < this.rules.minPlayers - 1) {
       this.clearTimer();
       // 유령을 데리고 로비로 돌아가지 않는다. 저 소켓들은 이미 닫혔으니 다시는
       // 아무 일도 안 일어나고, 머릿수만 부풀려 시작·정원 판정을 전부 어긋나게 한다.
@@ -672,6 +714,7 @@ export class Session {
       case 'join': return this.join(playerId, msg.name);
       case 'start': return this.start(playerId);
       case 'setTopic': return this.setTopic(playerId, msg.topic);
+      case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'stroke': return this.addStroke(playerId, msg.points);
       case 'undo': return this.undo(playerId);
       case 'drawDone': return this.drawDone(playerId);
@@ -725,8 +768,29 @@ export class Session {
     return this.players.some((p) => p.id === id && p.connected);
   }
 
+  /**
+   * 이번 라운드에 조각을 받고 답을 낼 사람들.
+   *
+   * 조각 수도 스킵 정족수도 전부 여기서 나온다 — 관전자를 여기서 한 번 빼면
+   * 나머지가 저절로 따라온다.
+   */
   protected guessers(): Player[] {
-    return this.players.filter((p) => p.id !== this.drawerId && p.connected);
+    return this.players.filter((p) => p.id !== this.drawerId && p.connected && !p.spectator);
+  }
+
+  /** 관전 중인 사람들. 출제자와 같은 것을 본다. */
+  protected spectators(): Player[] {
+    return this.players.filter((p) => p.connected && p.spectator);
+  }
+
+  /** 그 사람이 정답을 아는 쪽인가 — 출제자이거나 관전자. 보낼 것을 가르는 기준이다. */
+  protected knowsAnswer(id: string): boolean {
+    return id === this.drawerId || this.players.some((p) => p.id === id && p.spectator);
+  }
+
+  /** 실제로 게임을 도는 사람 수. 관전자는 빠진다. */
+  get activeCount(): number {
+    return this.players.filter((p) => p.connected && !p.spectator).length;
   }
 
   protected setDeadline(seconds: number, fn: () => void): void {
@@ -789,9 +853,22 @@ export class Session {
         history: this.answerLog.get(id) ?? [],
       })),
     };
-    // 출제자와, 먼저 맞혀 할 일이 없어진 사람에게. 둘 다 이미 답을 안다.
+    // 이미 답을 아는 사람 전부에게. 출제자, 관전자, 그리고 먼저 맞혀 할 일이 없어진 사람.
     this.send(this.drawerId, msg);
+    for (const p of this.spectators()) this.send(p.id, msg);
     for (const id of this.solved.keys()) this.send(id, msg);
+  }
+
+  /**
+   * 그려지는 원본을 관전자에게 실시간으로 흘린다.
+   *
+   * 획 하나마다 전체 캔버스를 다시 보내는 것은 낭비지만, 관전자가 없으면 한 번도
+   * 안 보내고 있어도 한 판에 몇 명뿐이다. 획 단위 증분 프로토콜을 새로 만드는 값보다 싸다.
+   */
+  protected pushCanvasToSpectators(): void {
+    for (const p of this.spectators()) {
+      this.send(p.id, { t: 'canvas', strokes: this.strokes });
+    }
   }
 
   protected broadcast(msg: ServerMsg): void {
@@ -814,6 +891,7 @@ export class Session {
         ? this.drawerEarned
         : this.solved.get(p.id) ?? this.scoreFor(p.id),
       doodleColor: this.doodleColors.get(p.id) ?? '',
+      spectator: p.spectator,
     }));
     this.broadcast({
       t: 'room',

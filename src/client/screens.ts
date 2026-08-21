@@ -19,11 +19,15 @@ export function renderPlayers(players: PlayerInfo[], youId: string, hostId: stri
   $('players').innerHTML = players
     .map((p) => {
       const meClass = p.id === youId ? ' me' : '';
-      const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : '', meClass].filter(Boolean).join(' ');
+      const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : '',
+                   p.spectator ? 'spectator' : '', meClass].filter(Boolean).join(' ');
       const mark = p.answered ? ' ✎' : p.skipped ? ' ⏩' : '';
       const host = p.id === hostId ? '👑' : '';
-      const score = phase !== 'lobby' ? ` ${p.score}` : '';
-      return `<span class="${cls}">${host}${escape(p.name)}${score}${mark}</span>`;
+      // 관전자는 점수가 없다. 0점을 붙이면 꼴찌로 읽힌다.
+      const score = phase !== 'lobby' && !p.spectator ? ` ${p.score}` : '';
+      const watch = p.spectator ? ' 👁' : '';
+      return `<span class="${cls}" title="${p.spectator ? '관전 중 — 정답을 보고 있습니다' : ''}">`
+        + `${host}${escape(p.name)}${score}${mark}${watch}</span>`;
     })
     .join('');
 }
@@ -34,40 +38,71 @@ export function renderLobbyNote(
   hostId: string,
   minPlayers: number,
 ): void {
-  const connectedCount = players.filter((p) => p.connected).length;
+  // 관전자는 세지 않는다. 서버의 시작 정족수가 관전자를 빼고 세므로(session.ts의 start),
+  // 여기서 같이 세면 "참가자 5/4 — 시작할 수 있습니다"라고 해놓고 시작이 거절된다.
+  const playing = players.filter((p) => p.connected && !p.spectator).length;
+  const watching = players.filter((p) => p.connected && p.spectator).length;
   const isHost = youId === hostId;
+  // 다섯이 앉아 있는데 4/4라고 하면 틀려 보인다. 어디로 갔는지 적어준다.
+  const aside = watching > 0 ? ` · 관전 ${watching}명` : '';
 
-  if (connectedCount < minPlayers) {
-    // 참가자 X/Y — Y명 더 모이면 시작할 수 있습니다
-    const needMore = minPlayers - connectedCount;
-    setTag('lobbyNote', `참가자 ${connectedCount}/${minPlayers} — ${needMore}명 더 모이면 시작할 수 있습니다`);
+  if (playing < minPlayers) {
+    const needMore = minPlayers - playing;
+    setTag('lobbyNote', `참가자 ${playing}/${minPlayers}${aside} — ${needMore}명 더 모이면 시작할 수 있습니다`);
   } else if (isHost) {
-    // 참가자 X/Y — 시작할 수 있습니다
-    setTag('lobbyNote', `참가자 ${connectedCount}/${minPlayers} — 시작할 수 있습니다`);
+    setTag('lobbyNote', `참가자 ${playing}/${minPlayers}${aside} — 시작할 수 있습니다`);
   } else {
-    // 참가자 X/Y — 방장이 시작하기를 기다립니다
-    setTag('lobbyNote', `참가자 ${connectedCount}/${minPlayers} — 방장이 시작하기를 기다립니다`);
+    setTag('lobbyNote', `참가자 ${playing}/${minPlayers}${aside} — 방장이 시작하기를 기다립니다`);
   }
 }
 
 /**
- * 라운드 스킵 옆 집계와, 내가 눌렀는지를 버튼 자체에 반영한다.
+ * 이번 회차를 몇 명이 마쳤는지와, 내가 스킵을 눌렀는지를 버튼 자체에 반영한다.
  *
  * 프로토콜에 새 필드를 추가하지 않는다 — room이 이미 실어 보내는 PlayerInfo만으로 계산된다.
- * 스킵을 누를 수 있는 사람(=서버가 정족수를 세는 대상)은 출제자가 아니고 접속 중인
- * 플레이어다(session.ts의 guessers()와 같은 조건). 그중 skipped가 true인 수를 세면 집계다.
  *
- * 이미 맞힌 사람은 서버가 기다리지 않으므로 분모에서 뺀다 — 안 빼면 3/4에서 영영
- * 멈춘 것처럼 보인다.
+ * 분모는 서버가 기다리는 사람과 같아야 한다(session.ts의 maybeEndAttempt).
+ * 조각을 못 받은 사람과 이미 맞힌 사람은 서버가 안 기다리므로 여기서도 뺀다.
+ *
+ * 분자는 예전에 스킵만 셌다. 그런데 서버는 "답을 냈거나 스킵을 누른" 사람을 똑같이
+ * 마친 것으로 세므로, 2/3인데 나머지 하나가 이미 답을 냈으면 실제로는 3/3이고 회차는
+ * 그 자리에서 끝났다 — 화면만 아직 한 명을 기다리는 것처럼 보였다.
+ *
+ * 빠진 사람 수도 같이 적는다. 방에 다섯이 앉아 있는데 분모가 3이면 숫자가 맞아도
+ * 틀려 보이기 때문이다.
  */
 export function renderSkipTally(players: PlayerInfo[], youId: string): void {
-  // 조각을 못 받은 관전자는 스킵을 누를 수 없다 — 서버가 세지 않으므로 분모에서도 뺀다.
   const waiting = players.filter((p) => !p.isDrawer && p.connected && !p.solved && p.sliceCount > 0);
-  const pressed = waiting.filter((p) => p.skipped).length;
-  setTag('skipTally', waiting.length > 0 ? `${pressed}/${waiting.length}명이 스킵을 눌렀습니다` : '');
+  const done = waiting.filter((p) => p.skipped || p.answered).length;
+  const skipped = waiting.filter((p) => p.skipped).length;
+  const answered = waiting.filter((p) => p.answered).length;
+
+  const watchers = players.filter((p) => p.spectator && p.connected).length;
+  const solved = players.filter((p) => !p.isDrawer && p.connected && p.solved).length;
+  const extra = [
+    solved > 0 ? `맞힘 ${solved}명` : '',
+    watchers > 0 ? `관전 ${watchers}명` : '',
+  ].filter(Boolean).join(' · ');
+
+  const detail = [answered > 0 ? `답 ${answered}` : '', skipped > 0 ? `스킵 ${skipped}` : '']
+    .filter(Boolean).join(' · ');
+
+  setTag('skipTally', waiting.length === 0 ? '' :
+    `${done}/${waiting.length}명이 이번 회차를 마쳤습니다`
+    + (detail ? ` — ${detail}` : '')
+    + (extra ? ` (${extra}은 세지 않습니다)` : ''));
 
   const me = players.find((p) => p.id === youId);
   $('skipBtn').classList.toggle('pressed', me?.skipped === true);
+}
+
+/** 라운드 진행도를 점으로. 숫자를 읽는 것보다 세는 것이 빠르다. */
+export function renderRoundDots(round: number, total: number): void {
+  const box = $('roundDots');
+  if (total <= 0) { box.innerHTML = ''; box.removeAttribute('title'); return; }
+  box.innerHTML = Array.from({ length: total }, (_, i) =>
+    i <= round ? '●' : '<span class="off">○</span>').join('');
+  box.title = `라운드 ${round + 1}/${total}`;
 }
 
 let stopSpin: (() => void) | null = null;
@@ -171,10 +206,9 @@ export function countdown(deadline: number | null, onSecond?: (left: number) => 
     lastLeft = -1;
   }
   const tick = () => {
-    if (deadline === null) { setTag('timeTag', ''); secondsLeftNow = null; return; }
+    if (deadline === null) { secondsLeftNow = null; return; }
     const left = Math.max(0, Math.ceil((deadline - (Date.now() - clockSkew)) / 1000));
     secondsLeftNow = left;
-    setTag('timeTag', `${left}초`);
     if (left !== lastLeft) {
       lastLeft = left;
       onSecond?.(left);

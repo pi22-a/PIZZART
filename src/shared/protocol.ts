@@ -23,6 +23,13 @@ export interface PlayerInfo {
    * 직접 고르면 남과 겹쳐도 된다 — 지우기는 색이 아니라 사람 단위다.
    */
   doodleColor: string;
+  /**
+   * 관전자인가. 관전자는 출제자와 같은 것을 본다 — 제시어도, 그려지는 원본도.
+   *
+   * 그래서 이 값은 "정답을 아는 사람"이라는 뜻이기도 하다. 통화 중에 흘릴 수 있는
+   * 사람이 누구인지 나머지가 알아야 하므로 전원에게 보낸다.
+   */
+  spectator: boolean;
 }
 
 export type ClientMsg =
@@ -31,6 +38,13 @@ export type ClientMsg =
   | { t: 'start' }
   /** 로비에서 방장이 주제를 고정한다. null이면 라운드마다 무작위. */
   | { t: 'setTopic'; topic: string | null }
+  /**
+   * 관전으로 돌리거나 참여로 돌아온다. 로비에서만, 본인만.
+   *
+   * 로비에서만 되는 것이 규칙의 전부다 — 그래서 "시작 전에 정한다"가 저절로 지켜지고,
+   * 도중에 들어온 사람은 판이 끝나 로비로 돌아오기 전에는 참여로 못 바꾼다.
+   */
+  | { t: 'setSpectator'; on: boolean }
   | { t: 'stroke'; points: Point[] }
   | { t: 'undo' }
   | { t: 'drawDone' }

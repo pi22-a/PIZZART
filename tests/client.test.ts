@@ -50,9 +50,9 @@ function deliver(m: ServerMsg): void {
 }
 
 const PLAYERS = [
-  { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-  { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-  { id: 'x', name: '친구', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
+  { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+  { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+  { id: 'x', name: '친구', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
 ];
 
 function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg {
@@ -372,8 +372,8 @@ describe('로비 카운트 라인', () => {
     deliver(room({
       phase: 'lobby',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     }));
@@ -387,10 +387,10 @@ describe('로비 카운트 라인', () => {
       phase: 'lobby',
       hostId: 'me',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     }));
@@ -404,10 +404,10 @@ describe('로비 카운트 라인', () => {
       phase: 'lobby',
       hostId: 'd',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     }));
@@ -420,9 +420,9 @@ describe('로비 카운트 라인', () => {
     deliver(room({
       phase: 'lobby',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     }));
@@ -485,13 +485,13 @@ describe('라운드 스킵 집계와 눌림 표시 (Fix 3)', () => {
     await guessing();
     deliver(withSkips({ me: true }));
     // 게서는 me, x 둘뿐(d는 출제자라 제외) — 그중 1명이 눌렀다.
-    expect($('skipTally').textContent).toBe('1/2명이 스킵을 눌렀습니다');
+    expect($('skipTally').textContent).toBe('1/2명이 이번 회차를 마쳤습니다 — 스킵 1');
   });
 
   it('전원이 누르면 2/2로 올라간다', async () => {
     await guessing();
     deliver(withSkips({ me: true, x: true }));
-    expect($('skipTally').textContent).toBe('2/2명이 스킵을 눌렀습니다');
+    expect($('skipTally').textContent).toBe('2/2명이 이번 회차를 마쳤습니다 — 스킵 2');
   });
 
   it('내가 누른 상태가 버튼 자체에 pressed 클래스로 나타난다', async () => {
@@ -505,12 +505,12 @@ describe('라운드 스킵 집계와 눌림 표시 (Fix 3)', () => {
     await guessing();
     deliver(room({
       players: [
- { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
-        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '' },
+ { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
+        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false },
       ],
     }));
-    expect($('skipTally').textContent).toBe('1/1명이 스킵을 눌렀습니다');
+    expect($('skipTally').textContent).toBe('1/1명이 이번 회차를 마쳤습니다 — 스킵 1');
   });
 });
 
@@ -531,7 +531,7 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
     $('answerSubmitBtn').click();
-    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+    expect($('answerSavedNote').textContent).toContain('제출됨 ✓');
   });
 
   it('엔터도 제출 버튼과 똑같이 확인을 켠다', async () => {
@@ -540,7 +540,7 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     input.value = '펭귄';
     input.dispatchEvent(new Event('input'));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+    expect($('answerSavedNote').textContent).toContain('제출됨 ✓');
     expect(live.out.filter((m) => m.t === 'answer').length).toBe(1);
   });
 
@@ -562,7 +562,7 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
     $('answerSubmitBtn').click();
-    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+    expect($('answerSavedNote').textContent).toContain('제출됨 ✓');
 
     input.value = '코끼리다';
     input.dispatchEvent(new Event('input'));
@@ -575,7 +575,7 @@ describe('답 제출 버튼과 저장 확인 (Fix 4)', () => {
     input.value = '코끼리';
     input.dispatchEvent(new Event('input'));
     $('answerSubmitBtn').click();
-    expect($('answerSavedNote').textContent).toBe('제출됨 ✓');
+    expect($('answerSavedNote').textContent).toContain('제출됨 ✓');
 
     deliver(room({ attempt: 2 }));
     expect($('answerSavedNote').textContent).not.toBe('제출됨 ✓');
@@ -656,5 +656,126 @@ describe('새 라운드가 지난 라운드 조립판을 덮어쓴다 (버그: �
     deliver(assembled());
     expect($('sliceBox').style.display).toBe('none');
     expect($('assembledWrap').style.display).toBe('');
+  });
+});
+
+describe('제출과 스킵은 서로를 잠근다', () => {
+  const answered = (over = {}) => room({
+    players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, answered: true } : p)),
+    ...over,
+  });
+
+  it('답을 내면 스킵이 잠긴다 — 스킵은 낸 답을 지우기 때문이다', async () => {
+    await guessing();
+    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(false);
+    deliver(answered());
+    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(true);
+  });
+
+  it('스킵이 잠긴 이유를 그 자리에 적는다', async () => {
+    await guessing();
+    deliver(answered());
+    expect($('skipLocked').textContent).toContain('답을 냈습니다');
+    expect($('skipNote').style.display).toBe('none');
+  });
+
+  it('답을 내도 입력칸과 제출은 열려 있다 — 고쳐 내는 것은 손해가 아니다', async () => {
+    await guessing();
+    deliver(answered());
+    expect($<HTMLInputElement>('answerInput').disabled).toBe(false);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(false);
+  });
+
+  it('스킵을 누르면 입력칸과 제출이 잠긴다', async () => {
+    await guessing();
+    deliver(room({
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, skipped: true } : p)),
+    }));
+    expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(true);
+  });
+});
+
+describe('낸 답만 지운다', () => {
+  it('제출한 뒤 회차가 넘어가면 입력칸을 비우고 지난 답을 알려준다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '고양이';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+
+    deliver(room({ attempt: 2 }));
+    deliver(slices());
+    expect(input.value).toBe('');
+    expect($('prevAnswer').textContent).toBe('지난 회차에 낸 답: 고양이');
+  });
+
+  it('제출하지 않은 글자는 회차가 넘어가도 남는다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '고양';
+    input.dispatchEvent(new Event('input'));
+
+    deliver(room({ attempt: 2 }));
+    deliver(slices());
+    expect(input.value).toBe('고양');
+    expect($('prevAnswer').textContent).toBe('');
+  });
+
+  it('라운드가 바뀌면 지난 답 기억도 지운다', async () => {
+    await guessing();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '고양이';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+    deliver(room({ attempt: 2 }));
+    expect($('prevAnswer').textContent).toContain('고양이');
+
+    deliver(room({ round: 1, attempt: 1 }));
+    deliver(slices());
+    expect($('prevAnswer').textContent).toBe('');
+    expect(input.value).toBe('');
+  });
+});
+
+describe('상단바는 조용해야 한다', () => {
+  it('붙어 있을 때는 연결 상태를 알리지 않는다', async () => {
+    await guessing();
+    expect($('netTag').textContent).toBe('');
+  });
+
+  it('방 코드는 로비에서만 뜬다', async () => {
+    await guessing();
+    expect($('roomTag').textContent).toBe('');
+    deliver(room({ phase: 'lobby' }));
+    expect($('roomTag').textContent).toContain('방 ');
+  });
+
+  it('라운드는 점으로 센다', async () => {
+    await guessing();
+    deliver(room({ round: 1, totalRounds: 4 }));
+    expect($('roundDots').textContent).toBe('●●○○');
+    expect($('roundDots').title).toBe('라운드 2/4');
+  });
+
+  it('주제는 상단이 아니라 맞히는 화면에 있다', async () => {
+    await guessing();
+    expect($('guessTopic').textContent).toBe('동물');
+  });
+});
+
+describe('로비 인원은 관전자를 빼고 센다', () => {
+  it('관전자는 참가자 수에 안 들어가고, 몇 명이 관전 중인지는 따로 적는다', async () => {
+    // 같이 세면 "참가자 5/4 — 시작할 수 있습니다"라고 해놓고 서버가 시작을 거절한다.
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby', hostId: 'me', minPlayers: 4,
+      players: [
+        ...PLAYERS.map((p) => ({ ...p, isDrawer: false })),
+        { id: 'w', name: '구경꾼', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 0, pendingScore: 0, doodleColor: '', spectator: true },
+      ],
+    }));
+    expect($('lobbyNote').textContent).toBe('참가자 3/4 · 관전 1명 — 1명 더 모이면 시작할 수 있습니다');
   });
 });
