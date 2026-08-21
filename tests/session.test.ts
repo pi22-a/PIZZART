@@ -35,7 +35,7 @@ const TEST_RULES = {
   minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
-  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1,
+  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5,
 };
 
 function newSession(names = ['p1', 'p2', 'p3', 'p4']) {
@@ -440,9 +440,39 @@ describe('추론 루프 — 개인 점수제', () => {
     }
   });
 
-  it('출제자는 점수를 받지 않는다', () => {
+  it('조각만 보고 다들 맞혀버리면 출제자는 아무것도 못 받는다', () => {
+    // 라운드가 조립판에 닿기도 전에 끝난다. 조각으로 알아볼 그림을 그린 값이다.
     s.answer('p2', word); s.answer('p3', word); s.answer('p4', word);
     expect(deltaOf('p1')).toBe(0);
+  });
+
+  it('조립판에서 한 명이 맞히면 출제자가 5점을 받는다', () => {
+    for (let i = 0; i < 5; i++) clock.fire();   // 조립판까지 아무도 못 맞힌다
+    s.answer('p2', word);
+    finish();
+    expect(deltaOf('p1')).toBe(TEST_RULES.drawerScore);
+  });
+
+  it('조립판에서 여럿이 맞혀도 출제자 몫은 그대로 5점이다', () => {
+    for (let i = 0; i < 5; i++) clock.fire();
+    s.answer('p2', word); s.answer('p3', word); s.answer('p4', word);
+    finish();
+    expect(deltaOf('p1')).toBe(TEST_RULES.drawerScore);
+  });
+
+  it('조립판에서도 아무도 못 맞히면 출제자는 못 받는다', () => {
+    for (let i = 0; i < 5; i++) clock.fire();
+    s.answer('p2', '엉뚱한답');
+    finish();
+    expect(deltaOf('p1')).toBe(0);
+  });
+
+  it('먼저 맞힌 사람이 있어도 조립판에서 나머지가 맞히면 출제자가 받는다', () => {
+    s.answer('p2', word);                       // 1회차에 p2만 맞힌다
+    for (let i = 0; i < 5; i++) clock.fire();
+    s.answer('p3', word);                       // 조립판에서 p3가 맞힌다
+    finish();
+    expect(deltaOf('p1')).toBe(TEST_RULES.drawerScore);
   });
 
   it('출제자는 스킵도 답도 낼 수 없다', () => {

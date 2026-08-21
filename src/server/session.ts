@@ -204,6 +204,7 @@ export class Session {
     this.skippedThisAttempt.clear();
     this.solved.clear();
     this.answerLog.clear();
+    this.drawerEarned = 0;
     this.phase = 'drawing';
 
     // 낙서 색을 미리 배정한다. 그릴 때 배정하면 남의 팔레트에는 그 사람이 첫 획을
@@ -291,6 +292,12 @@ export class Session {
 
   /** 이미 맞혀서 점수가 확정된 사람 → 그 점수 */
   protected solved = new Map<string, number>();
+
+  /**
+   * 이번 라운드에 출제자가 벌어들인 점수. 조립판에서 누가 맞히는 순간 한 번만 오른다.
+   * 몇 명이 맞혔든 값은 같다.
+   */
+  protected drawerEarned = 0;
   protected answers = new Map<string, string>();
   protected seen = new Map<string, Set<number>>();
 
@@ -463,8 +470,13 @@ export class Session {
       if (this.solved.has(id)) continue;
       const text = this.answers.get(id) ?? '';
       if (text.length === 0) continue;
-      if (judge(text, this.word)) this.solved.set(id, this.scoreFor(id));
-      else this.wrongSubmits.set(id, (this.wrongSubmits.get(id) ?? 0) + 1);
+      if (judge(text, this.word)) {
+        this.solved.set(id, this.scoreFor(id));
+        // 조립판에서 맞혔다면 출제자도 받는다. 여러 명이 맞혀도 한 번만 — 대입이라 저절로 그렇다.
+        if (this.attempt >= this.rules.maxAttempts) this.drawerEarned = this.rules.drawerScore;
+      } else {
+        this.wrongSubmits.set(id, (this.wrongSubmits.get(id) ?? 0) + 1);
+      }
     }
 
     // 이번 회차에 각자 뭘 했는지 남긴다. 출제자 현황판이 회차별로 되짚어 볼 자료다.
@@ -509,8 +521,10 @@ export class Session {
 
     // 점수는 맞힌 그 순간 이미 확정돼 solved에 들어 있다. 여기서 다시 계산하지 않는다 —
     // 지금 계산하면 그 뒤에 남이 쓴 힌트나 오답이 내 점수에 섞인다.
-    // 출제자는 점수를 받지 않는다.
     const delta = new Map<string, number>(this.solved);
+    // 출제자 몫은 조립판에서만 붙는다. 0이면 아예 넣지 않는다 — 넣으면 결과 화면에
+    // 출제자만 "+0"이라는 없는 줄이 하나 생긴다.
+    if (this.drawerEarned > 0) delta.set(this.drawerId, this.drawerEarned);
     for (const p of this.players) p.score += delta.get(p.id) ?? 0;
 
     // 결과 화면에도 마감 시각을 준다. 이 화면만 시간이 없으면 나가는 문이 next() 하나뿐인데,
@@ -790,7 +804,10 @@ export class Session {
       skipped: this.skippedThisAttempt.has(p.id),
       solved: this.solved.has(p.id),
       sliceCount: this.seen.get(p.id)?.size ?? 0,
-      pendingScore: this.solved.get(p.id) ?? this.scoreFor(p.id),
+      // 출제자는 조각을 맞히는 사람이 아니므로 scoreFor를 쓰면 아무 뜻 없는 숫자가 나간다.
+      pendingScore: p.id === this.drawerId && this.phase !== 'lobby'
+        ? this.drawerEarned
+        : this.solved.get(p.id) ?? this.scoreFor(p.id),
       doodleColor: this.doodleColors.get(p.id) ?? '',
     }));
     this.broadcast({

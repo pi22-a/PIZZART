@@ -12,6 +12,7 @@ describe('loadRules', () => {
     expect(r.maxAttempts).toBe(r.maxSlices + 1);
     expect(r.startScore).toBeGreaterThan(0);
     expect(r.finalAttemptScore).toBeGreaterThan(0);
+    expect(r.drawerScore).toBeGreaterThan(0);
   });
 
   it('시도 횟수만큼 점수 표가 있다', () => {

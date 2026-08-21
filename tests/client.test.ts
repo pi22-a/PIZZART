@@ -627,7 +627,7 @@ const TEST_RULES_CLIENT = {
   minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
-  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1,
+  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5,
 };
 
 describe('새 라운드가 지난 라운드 조립판을 덮어쓴다 (버그: 직전 출제자만 새 그림이 보인다)', () => {

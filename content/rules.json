@@ -10,5 +10,6 @@
   "startScore": 10,
   "wrongSubmitCost": 1,
   "attemptCost": 1,
-  "finalAttemptScore": 1
+  "finalAttemptScore": 1,
+  "drawerScore": 5
 }

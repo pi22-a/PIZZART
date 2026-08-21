@@ -391,7 +391,7 @@ function onMsg(m: ServerMsg): void {
       const deltaText = s.delta > 0 ? `+${s.delta}점` : `${s.delta}점`;
       const row = rows.get(s.playerId);
       const text = s.playerId === drawerId
-        ? deltaText
+        ? `출제 ${deltaText}`
         : row?.text
           ? `${row.text} (${deltaText})`
           : '(무응답)';
