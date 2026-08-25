@@ -905,3 +905,62 @@ describe('방장이 넘어오면 알린다', () => {
     expect($('toast').classList.contains('on')).toBe(false);
   });
 });
+
+describe('이야기판은 결과 화면이 다시 떠도 최신 줄을 보여준다', () => {
+  /** jsdom에는 레이아웃이 없다. 넘치는 로그를 흉내 낸다. */
+  function fakeOverflow(id: string, scrollHeight = 500, clientHeight = 132) {
+    const box = $(id);
+    Object.defineProperty(box, 'scrollHeight', { value: scrollHeight, configurable: true });
+    Object.defineProperty(box, 'clientHeight', { value: clientHeight, configurable: true });
+    return box;
+  }
+
+  it('결과 화면이 뜨면 바닥으로 붙인다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver({ t: 'chat', line: {
+      id: 'a', by: 'x', name: '친구', color: '#6fb6e8', text: '가', round: 0, word: '낙타',
+    } });
+
+    // 화면이 숨겨진 동안 브라우저가 스크롤을 0으로 되돌린 상태를 만든다
+    const box = fakeOverflow('roundChatLog');
+    box.scrollTop = 0;
+
+    deliver(room({ phase: 'roundEnd' }));
+    expect(box.scrollTop).toBe(500);
+  });
+
+  it('최종 화면도 마찬가지다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const box = fakeOverflow('finalChatLog', 800);
+    box.scrollTop = 0;
+
+    deliver(room({ phase: 'final' }));
+    expect(box.scrollTop).toBe(800);
+  });
+
+  it('바닥에 있을 때 새 줄이 오면 따라 내려간다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const box = fakeOverflow('roundChatLog', 300);
+    box.scrollTop = 300 - 132;   // 바닥
+
+    deliver({ t: 'chat', line: {
+      id: 'b', by: 'x', name: '친구', color: '#6fb6e8', text: '새 줄', round: 0, word: '낙타',
+    } });
+    expect(box.scrollTop).toBe(300);
+  });
+
+  it('위를 읽고 있으면 새 줄이 와도 끌어내리지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const box = fakeOverflow('roundChatLog', 300);
+    box.scrollTop = 0;           // 맨 위를 읽는 중
+
+    deliver({ t: 'chat', line: {
+      id: 'c', by: 'x', name: '친구', color: '#6fb6e8', text: '새 줄', round: 0, word: '낙타',
+    } });
+    expect(box.scrollTop).toBe(0);
+  });
+});

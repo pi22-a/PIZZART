@@ -8,7 +8,7 @@ import {
   renderTopics,
   syncClock,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots, renderChat,
-  flashHost, toast,
+  flashHost, toast, scrollChatToBottom,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
@@ -582,6 +582,7 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
     }
     return show('guess');
   }
-  if (phase === 'roundEnd') return show('round');
-  if (phase === 'final') return show('final');
+  // 붙이기는 화면을 띄운 뒤에 한다. 숨겨진 동안에는 높이가 0이라 아무 데도 못 붙인다.
+  if (phase === 'roundEnd') { show('round'); return scrollChatToBottom('roundChatLog'); }
+  if (phase === 'final') { show('final'); return scrollChatToBottom('finalChatLog'); }
 }

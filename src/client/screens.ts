@@ -303,6 +303,8 @@ export function renderChat(boxId: string, lines: ChatLine[]): void {
     return;
   }
   // 바닥에 붙어 있었으면 새 줄이 와도 계속 바닥에 둔다. 위를 읽고 있었으면 건드리지 않는다.
+  // 화면이 숨겨져 있으면 높이가 전부 0이라 "바닥"으로 읽힌다 — 그 편이 맞다.
+  // 다시 보일 때 최신 줄이 보여야 하기 때문이다(scrollChatToBottom).
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
 
   let lastRound = Number.NaN;
@@ -332,4 +334,19 @@ export function toast(html: string, ms = 5000): void {
   box.classList.add('on');
   clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => box.classList.remove('on'), ms);
+}
+
+/**
+ * 이야기판을 바닥으로 붙인다. 결과·최종 화면이 다시 뜰 때 부른다.
+ *
+ * 화면 전환은 display:none으로 하는데, 그 사이 브라우저가 스크롤 위치를 0으로 되돌린다.
+ * 그래서 라운드가 하나 끝날 때마다 이야기판이 맨 위(제일 오래된 줄)로 올라가 있었다 —
+ * 줄이 쌓일수록 방금 나눈 말이 화면 밖으로 밀려났다.
+ *
+ * 다시 그리는 것으로는 못 고친다. 화면이 뜨는 시점에는 새 줄이 없어서 renderChat이
+ * 아예 안 불리기 때문이다.
+ */
+export function scrollChatToBottom(boxId: string): void {
+  const box = $(boxId);
+  box.scrollTop = box.scrollHeight;
 }
