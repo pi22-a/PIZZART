@@ -32,6 +32,13 @@ export interface Rules {
   drawerScore: number;
   /** 0이면 자동으로 안 넘어간다 — 방장이 직접 눌러야 한다 */
   roundEndSeconds: number;
+  /**
+   * 출제자가 제시어를 다시 뽑을 수 있는 횟수.
+   *
+   * "뭘 그릴지 모르겠다"로 판이 멈추는 것을 막는 장치다. 그리는 시간은 안 늘어나므로
+   * 무한정 돌려도 이득이 없지만, 쉬운 단어가 나올 때까지 돌리는 것은 막아야 한다.
+   */
+  wordRerolls: number;
 }
 
 export interface Topic {

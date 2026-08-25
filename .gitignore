@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .superpowers/
+
+# 플레이 중 쌓이는 그림 기록. 커밋하지 않는다 — 백업은 직접.
+data/

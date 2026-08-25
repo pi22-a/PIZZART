@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 import { Session } from './session';
+import { saveDrawing } from './gallery';
 import type { ClientMsg } from '../shared/protocol';
 import type { Point } from '../shared/drawing';
 import { DOODLE_W, DOODLE_H } from '../shared/drawing';
@@ -50,6 +51,9 @@ function sessionFor(room: string): Session {
       if (c && c.socket.readyState === WebSocket.OPEN) {
         c.socket.send(JSON.stringify(msg));
       }
+    }, {
+      // 라운드가 끝날 때마다 그림을 파일에 쌓는다. 나중에 '지난 그림 보기' 모드의 재료다.
+      onDrawing: (rec) => saveDrawing({ ...rec, room } as typeof rec & { room: string }),
     });
     sessions.set(room, s);
   }

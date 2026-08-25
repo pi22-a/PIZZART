@@ -30,6 +30,13 @@ export interface PlayerInfo {
    * 사람이 누구인지 나머지가 알아야 하므로 전원에게 보낸다.
    */
   spectator: boolean;
+  /**
+   * 이름을 바꿀 수 있는가. 게임 도중에 들어온 사람만 참이다.
+   *
+   * 새로 온 사람이 계속 '손님'으로 남으면 결과 화면에서 누가 누군지 알 수 없다.
+   * 반대로 원래 있던 사람이 도중에 이름을 바꾸면 그때까지의 기록이 헷갈린다.
+   */
+  canRename: boolean;
 }
 
 export type ClientMsg =
@@ -59,6 +66,8 @@ export type ClientMsg =
   | { t: 'doodleColor'; color: string }
   /** 결과·최종 화면에서만. 다른 단계에서는 서버가 버린다. */
   | { t: 'chat'; text: string }
+  /** 제시어를 다시 뽑는다. 그리는 중에, 출제자만, 남은 횟수 안에서. */
+  | { t: 'reroll' }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };
@@ -117,8 +126,11 @@ export type ServerMsg =
       /** 방장이 고정한 주제. null이면 라운드마다 무작위로 뽑는다 */
       selectedTopic: string | null;
     }
-  /** 제시어. 출제자에게만 간다. */
-  | { t: 'word'; word: string }
+  /**
+   * 제시어. 정답을 아는 쪽(출제자·관전자)에게만 간다.
+   * rerollsLeft는 출제자가 제시어를 몇 번 더 바꿀 수 있는지다.
+   */
+  | { t: 'word'; word: string; rerollsLeft: number }
   /** 출제자가 새로고침했을 때 자기 그림을 되찾는다. 출제자에게만 간다. */
   | { t: 'canvas'; strokes: Point[][] }
   /**

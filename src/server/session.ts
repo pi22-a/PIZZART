@@ -22,10 +22,34 @@ interface Player {
    * 시작 전에 정하게 되고, 도중에 들어온 사람은 판이 끝나기 전에는 못 바꾼다.
    */
   spectator: boolean;
+  /**
+   * 게임이 도는 중에 들어온 사람인가. 이 사람만 도중에 이름을 바꿀 수 있다.
+   *
+   * 새로 온 사람이 '손님'으로 남으면 결과 화면에서 누가 누군지 알 수 없고,
+   * 원래 있던 사람이 도중에 이름을 바꾸면 그때까지의 기록이 헷갈린다.
+   */
+  lateJoin: boolean;
+}
+
+/** 한 라운드가 끝날 때 남기는 기록. 나중에 '지난 그림 보기' 모드의 재료가 된다. */
+export interface DrawingRecord {
+  at: string;
+  topic: string;
+  word: string;
+  sliceCount: number;
+  strokes: Point[][];
+  /** 맞힌 사람 수 / 맞히려 한 사람 수. 그 그림이 얼마나 어려웠는지가 여기 남는다. */
+  solved: number;
+  guessers: number;
 }
 
 export interface SessionOpts {
   scheduler?: Scheduler;
+  /**
+   * 라운드가 끝날 때 그림을 넘긴다. 세션은 어디에 어떻게 쌓이는지 모른다 —
+   * 파일을 여기서 열면 테스트가 돌 때마다 디스크에 쓴다.
+   */
+  onDrawing?: (rec: DrawingRecord) => void;
   /** 0 <= 결과 < n 인 정수. 테스트에서 고정한다. */
   pick?: (n: number) => number;
   shuffle?: <T>(xs: T[]) => T[];
@@ -76,6 +100,9 @@ export class Session {
   /** 이번 게임에 이미 나온 제시어. 같은 판에서 두 번 나오면 정답을 흘리는 셈이다. */
   private usedWords = new Set<string>();
 
+  /** 이번 라운드에 출제자가 제시어를 더 바꿀 수 있는 횟수. 라운드마다 다시 찬다. */
+  private rerollsLeft = 0;
+
   /**
    * 결과·최종 화면에서 오간 이야기. 한 판 내내 이어지고 새 판에서 비워진다.
    *
@@ -95,6 +122,7 @@ export class Session {
   private readonly shuffle: <T>(xs: T[]) => T[];
   readonly rules: Rules;
   private readonly topics: Topic[];
+  private readonly onDrawing?: (rec: DrawingRecord) => void;
 
   constructor(
     private send: (playerId: string, msg: ServerMsg) => void,
@@ -105,6 +133,7 @@ export class Session {
     this.shuffle = opts.shuffle ?? defaultShuffle;
     this.rules = opts.rules ?? loadRules();
     this.topics = opts.topics ?? loadTopics();
+    this.onDrawing = opts.onDrawing;
   }
 
   /** 테스트에서 들여다보기 위한 것 */
@@ -124,7 +153,10 @@ export class Session {
       existing.connected = true;
       // 이름을 새로 보냈으면 갱신한다. 버리면 이름칸에 뭘 치든 계속 '손님'이고,
       // 이 게임의 하이라이트인 결과 화면이 '손님 — 코끼리' 다섯 줄이 된다.
-      if (name) existing.name = name;
+      //
+      // 단 게임이 도는 중에는 도중에 들어온 사람만 바꿀 수 있다. 원래 있던 사람이
+      // 중간에 이름을 갈면 그때까지 쌓인 답 기록과 이야기가 누구 것인지 어긋난다.
+      if (name && (this.phase === 'lobby' || existing.lateJoin)) existing.name = name;
     } else {
       // 끊긴 사람은 정원에 세지 않는다. 유령까지 세면 세 명 있는 방이
       // 진짜 사람에게 "방이 가득 찼습니다"를 돌려준다.
@@ -136,7 +168,8 @@ export class Session {
       // 이미 나뉘었으므로 이번 라운드에 낄 자리가 없고, 다음 라운드에 슬쩍 끼워주면
       // 남들이 한 판을 다 도는 동안 이 사람만 출제 없이 맞히기만 하게 된다.
       // 로비로 돌아올 때까지 관전이고, 그때 본인이 끈다.
-      this.players.push({ id, name, connected: true, score: 0, spectator: this.phase !== 'lobby' });
+      const late = this.phase !== 'lobby';
+      this.players.push({ id, name, connected: true, score: 0, spectator: late, lateJoin: late });
     }
     if (!this.hostId) this.hostId = id;
 
@@ -149,10 +182,10 @@ export class Session {
   private restore(id: string): void {
     // 출제자와 관전자는 같은 것을 본다. 돌아왔을 때도 같은 것을 되찾아야 한다.
     if (this.phase === 'drawing' && this.knowsAnswer(id)) {
-      this.send(id, { t: 'word', word: this.word });
+      this.send(id, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
       this.send(id, { t: 'canvas', strokes: this.strokes });
     }
-    if (this.phase === 'drawing' && !this.knowsAnswer(id)) {
+    if (this.phase === 'drawing' && id !== this.drawerId) {
       this.send(id, { t: 'doodleBoard', strokes: this.doodle });
     }
     if (this.phase === 'guessing' && this.seen.has(id)) {
@@ -164,7 +197,7 @@ export class Session {
     if (this.phase === 'guessing' && this.knowsAnswer(id)) {
       // 제시어를 같이 보낸다. 추론 중에 들어온 관전자는 word를 받은 적이 없어서,
       // 현황판만 주면 남들이 뭘 맞히려는지 모르는 채로 구경하게 된다.
-      this.send(id, { t: 'word', word: this.word });
+      this.send(id, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
       this.sendBoard();
     }
     if (this.phase === 'roundEnd' && this.lastRoundEnd) {
@@ -240,6 +273,8 @@ export class Session {
     }
     this.order = live.map((p) => p.id);
     this.round = 0;
+    // 새 판이 시작되면 아무도 '늦게 온 사람'이 아니다. 이름은 로비에서 바꾼다.
+    for (const p of this.players) p.lateJoin = false;
     this.usedWords.clear();
     this.chatLog = [];
     this.doodleColors.clear();
@@ -259,6 +294,7 @@ export class Session {
     const chosen = this.nextWord();
     this.topic = chosen.topic;
     this.word = chosen.word;
+    this.rerollsLeft = this.rules.wordRerolls;
     this.strokes = [];
     this.slices = [];
     this.owner.clear();
@@ -287,10 +323,40 @@ export class Session {
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
     this.setDeadline(this.rules.drawSeconds, () => this.endDrawing());
     this.broadcastRoom();
-    this.send(this.drawerId, { t: 'word', word: this.word });
+    this.send(this.drawerId, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
     // 관전자는 출제자와 같은 것을 본다. 빈 캔버스부터 같이 보게 지금 한 번 보낸다.
     for (const p of this.spectators()) {
-      this.send(p.id, { t: 'word', word: this.word });
+      this.send(p.id, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
+      this.send(p.id, { t: 'canvas', strokes: this.strokes });
+    }
+  }
+
+  /**
+   * 제시어를 다시 뽑는다. 그리는 중에, 출제자만, 남은 횟수 안에서.
+   *
+   * "뭘 그릴지 모르겠다"로 판이 멈추는 것을 막는 장치다. 두 가지를 일부러 안 한다:
+   * 시간은 다시 안 준다(돌려서 시간을 벌 수 없어야 한다), 주제는 안 바꾼다
+   * (맞히는 사람들이 이미 주제를 받았고, 바뀌면 그 힌트가 거짓이 된다).
+   */
+  rerollWord(playerId: string): void {
+    if (this.phase !== 'drawing') return;
+    if (playerId !== this.drawerId) return;
+    if (this.rerollsLeft <= 0) return;
+
+    this.rerollsLeft--;
+    // 같은 주제 안에서만 다시 뽑는다.
+    const before = this.selectedTopic;
+    this.selectedTopic = this.topic;
+    const chosen = this.nextWord();
+    this.selectedTopic = before;
+    this.word = chosen.word;
+
+    // 그리던 것은 지운다. 다른 단어를 보고 그린 선이라 남겨두면 정답과 어긋난다.
+    this.strokes = [];
+    this.send(playerId, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
+    this.send(playerId, { t: 'canvas', strokes: this.strokes });
+    for (const p of this.spectators()) {
+      this.send(p.id, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
       this.send(p.id, { t: 'canvas', strokes: this.strokes });
     }
   }
@@ -440,9 +506,10 @@ export class Session {
     const safe = this.ensureDoodleColor(playerId);
     this.doodle.push({ by: playerId, points, color: safe });
     if (this.doodle.length > Session.DOODLE_MAX) this.doodle.shift();
-    // 기다리는 사람들끼리만 본다. 정답을 아는 쪽은 화면 자체가 다르다.
+    // 출제자만 빼고 전부에게 보낸다. 관전자는 그리지는 못하지만 보는 것은 안전하다 —
+    // 이미 정답을 아는 사람이라 낙서에서 새어 나갈 것이 없다.
     for (const p of this.players) {
-      if (this.knowsAnswer(p.id)) continue;
+      if (p.id === this.drawerId) continue;
       this.send(p.id, { t: 'doodleStroke', by: playerId, points, color: safe });
     }
   }
@@ -453,7 +520,7 @@ export class Session {
     this.doodle = this.doodle.filter((s) => s.by !== playerId);
     if (this.doodle.length === before) return;
     for (const p of this.players) {
-      if (this.knowsAnswer(p.id)) continue;
+      if (p.id === this.drawerId) continue;
       this.send(p.id, { t: 'doodleBoard', strokes: this.doodle });
     }
   }
@@ -654,12 +721,29 @@ export class Session {
       drawing: this.strokes,
       sliceCount: this.slices.length,
       owners: this.slices.map((s) => ({ sliceIndex: s.index, playerId: this.owner.get(s.index) ?? null })),
-      scores: this.players.map((p) => ({ playerId: p.id, delta: delta.get(p.id) ?? 0, total: p.score })),
+      // 관전자는 뺀다. 점수가 없는 사람이 0점으로 줄에 끼면 꼴찌로 읽히고,
+      // 결과 화면 답 목록도 이 줄로 그려지므로 '(무응답)'까지 따라붙는다.
+      scores: this.players
+        .filter((p) => !p.spectator)
+        .map((p) => ({ playerId: p.id, delta: delta.get(p.id) ?? 0, total: p.score })),
       correct,
       answers,
     };
     this.lastRoundEnd = msg;
     this.broadcast(msg);
+
+    // 그림을 남긴다. 빈 캔버스는 남길 것이 없다.
+    if (this.strokes.length > 0) {
+      this.onDrawing?.({
+        at: new Date().toISOString(),
+        topic: this.topic,
+        word: this.word,
+        sliceCount: this.slices.length,
+        strokes: this.strokes,
+        solved: correct.length,
+        guessers: this.seen.size,
+      });
+    }
   }
 
   next(playerId: string): void {
@@ -733,6 +817,7 @@ export class Session {
     const msg: ServerMsg = {
       t: 'final',
       ranking: this.players
+        .filter((p) => !p.spectator)
         .map((p) => ({ playerId: p.id, name: p.name, score: p.score }))
         .sort((a, b) => b.score - a.score),
     };
@@ -793,6 +878,7 @@ export class Session {
       case 'doodleClear': return this.clearDoodle(playerId);
       case 'doodleColor': return this.setDoodleColor(playerId, msg.color);
       case 'chat': return this.chat(playerId, msg.text);
+      case 'reroll': return this.rerollWord(playerId);
       case 'next': return this.next(playerId);
       default: return;
     }
@@ -974,6 +1060,8 @@ export class Session {
         : this.solved.get(p.id) ?? this.scoreFor(p.id),
       doodleColor: this.doodleColors.get(p.id) ?? '',
       spectator: p.spectator,
+      // 로비에서는 이름칸이 원래 열려 있으므로 따로 표시하지 않는다.
+      canRename: this.phase !== 'lobby' && p.lateJoin,
     }));
     this.broadcast({
       t: 'room',

@@ -36,9 +36,25 @@ themeBtn.addEventListener('click', () => {
 const params = new URLSearchParams(location.search);
 const room = (params.get('room') ?? 'LOBBY').toUpperCase();
 
-/** 새로고침해도 같은 자리로 돌아오게 하는 식별자 */
-let cid = sessionStorage.getItem('pizza-cid');
-if (!cid) { cid = crypto.randomUUID(); sessionStorage.setItem('pizza-cid', cid); }
+/**
+ * 같은 자리로 돌아오게 하는 식별자.
+ *
+ * sessionStorage에 두었더니 탭을 닫는 순간 사라져서, 다시 들어오면 새 사람이 되고
+ * 점수가 0으로 시작했다. localStorage는 탭을 닫아도 남는다.
+ *
+ * 대가는 같은 브라우저의 모든 탭이 한 자리를 나눠 쓰게 되는 것이다.
+ * 혼자 여러 창으로 시험할 때 곤란하므로 ?seat=2 처럼 이름을 붙이면 자리가 갈린다.
+ */
+const seat = params.get('seat') ?? '';
+const CID_KEY = seat ? `pizza-cid:${seat}` : 'pizza-cid';
+const NAME_KEY = seat ? `pizza-name:${seat}` : 'pizza-name';
+/** 사생활 모드에서는 저장이 막힌다. 그렇다고 판이 멈추면 안 된다. */
+const keep = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* 무시 */ } },
+};
+let cid = keep.get(CID_KEY);
+if (!cid) { cid = crypto.randomUUID(); keep.set(CID_KEY, cid); }
 
 let youId = '';
 let hostId = '';
@@ -173,7 +189,7 @@ const nameInput = $('nameInput') as HTMLInputElement;
 const nameSaveBtn = $('nameSaveBtn') as HTMLButtonElement;
 const NAME_HINT_DEFAULT = '엔터를 쳐도 저장됩니다 · 최대 12자';
 // 새로고침해도 이름을 잃지 않는다. 잃으면 서버가 이름을 받아줘도 다시 '손님'이 된다.
-nameInput.value = params.get('name') ?? sessionStorage.getItem('pizza-name') ?? '';
+nameInput.value = params.get('name') ?? keep.get(NAME_KEY) ?? '';
 /** 지금까지 서버에 확정된 이름. 빈 이름 저장 시도를 되돌릴 때 여기로 복원한다. */
 let lastName = nameInput.value.trim() || '손님';
 const join = () => net.send({ t: 'join', name: lastName, cid: cid! });
@@ -194,16 +210,44 @@ const saveName = () => {
     return;
   }
   lastName = raw;
-  sessionStorage.setItem('pizza-name', raw);
+  keep.set(NAME_KEY, raw);
   net.send({ t: 'join', name: raw, cid: cid! });
   setTag('nameHint', NAME_HINT_DEFAULT);
 };
 nameSaveBtn.addEventListener('click', saveName);
 nameInput.addEventListener('change', saveName);
+/**
+ * 한글은 조합이 끝나기 전에 엔터가 먼저 온다.
+ *
+ * 조합 중(isComposing)에 보내면 마지막 글자가 아직 확정되지 않은 상태로 나가고,
+ * 그 뒤에 확정된 글자가 입력칸에 남는다. 채팅에서는 그 글자가 다음 엔터에 또 나가
+ * "다리다리" 뒤에 "리"가 한 줄 더 붙었고, 답 입력칸에서는 "고양이"를 치고 엔터를
+ * 눌렀는데 "고양"이 제출돼 오답으로 1점을 잃었다.
+ */
+const enterSent = (e: KeyboardEvent) => e.key === 'Enter' && !e.isComposing;
+
 nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Enter') saveName();
+  if (enterSent(e)) saveName();
 });
 
+/** 관전 중에 무엇을 볼지. 출제자 그림이 기본이다 — 관전은 그걸 보러 온 것이다. */
+let specView: 'draw' | 'doodle' = 'draw';
+$('viewDrawBtn').addEventListener('click', () => { specView = 'draw'; paintSpecView(); });
+$('viewDoodleBtn').addEventListener('click', () => { specView = 'doodle'; paintSpecView(); });
+
+// 게임 도중에 들어온 사람만 쓰는 이름칸. 서버가 다시 확인한다.
+const lateNameInput = $('lateNameInput') as HTMLInputElement;
+const saveLateName = () => {
+  const raw = lateNameInput.value.trim();
+  if (!raw) return;
+  keep.set(NAME_KEY, raw);
+  net.send({ t: 'join', name: raw, cid: cid! });
+  setTag('lateNameNote', '저장됐습니다');
+};
+$('lateNameBtn').addEventListener('click', saveLateName);
+lateNameInput.addEventListener('keydown', (e: KeyboardEvent) => { if (enterSent(e)) saveLateName(); });
+
+$('rerollBtn').addEventListener('click', () => net.send({ t: 'reroll' }));
 $('startBtn').addEventListener('click', () => net.send({ t: 'start' }));
 $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));
 $('undoBtn').addEventListener('click', () => net.send({ t: 'undo' }));
@@ -229,7 +273,7 @@ answerInput.addEventListener('input', () => {
 // 엔터는 모두의 반사 신경이다. 여기서 안 받으면 아무 일도 안 일어난 것처럼 보인다.
 // 제출 버튼과 똑같이 즉시 반영 + 확인 표시까지 간다.
 answerInput.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Enter') submitAnswer();
+  if (enterSent(e)) submitAnswer();
 });
 $('answerSubmitBtn').addEventListener('click', submitAnswer);
 
@@ -252,7 +296,7 @@ function wireChat(inputId: string, sendId: string): void {
     // 비우는 것이 곧 "나갔다"는 신호다. 남아 있으면 또 보낸 줄 알고 다시 누른다.
     box.value = '';
   };
-  box.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') send(); });
+  box.addEventListener('keydown', (e: KeyboardEvent) => { if (enterSent(e)) send(); });
   $(sendId).addEventListener('click', send);
 }
 wireChat('roundChatInput', 'roundChatSend');
@@ -332,6 +376,8 @@ function onMsg(m: ServerMsg): void {
     renderRoundDots(m.round, m.phase === 'lobby' ? 0 : m.totalRounds);
     // 주제는 상단이 아니라 조각 옆에 있다. 시선이 이미 가 있는 자리라야 읽힌다.
     setTag('guessTopic', m.topic);
+    // 그리는 화면에도 준다. 출제자도 관전자도 그동안 주제를 볼 데가 없었다.
+    setTag('drawTopic', m.topic ? `주제 ${m.topic}` : '');
     // 소리는 시간이 도는 단계에서만 낸다. 결과 화면처럼 마감이 없는 곳은 조용하다.
     countdown(m.deadline, (left) => {
       if (m.phase === 'drawing' || m.phase === 'guessing') timeTick(left);
@@ -393,6 +439,18 @@ function onMsg(m: ServerMsg): void {
       : `${names.get(hostId) ?? '방장'} 님이 눌러야 새 판이 시작됩니다`;
     renderLobbyNote(m.players, youId, hostId, m.minPlayers);
 
+    // 관전 전환 줄은 그리는 동안에만 쓸모가 있다. 그때 말고는 볼 것이 하나뿐이다.
+    $('watchBar').style.display = iWatch && m.phase === 'drawing' ? '' : 'none';
+
+    // 도중에 들어온 사람에게만 이름칸을 준다. 원래 있던 사람이 중간에 이름을 갈면
+    // 그때까지 쌓인 답 기록과 이야기가 누구 것인지 어긋난다.
+    const canRename = me?.canRename === true;
+    $('renameBar').style.display = canRename ? '' : 'none';
+    if (canRename && document.activeElement !== lateNameInput && !lateNameInput.value) {
+      lateNameInput.value = me?.name === '손님' ? '' : (me?.name ?? '');
+      setTag('lateNameNote', '새로 오셨네요 — 이름을 정해두면 결과 화면에서 알아보기 쉽습니다');
+    }
+
     // 관전 여부가 바뀌면 화면도 다시 잡아야 한다. 로비에서 관전을 켜고 시작하면
     // phase만 보고는 s-guess로 갈 수 있다.
     if (m.phase !== lastPhase || iWatch !== lastWatch) {
@@ -442,7 +500,17 @@ function onMsg(m: ServerMsg): void {
     return;
   }
 
-  if (m.t === 'word') { setTag('wordTag', m.word); return; }
+  if (m.t === 'word') {
+    setTag('wordTag', m.word);
+    // 남은 횟수를 버튼에 적는다. 몇 번 남았는지 모르면 아껴 쓸지 말지 정할 수 없다.
+    const btn = $('rerollBtn') as HTMLButtonElement;
+    btn.textContent = m.rerollsLeft > 0 ? `제시어 바꾸기 (${m.rerollsLeft})` : '제시어 바꾸기';
+    btn.disabled = m.rerollsLeft <= 0;
+    btn.title = m.rerollsLeft > 0
+      ? '다른 제시어를 받습니다. 주제와 남은 시간은 그대로이고, 그리던 것은 지워집니다'
+      : '더 바꿀 수 없습니다';
+    return;
+  }
   if (m.t === 'canvas') { drawCanvas.render(m.strokes); return; }
 
   if (m.t === 'doodleStroke') { doodle.add({ by: m.by, points: m.points, color: m.color }); return; }
@@ -523,6 +591,28 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'error') { alert(m.msg); return; }
 }
 
+/**
+ * 관전 중 보는 화면을 다시 잡는다. 전환 버튼과 onPhase가 같이 쓴다.
+ *
+ * 출제자 그림과 낙서판은 서로 다른 화면(s-draw / s-wait)에 있으므로,
+ * 전환은 곧 화면을 갈아 끼우는 일이다.
+ */
+function paintSpecView(phase: string = lastPhase): void {
+  $('viewDrawBtn').classList.toggle('on', specView === 'draw');
+  $('viewDoodleBtn').classList.toggle('on', specView === 'doodle');
+  // 단계를 인자로 받는다. onPhase가 부를 때는 lastPhase가 아직 이전 단계를 가리키고 있어서,
+  // 그 값을 보면 관전 화면이 처음 뜨는 그 순간에만 아무 일도 안 일어난다.
+  if (!iWatch || phase !== 'drawing') return;
+  if (specView === 'draw') {
+    $('doodleWrap').style.display = 'none';
+    show('draw');
+  } else {
+    $('boardWrap').style.display = 'none';
+    $('doodleWrap').style.display = '';
+    show('wait');
+  }
+}
+
 function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: string): void {
   if (phase !== 'guessing') stopSpinHint();
 
@@ -533,12 +623,16 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
   if (iWatch && phase !== 'lobby' && phase !== 'roundEnd' && phase !== 'final') {
     $('doneBtn').style.display = 'none';
     $('undoBtn').style.display = 'none';
+    $('rerollBtn').style.display = 'none';
     $('drawCanvas').classList.add('watching');
     $('doodleWrap').style.display = 'none';
     if (phase === 'drawing') {
       const drawer = players.find((p) => p.isDrawer);
       $('drawWatchNote').textContent = `관전 중 — ${drawer?.name ?? '누군가'} 님이 그리는 중입니다`;
-      return show('draw');
+      // 관전자는 낙서판을 볼 수는 있고 그리지는 못한다. 정답을 아는 사람이 그리면
+      // 그게 곧 정답을 알려주는 짓이라 서버도 받지 않는다.
+      $('doodleCanvas').classList.add('watching');
+      return paintSpecView(phase);
     }
     $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
     $('waitWho').textContent = '관전 중 — 모두가 이 그림을 맞히는 중입니다';
@@ -549,7 +643,9 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
     // 관전을 껐다. 감춰둔 것을 되돌린다.
     $('doneBtn').style.display = '';
     $('undoBtn').style.display = '';
+    $('rerollBtn').style.display = '';
     $('drawCanvas').classList.remove('watching');
+    $('doodleCanvas').classList.remove('watching');
     $('drawWatchNote').textContent = '';
   }
 

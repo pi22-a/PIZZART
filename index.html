@@ -103,7 +103,10 @@
   .pill.topic { background:var(--sauce); color:#1c1712; font-weight:700; font-size:17px; padding:5px 15px; }
 
   /* 관전 중에는 캔버스가 구경거리지 그리는 곳이 아니다. */
-  #drawCanvas.watching { pointer-events:none; }
+  #drawCanvas.watching, #doodleCanvas.watching { pointer-events:none; }
+  .watchbar, .renamebar { margin-top:-4px; }
+  .watchbar button.on, .renamebar button.on { background:var(--sauce); color:#1c1712; border-color:var(--sauce); }
+  .renamebar input { max-width:180px; }
   /* 인원 알약 줄 바로 아래에 화면 내용(조각 액자, 그리기 버튼 등)이 틈 없이 붙어 있었다.
      화면마다 따로 손보는 대신 .screen 하나에 위쪽 여백을 줘서 전 화면이 한 번에 떨어지게 한다. */
   .screen { margin-top:16px; }
@@ -208,6 +211,21 @@
   </div>
   <div class="players" id="players"></div>
 
+  <!-- 관전자 전용 줄. 관전 중이 아니면 통째로 숨는다. -->
+  <div class="bar watchbar" id="watchBar" style="display:none">
+    <span class="muted" id="watchViewLabel">보는 화면</span>
+    <button id="viewDrawBtn" class="ghost">출제자 그림</button>
+    <button id="viewDoodleBtn" class="ghost">같이 낙서판</button>
+  </div>
+
+  <!-- 게임 도중에 들어온 사람만 뜬다. 계속 '손님'이면 결과 화면에서 누군지 알 수 없다. -->
+  <div class="bar renamebar" id="renameBar" style="display:none">
+    <label class="muted" for="lateNameInput">이름</label>
+    <input id="lateNameInput" placeholder="이름" maxlength="12" />
+    <button id="lateNameBtn" class="ghost">저장</button>
+    <span class="muted" id="lateNameNote"></span>
+  </div>
+
   <section class="screen on" id="s-lobby">
     <h1>P I Z Z A</h1>
     <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
@@ -289,9 +307,14 @@
        버튼만 감추고 캔버스 입력만 막으면 그대로 관전 화면이 된다. -->
   <section class="screen" id="s-draw">
     <div class="bar">
+      <!-- 주제는 그리는 사람에게도 필요하다. 상단바를 걷어내면서 여기 넣는 걸 빠뜨려
+           출제자와 관전자 둘 다 주제를 못 보고 있었다. -->
+      <span class="pill" id="drawTopic"></span>
       <span class="pill big word" id="wordTag"></span>
       <button id="doneBtn">다 그렸다</button>
       <button id="undoBtn">되돌리기</button>
+      <!-- 뭘 그릴지 막막해서 판이 멈추는 것을 막는다. 시간은 다시 안 준다. -->
+      <button id="rerollBtn" class="ghost">제시어 바꾸기</button>
       <span class="muted" id="drawWatchNote"></span>
     </div>
     <div style="max-width:520px"><canvas id="drawCanvas"></canvas></div>

@@ -35,7 +35,7 @@ const TEST_RULES = {
   minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
-  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5,
+  startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5, wordRerolls: 2,
 };
 
 function newSession(names = ['p1', 'p2', 'p3', 'p4']) {
@@ -1327,18 +1327,23 @@ describe('관전 자리', () => {
     expect(msgsTo('p5').filter((m) => m.t === 'board').length).toBeGreaterThan(0);
   });
 
-  it('관전자는 낙서판에 그릴 수 없고 남의 낙서도 안 받는다', () => {
-    // 정답을 아는 사람이 대기 화면에 그리면 그것이 곧 정답을 알려주는 짓이다.
+  it('관전자는 낙서판에 그릴 수 없다 — 정답을 아는 사람이 그리면 그게 유출이다', () => {
     s.setSpectator('p5', true);
     s.start('p1');
     sent = [];
     s.addDoodle('p5', [[10, 10], [20, 20]], '#6fb6e8');
     expect(msgsOfType('doodleStroke').length).toBe(0);
+  });
 
+  it('관전자도 남의 낙서는 볼 수 있다 — 보는 것으로는 아무것도 새지 않는다', () => {
+    s.setSpectator('p5', true);
+    s.start('p1');
     sent = [];
     s.addDoodle('p2', [[10, 10], [20, 20]], '#6fb6e8');
-    expect(msgsTo('p5').filter((m) => m.t === 'doodleStroke').length).toBe(0);
+    expect(msgsTo('p5').filter((m) => m.t === 'doodleStroke').length).toBe(1);
     expect(msgsTo('p3').filter((m) => m.t === 'doodleStroke').length).toBe(1);
+    // 출제자는 여전히 안 받는다. 그릴 화면 자체가 다르다.
+    expect(msgsTo('p1').filter((m) => m.t === 'doodleStroke').length).toBe(0);
   });
 
   it('관전자만 남으면 시작할 수 없다', () => {
@@ -1600,5 +1605,176 @@ describe('방장은 늘 참여 중인 사람에게 넘어간다', () => {
     s.setSpectator('p2', true);
     s.disconnect('p1');
     expect(roomNow().hostId).toBe('p2');
+  });
+});
+
+describe('제시어 바꾸기', () => {
+  const wordTo = (id: string) =>
+    (msgsTo(id).filter((m) => m.t === 'word').at(-1) as Extract<ServerMsg, { t: 'word' }>);
+
+  beforeEach(() => { newSession(); s.start('p1'); });
+
+  it('출제자가 바꾸면 다른 제시어가 온다', () => {
+    const before = wordTo('p1');
+    expect(before.rerollsLeft).toBe(TEST_RULES.wordRerolls);
+    s.rerollWord('p1');
+    const after = wordTo('p1');
+    expect(after.word).not.toBe(before.word);
+    expect(after.rerollsLeft).toBe(TEST_RULES.wordRerolls - 1);
+  });
+
+  it('주제는 그대로다 — 맞히는 사람들이 이미 받은 힌트가 거짓이 되면 안 된다', () => {
+    const topic = msgsOfType('room').at(-1)!.topic;
+    s.rerollWord('p1');
+    expect(msgsOfType('room').at(-1)!.topic).toBe(topic);
+  });
+
+  it('그리던 것은 지운다 — 다른 단어를 보고 그린 선이다', () => {
+    s.addStroke('p1', [[300, 200], [400, 300]]);
+    expect(s.strokeCount).toBe(1);
+    s.rerollWord('p1');
+    expect(s.strokeCount).toBe(0);
+  });
+
+  it('정해진 횟수를 넘으면 안 바뀐다', () => {
+    for (let i = 0; i < TEST_RULES.wordRerolls; i++) s.rerollWord('p1');
+    const last = wordTo('p1');
+    expect(last.rerollsLeft).toBe(0);
+    s.rerollWord('p1');
+    expect(wordTo('p1').word).toBe(last.word);
+  });
+
+  it('출제자가 아니면 못 바꾼다', () => {
+    const before = wordTo('p1');
+    s.rerollWord('p2');
+    expect(wordTo('p1').word).toBe(before.word);
+  });
+
+  it('그리는 중이 아니면 못 바꾼다', () => {
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    const before = wordTo('p1');
+    s.rerollWord('p1');
+    expect(wordTo('p1').word).toBe(before.word);
+  });
+
+  it('라운드가 바뀌면 횟수가 다시 찬다', () => {
+    s.rerollWord('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    s.next('p1');
+    expect(wordTo('p2').rerollsLeft).toBe(TEST_RULES.wordRerolls);
+  });
+});
+
+describe('이름은 도중에 들어온 사람만 바꾼다', () => {
+  const nameOf = (id: string) =>
+    msgsOfType('room').at(-1)!.players.find((p) => p.id === id)!.name;
+  const canRename = (id: string) =>
+    msgsOfType('room').at(-1)!.players.find((p) => p.id === id)!.canRename;
+
+  beforeEach(() => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    s.join('p9', '손님');
+  });
+
+  it('난입자는 바꿀 수 있다', () => {
+    expect(canRename('p9')).toBe(true);
+    s.join('p9', '늦둥이');
+    expect(nameOf('p9')).toBe('늦둥이');
+  });
+
+  it('원래 있던 사람은 못 바꾼다 — 쌓인 기록이 누구 것인지 어긋난다', () => {
+    expect(canRename('p2')).toBe(false);
+    s.join('p2', '딴사람');
+    expect(nameOf('p2')).toBe('p2');
+  });
+
+  it('로비에서는 누구나 바꾼다', () => {
+    newSession();
+    s.join('p2', '바꾼이름');
+    expect(nameOf('p2')).toBe('바꾼이름');
+  });
+
+  it('새 판이 시작되면 아무도 늦게 온 사람이 아니다', () => {
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+      if (s.phase === 'drawing') {
+        s.addStroke(s.drawerId, [[300, 200], [400, 300], [200, 400], [300, 200]]);
+        s.drawDone(s.drawerId);
+      }
+    }
+    s.again('p1');
+    s.start('p1');
+    expect(canRename('p9')).toBe(false);
+  });
+});
+
+describe('관전자는 점수판 어디에도 안 나온다', () => {
+  it('결과 화면 점수줄과 최종 등수에서 빠진다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+
+    const end = msgsOfType('roundEnd').at(-1)!;
+    expect(end.scores.map((x) => x.playerId)).not.toContain('p5');
+    expect(end.answers.map((x) => x.playerId)).not.toContain('p5');
+
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      s.next('p1');
+      if (s.phase === 'drawing') {
+        s.addStroke(s.drawerId, [[300, 200], [400, 300], [200, 400], [300, 200]]);
+        s.drawDone(s.drawerId);
+      }
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    }
+    const fin = msgsOfType('final').at(-1)!;
+    expect(fin.ranking.map((r) => r.playerId)).not.toContain('p5');
+  });
+});
+
+describe('그림을 모은다', () => {
+  it('라운드가 끝나면 그림 한 장이 기록으로 넘어온다', () => {
+    const got: unknown[] = [];
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs,
+      onDrawing: (rec) => got.push(rec),
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+
+    expect(got.length).toBe(1);
+    const rec = got[0] as { word: string; topic: string; strokes: unknown[]; guessers: number };
+    expect(rec.word.length).toBeGreaterThan(0);
+    expect(rec.topic.length).toBeGreaterThan(0);
+    expect(rec.strokes.length).toBe(1);
+    expect(rec.guessers).toBe(3);
+  });
+
+  it('빈 캔버스는 남기지 않는다', () => {
+    const got: unknown[] = [];
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs,
+      onDrawing: (rec) => got.push(rec),
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.start('p1');
+    s.drawDone('p1');   // 아무것도 안 그리고 끝냈다
+    expect(got.length).toBe(0);
   });
 });
