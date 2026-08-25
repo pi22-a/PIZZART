@@ -39,6 +39,18 @@ export interface PlayerInfo {
   canRename: boolean;
 }
 
+/** 로비 방 목록의 한 줄. */
+export interface RoomInfo {
+  code: string;
+  name: string;
+  count: number;
+  max: number;
+  phase: Phase;
+  round: number;
+  totalRounds: number;
+  locked: boolean;
+}
+
 export type ClientMsg =
   /** cid는 브라우저가 sessionStorage에 들고 다니는 식별자다. 새로고침해도 같은 자리로 돌아온다. */
   | { t: 'join'; name: string; cid: string }
@@ -68,6 +80,12 @@ export type ClientMsg =
   | { t: 'chat'; text: string }
   /** 제시어를 다시 뽑는다. 그리는 중에, 출제자만, 남은 횟수 안에서. */
   | { t: 'reroll' }
+  /** 로비에서 방을 만든다. 서버가 코드를 발급해 roomCreated로 돌려준다. */
+  | { t: 'createRoom'; name: string }
+  /** 방장이 내보낸다. 그 방에 한해 다시 못 들어온다. */
+  | { t: 'kick'; playerId: string }
+  /** 방장이 새 사람의 입장을 막거나 푼다. 이미 자리가 있는 사람의 재접속은 통과한다. */
+  | { t: 'setLock'; on: boolean }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };
@@ -121,6 +139,11 @@ export type ServerMsg =
       now: number;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
+      /** 방 이름과 코드. 방 안에서 링크를 만들어 줄 때 쓴다. */
+      roomName: string;
+      roomCode: string;
+      /** 새 사람의 입장이 막혀 있는가 */
+      locked: boolean;
       /** 고를 수 있는 주제 목록 */
       topics: string[];
       /** 방장이 고정한 주제. null이면 라운드마다 무작위로 뽑는다 */
@@ -207,4 +230,10 @@ export type ServerMsg =
   /** 지금까지의 이야기 전부. 들어오거나 돌아온 사람에게 한 번에 보낸다. */
   | { t: 'chatLog'; lines: ChatLine[] }
   | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
+  /** 로비에 있는 사람에게. 방이 생기거나 사라지거나 인원이 바뀔 때마다 다시 온다. */
+  | { t: 'roomList'; rooms: RoomInfo[] }
+  /** 방을 만들었다. 클라이언트는 이 코드로 옮겨간다. */
+  | { t: 'roomCreated'; room: string }
+  /** 이 방에서 나가라는 뜻. 로비로 돌려보낸다. */
+  | { t: 'kicked'; msg: string }
   | { t: 'error'; msg: string };

@@ -3,7 +3,7 @@ import { CircleCanvas } from './canvas';
 import type { Point } from '../shared/drawing';
 import type { ChatLine, PlayerInfo, ServerMsg } from '../shared/protocol';
 import {
-  show, setTag, renderPlayers, renderSlices, renderAnswers,
+  show, setTag, renderPlayers, renderSlices, renderAnswers, renderRooms, setKickHandler,
   renderRanking,
   renderTopics,
   syncClock,
@@ -34,7 +34,14 @@ themeBtn.addEventListener('click', () => {
 });
 
 const params = new URLSearchParams(location.search);
-const room = (params.get('room') ?? 'LOBBY').toUpperCase();
+/**
+ * 어느 방에 들어갈 것인가. 비어 있으면 로비다.
+ *
+ * 예전에는 비어 있으면 'LOBBY'라는 방으로 보냈다. 그래서 로비가 말만 로비지
+ * 다른 방과 구별이 안 됐고, 링크를 줄 때마다 방 코드를 정해서 알려줘야 했다.
+ */
+const room = (params.get('room') ?? '').trim().toUpperCase();
+const inLobby = room === '';
 
 /**
  * 같은 자리로 돌아오게 하는 식별자.
@@ -45,7 +52,14 @@ const room = (params.get('room') ?? 'LOBBY').toUpperCase();
  * 대가는 같은 브라우저의 모든 탭이 한 자리를 나눠 쓰게 되는 것이다.
  * 혼자 여러 창으로 시험할 때 곤란하므로 ?seat=2 처럼 이름을 붙이면 자리가 갈린다.
  */
-const seat = params.get('seat') ?? '';
+/**
+ * 자리를 가르는 이름. 혼자 여러 창으로 시험할 때 쓴다.
+ *
+ * 바깥에서는 안 먹힌다. 이게 열려 있으면 주소 한 글자로 새 자리를 만들 수 있어서,
+ * 강퇴가 그 자리에서 무의미해진다.
+ */
+const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const seat = isLocal ? (params.get('seat') ?? '') : '';
 const CID_KEY = seat ? `pizza-cid:${seat}` : 'pizza-cid';
 const NAME_KEY = seat ? `pizza-name:${seat}` : 'pizza-name';
 /** 사생활 모드에서는 저장이 막힌다. 그렇다고 판이 멈추면 안 된다. */
@@ -105,7 +119,29 @@ let submittedThisAttempt = false;
 /** 지난 회차에 낸 답. 입력칸에서 지우는 대신 여기로 옮겨 보여준다. */
 let lastSubmitted = '';
 
+/** 내 이름. 로비에서 정하고 방까지 들고 간다. */
+let myName = keep.get(NAME_KEY) ?? params.get('name') ?? '';
+
 const net = new Net(room, onMsg);
+
+/** 방에 실제로 들어간다. 이름이 정해진 뒤에만 부른다. */
+function joinRoom(): void {
+  net.send({ t: 'join', name: myName, cid: cid! });
+}
+
+/**
+ * 첫 화면을 정한다.
+ *
+ * 이름이 없으면 무조건 이름부터 묻는다 — 로비로 가든 방으로 가든 이름 없이는
+ * 결과 화면이 '손님' 다섯 줄이 된다.
+ */
+function routeEntry(): void {
+  if (!myName) { enterName.value = ''; show('enter'); return; }
+  setTag('whoami', myName);
+  if (inLobby) { show('rooms'); return; }
+  // 소켓이 아직 안 열렸어도 된다. Net이 큐에 담았다가 열릴 때 보낸다.
+  joinRoom();
+}
 // 붙어 있을 때는 아무 말도 안 한다. 늘 떠 있는 상태 표시는 신호가 될 수 없다 —
 // "연결됨"이 항상 그 자리에 있으면 "끊김"으로 바뀌어도 눈에 안 들어온다.
 net.onStatus((ok) => setTag('netTag', ok ? '' : '끊김'));
@@ -192,8 +228,8 @@ const NAME_HINT_DEFAULT = '엔터를 쳐도 저장됩니다 · 최대 12자';
 nameInput.value = params.get('name') ?? keep.get(NAME_KEY) ?? '';
 /** 지금까지 서버에 확정된 이름. 빈 이름 저장 시도를 되돌릴 때 여기로 복원한다. */
 let lastName = nameInput.value.trim() || '손님';
-const join = () => net.send({ t: 'join', name: lastName, cid: cid! });
-join();
+// 여기서 바로 들어가지 않는다. 이름을 정하기 전에 입장하면 서버가 '손님'으로 앉히고,
+// 그러면 이름 화면이 떠 있어도 이미 방에 들어가 있다. 입장은 routeEntry가 맡는다.
 
 /**
  * 저장 버튼 클릭·엔터·change(포커스 이탈) 세 경로가 전부 여기로 모인다.
@@ -229,6 +265,69 @@ const enterSent = (e: KeyboardEvent) => e.key === 'Enter' && !e.isComposing;
 nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
   if (enterSent(e)) saveName();
 });
+
+// ── 로비 ──
+const enterName = $('enterName') as HTMLInputElement;
+const newRoomName = $('newRoomName') as HTMLInputElement;
+
+/** 방으로 옮겨간다. 페이지를 새로 여는 편이 소켓을 갈아 끼우는 것보다 간단하고 튼튼하다. */
+function goRoom(code: string): void {
+  const q = new URLSearchParams({ room: code });
+  if (seat) q.set('seat', seat);
+  location.href = `${location.pathname}?${q}`;
+}
+function goLobby(): void {
+  const q = new URLSearchParams();
+  if (seat) q.set('seat', seat);
+  location.href = q.toString() ? `${location.pathname}?${q}` : location.pathname;
+}
+
+const confirmName = () => {
+  const raw = enterName.value.trim();
+  if (!raw) { setTag('enterHint', '이름을 비워둘 수 없습니다'); return; }
+  keep.set(NAME_KEY, raw);
+  myName = raw;
+  setTag('whoami', raw);
+  // 방으로 가던 길이었으면 그대로 보내고, 아니면 방 목록을 보여준다.
+  if (room) { joinRoom(); } else { show('rooms'); }
+};
+$('enterBtn').addEventListener('click', confirmName);
+enterName.addEventListener('keydown', (e: KeyboardEvent) => { if (enterSent(e)) confirmName(); });
+
+$('renameMeBtn').addEventListener('click', () => {
+  enterName.value = myName;
+  setTag('enterHint', '엔터를 쳐도 됩니다 · 최대 12자');
+  show('enter');
+});
+
+$('makeRoomBtn').addEventListener('click', () => {
+  net.send({ t: 'createRoom', name: newRoomName.value.trim() || `${myName}의 방` });
+});
+
+// ── 방 안 ──
+$('leaveBtn').addEventListener('click', goLobby);
+$('copyLinkBtn').addEventListener('click', () => {
+  const url = `${location.origin}${location.pathname}?room=${room}`;
+  navigator.clipboard?.writeText(url).then(
+    () => setTag('roomNameTag', '링크를 복사했습니다'),
+    () => prompt('이 주소를 복사하세요', url),
+  );
+  setTimeout(paintRoomBar, 1500);
+});
+$('lockBtn').addEventListener('click', () => net.send({ t: 'setLock', on: !roomLocked }));
+
+let roomLocked = false;
+let roomLabel = '';
+function paintRoomBar(): void {
+  setTag('roomNameTag', roomLabel);
+  const btn = $('lockBtn') as HTMLButtonElement;
+  btn.textContent = roomLocked ? '입장 잠김 — 풀기' : '입장 잠그기';
+  btn.classList.toggle('on', roomLocked);
+  btn.disabled = youId !== hostId;
+  btn.title = youId === hostId ? '' : '방장만 바꿀 수 있습니다';
+}
+
+setKickHandler((playerId) => net.send({ t: 'kick', playerId }));
 
 /** 관전 중에 무엇을 볼지. 출제자 그림이 기본이다 — 관전은 그걸 보러 온 것이다. */
 let specView: 'draw' | 'doodle' = 'draw';
@@ -347,6 +446,15 @@ function setSpectating(on: boolean): void {
 }
 
 function onMsg(m: ServerMsg): void {
+  if (m.t === 'roomList') { renderRooms(m.rooms, goRoom); return; }
+  if (m.t === 'roomCreated') { goRoom(m.room); return; }
+  if (m.t === 'kicked') {
+    // 방을 잃었다는 뜻이다. 빈 화면에 남겨두지 않고 로비로 돌려보낸다.
+    alert(m.msg);
+    goLobby();
+    return;
+  }
+
   if (m.t === 'joined') { youId = m.youId; return; }
 
   if (m.t === 'room') {
@@ -438,6 +546,11 @@ function onMsg(m: ServerMsg): void {
       ? ''
       : `${names.get(hostId) ?? '방장'} 님이 눌러야 새 판이 시작됩니다`;
     renderLobbyNote(m.players, youId, hostId, m.minPlayers);
+
+    roomLocked = m.locked;
+    roomLabel = `${m.roomName || '방'} · ${m.roomCode}`;
+    $('roomBar').style.display = '';
+    paintRoomBar();
 
     // 관전 전환 줄은 그리는 동안에만 쓸모가 있다. 그때 말고는 볼 것이 하나뿐이다.
     $('watchBar').style.display = iWatch && m.phase === 'drawing' ? '' : 'none';
@@ -682,3 +795,6 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
   if (phase === 'roundEnd') { show('round'); return scrollChatToBottom('roundChatLog'); }
   if (phase === 'final') { show('final'); return scrollChatToBottom('finalChatLog'); }
 }
+
+// 배선이 전부 끝난 뒤에 첫 화면을 정한다. 위에서 부르면 아직 없는 요소를 만지게 된다.
+routeEntry();

@@ -1778,3 +1778,79 @@ describe('그림을 모은다', () => {
     expect(got.length).toBe(0);
   });
 });
+
+describe('강퇴 — 방장 전권', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+  const ids = () => roomNow().players.map((p) => p.id);
+
+  beforeEach(() => { newSession(['p1', 'p2', 'p3', 'p4', 'p5']); });
+
+  it('방장이 내보내면 명단에서 아예 사라진다', () => {
+    // 이탈과 다르다. 이탈은 자리를 남겨두고 기다리지만 강퇴는 돌아올 자리를 없앤다.
+    expect(s.kick('p1', 'p2')).toBe(true);
+    expect(ids()).not.toContain('p2');
+  });
+
+  it('방장이 아니면 못 내보낸다', () => {
+    expect(s.kick('p2', 'p3')).toBe(false);
+    expect(ids()).toContain('p3');
+  });
+
+  it('자기 자신은 못 내보낸다', () => {
+    expect(s.kick('p1', 'p1')).toBe(false);
+    expect(ids()).toContain('p1');
+  });
+
+  it('게임 중에 내보내면 그 사람 몫이 전부 지워진다', () => {
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    s.kick('p1', 'p2');
+    expect(ids()).not.toContain('p2');
+    expect(roomNow().players.find((p) => p.id === 'p2')).toBeUndefined();
+  });
+
+  it('그리던 사람을 내보내면 그 라운드는 접는다', () => {
+    // 반쯤 그린 그림을 조각내봐야 아무도 못 맞히고, 출제자 없는 라운드를 돌릴 수도 없다.
+    // 방장(p1)이 출제자가 아닌 라운드를 만들어야 하므로 2라운드까지 간다.
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    s.next('p1');
+    expect(s.phase).toBe('drawing');
+    expect(s.drawerId).toBe('p2');
+
+    s.addStroke('p2', [[300, 200], [400, 300]]);
+    s.kick('p1', 'p2');
+    expect(s.phase).toBe('roundEnd');
+  });
+
+  it('내보내면 남은 사람만으로 회차가 끝날 수 있는지 다시 본다', () => {
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    expect(roomNow().attempt).toBe(1);
+    s.answer('p2', '몰라');
+    s.answer('p3', '몰라');
+    // p4와 p5가 남아 있어 회차가 안 끝난다
+    expect(roomNow().attempt).toBe(1);
+    s.answer('p4', '몰라');
+    s.kick('p1', 'p5');           // 마지막 한 명을 내보내면 기다릴 사람이 없다
+    expect(roomNow().attempt).toBe(2);
+  });
+});
+
+describe('입장 잠그기', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+
+  it('방장만 잠그고 푼다', () => {
+    newSession();
+    s.setLock('p2', true);
+    expect(roomNow().locked).toBe(false);
+    s.setLock('p1', true);
+    expect(roomNow().locked).toBe(true);
+    s.setLock('p1', false);
+    expect(roomNow().locked).toBe(false);
+  });
+});

@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 import { Session } from './session';
 import { saveDrawing } from './gallery';
-import type { ClientMsg } from '../shared/protocol';
+import type { ClientMsg, RoomInfo, ServerMsg } from '../shared/protocol';
 import type { Point } from '../shared/drawing';
 import { DOODLE_W, DOODLE_H } from '../shared/drawing';
 
@@ -43,6 +43,96 @@ const actors = new Map<string, Conn>();
 /** `방:cid` → 플레이어 id. 새로고침해도 같은 자리로 돌아오게 한다. */
 const seats = new Map<string, string>();
 
+/**
+ * 로비에 서 있는 연결들. 방에 들어가지 않은 사람이다(주소에 ?room= 이 없다).
+ * 방 목록만 받아 보고, 방을 만들거나 골라 들어간다.
+ */
+const lobbyConns = new Set<Conn>();
+
+/** 강퇴당한 브라우저. 방마다 따로 센다 — 한 방에서 쫓겨났다고 다른 방까지 막을 이유는 없다. */
+const banned = new Map<string, Set<string>>();
+
+/** 방을 만들고 그 사람이 도착하기 전까지 비워둘 시간. 이 안에는 빈 방으로 지우지 않는다. */
+const ROOM_GRACE_MS = 60_000;
+
+/** 헷갈리는 글자(0/O, 1/I)를 뺀 방 코드. 통화로 불러줄 수 있어야 한다. */
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function newRoomCode(): string {
+  for (let tries = 0; tries < 50; tries++) {
+    let code = '';
+    for (let i = 0; i < 4; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+    if (!sessions.has(code)) return code;
+  }
+  return `R${Date.now().toString(36).toUpperCase().slice(-5)}`;
+}
+
+function roomList(): RoomInfo[] {
+  return [...sessions.entries()]
+    .map(([code, s]) => ({
+      code,
+      name: s.name || `${s.hostName || '누군가'}의 방`,
+      count: s.connectedCount,
+      max: s.rules.maxPlayers,
+      phase: s.phase,
+      round: s.roundNow,
+      totalRounds: s.totalRounds,
+      locked: s.locked,
+    }))
+    // 아무도 없는 방은 목록에 띄우지 않는다. 만든 사람이 아직 도착 중일 뿐이다.
+    .filter((r) => r.count > 0)
+    .sort((a, b) => (a.phase === 'lobby' ? 0 : 1) - (b.phase === 'lobby' ? 0 : 1) || b.count - a.count);
+}
+
+let listTimer: NodeJS.Timeout | null = null;
+/**
+ * 방 목록이 바뀌었음을 로비에 알린다.
+ *
+ * 한 번의 입장이 join·broadcastRoom 등으로 여러 번 이 함수를 부르므로 한 박자 모아 보낸다.
+ * 목록은 몇 줄짜리지만 사람이 몰리면 초당 수십 번이 되고, 그걸 그대로 흘리면
+ * 로비에 서 있는 사람들의 화면이 쉴 새 없이 다시 그려진다.
+ */
+function notifyLobby(): void {
+  if (listTimer || lobbyConns.size === 0) return;
+  listTimer = setTimeout(() => {
+    listTimer = null;
+    const msg: ServerMsg = { t: 'roomList', rooms: roomList() };
+    const line = JSON.stringify(msg);
+    for (const c of lobbyConns) {
+      if (c.socket.readyState === WebSocket.OPEN) c.socket.send(line);
+    }
+  }, 120);
+}
+
+/** 방이 언제부터 비어 있었나. 잠깐 비는 것과 정말 끝난 것을 가른다. */
+const emptyAt = new Map<string, number>();
+
+/**
+ * 오래 비어 있는 방을 치운다.
+ *
+ * 마지막 사람이 나가는 그 순간에 지우지 않는다. 전원이 새로고침하면 잠깐 0명이 되는데,
+ * 그때 지우면 방 이름도 점수도 통째로 날아가고 돌아온 사람들은 낯선 빈 방에 떨어진다.
+ * 대신 한동안 비어 있으면 치운다 — 끝난 판이 방 코드에 눌러앉으면, 단톡방에 뿌린
+ * 그 링크를 다시 열었을 때 예전 순위 화면으로 떨어진다.
+ */
+function sweepEmptyRooms(): void {
+  const now = Date.now();
+  for (const [code, s] of [...sessions.entries()]) {
+    if (s.connectedCount > 0) { emptyAt.delete(code); continue; }
+    const since = emptyAt.get(code) ?? now;
+    emptyAt.set(code, since);
+    if (now - since < ROOM_GRACE_MS) continue;
+    if (now - s.bornAt < ROOM_GRACE_MS) continue;
+    sessions.delete(code);
+    banned.delete(code);
+    emptyAt.delete(code);
+    for (const key of [...seats.keys()]) {
+      if (key.startsWith(`${code}:`)) seats.delete(key);
+    }
+  }
+  notifyLobby();
+}
+setInterval(sweepEmptyRooms, 30_000);
+
 function sessionFor(room: string): Session {
   let s = sessions.get(room);
   if (!s) {
@@ -55,6 +145,7 @@ function sessionFor(room: string): Session {
       // 라운드가 끝날 때마다 그림을 파일에 쌓는다. 나중에 '지난 그림 보기' 모드의 재료다.
       onDrawing: (rec) => saveDrawing({ ...rec, room } as typeof rec & { room: string }),
     });
+    s.code = room;
     sessions.set(room, s);
   }
   return s;
@@ -88,7 +179,9 @@ setInterval(() => {
 
 wss.on('connection', (socket, req) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
-  const room = (url.searchParams.get('room') ?? '').trim().toUpperCase() || 'LOBBY';
+  // 주소에 ?room= 이 없으면 로비다. 예전에는 이 자리를 'LOBBY'라는 방 하나로 때웠는데,
+  // 그러면 로비가 말만 로비지 다른 방과 구별이 안 됐다.
+  const room = (url.searchParams.get('room') ?? '').trim().toUpperCase();
   const conn: Conn = {
     socket, room, actorId: randomUUID(),
     strokeBudget: STROKES_PER_SECOND, chatBudget: CHATS_PER_SECOND, alive: true,
@@ -99,7 +192,26 @@ wss.on('connection', (socket, req) => {
   // 끊긴 연결은 어차피 바로 뒤에 close로 온다. 판이 멈추는 것보다 서버가 죽는 게 나쁘다.
   socket.on('error', () => {});
 
+  // ── 로비: 방 목록을 보고, 방을 만든다. 게임 세션에는 붙지 않는다. ──
+  if (!room) {
+    lobbyConns.add(conn);
+    socket.send(JSON.stringify({ t: 'roomList', rooms: roomList() } satisfies ServerMsg));
+    socket.on('message', (raw) => {
+      let msg: ClientMsg;
+      try { msg = JSON.parse(String(raw)) as ClientMsg; } catch { return; }
+      if (!msg || msg.t !== 'createRoom') return;
+      const code = newRoomCode();
+      const s = sessionFor(code);
+      s.name = String(msg.name ?? '').trim().slice(0, 20) || '새 방';
+      socket.send(JSON.stringify({ t: 'roomCreated', room: code } satisfies ServerMsg));
+      notifyLobby();
+    });
+    socket.on('close', () => { conns.delete(conn); lobbyConns.delete(conn); });
+    return;
+  }
+
   const session = sessionFor(room);
+  session.code = room;
 
   socket.on('message', (raw) => {
     let msg: ClientMsg;
@@ -114,7 +226,22 @@ wss.on('connection', (socket, req) => {
       // 같은 브라우저가 돌아왔다면 예전 자리를 그대로 쓴다
       const cid = typeof msg.cid === 'string' ? msg.cid.slice(0, 64) : '';
       const seatKey = `${room}:${cid}`;
-      if (cid && seats.has(seatKey)) {
+      const returning = Boolean(cid) && seats.has(seatKey);
+
+      // 강퇴당한 브라우저는 이 방에 못 들어온다. 새 창을 열면 뚫리지만, 그건 계정이 없는
+      // 웹에서는 어차피 못 막는다. 여기서 막는 것은 '그냥 다시 들어오는 것'이다.
+      if (cid && banned.get(room)?.has(cid)) {
+        socket.send(JSON.stringify({ t: 'kicked', msg: '이 방에서 내보내졌습니다' } satisfies ServerMsg));
+        return;
+      }
+      // 잠긴 방에는 새 사람만 못 들어온다. 끊겼다 돌아오는 사람은 통과시킨다 —
+      // 잠금은 모르는 사람을 막자는 것이지 친구를 내쫓자는 것이 아니다.
+      if (!returning && session.locked) {
+        socket.send(JSON.stringify({ t: 'kicked', msg: '방장이 입장을 막아두었습니다' } satisfies ServerMsg));
+        return;
+      }
+
+      if (returning) {
         conn.actorId = seats.get(seatKey)!;
       } else if (cid) {
         seats.set(seatKey, conn.actorId);
@@ -122,10 +249,33 @@ wss.on('connection', (socket, req) => {
       actors.set(conn.actorId, conn);
       const name = String(msg.name ?? '').trim().slice(0, 12) || '손님';
       session.join(conn.actorId, name);
+      notifyLobby();
       return;
     }
 
     const id = conn.actorId;
+
+    if (msg.t === 'kick') {
+      const target = String(msg.playerId ?? '');
+      if (!session.kick(id, target)) return;
+      // 그 브라우저를 이 방에 한해 막고, 새 사람이 못 들어오게 방을 잠근다.
+      // 내보내자마자 다시 들어오면 내보낸 의미가 없다 — 방장이 언제든 풀 수 있다.
+      for (const [key, actorId] of seats) {
+        if (actorId === target && key.startsWith(`${room}:`)) {
+          const cid = key.slice(room.length + 1);
+          if (!banned.has(room)) banned.set(room, new Set());
+          banned.get(room)!.add(cid);
+          seats.delete(key);
+        }
+      }
+      session.setLock(id, true);
+      const victim = actors.get(target);
+      if (victim?.socket.readyState === WebSocket.OPEN) {
+        victim.socket.send(JSON.stringify({ t: 'kicked', msg: '방장이 내보냈습니다' } satisfies ServerMsg));
+      }
+      notifyLobby();
+      return;
+    }
 
     if (msg.t === 'chat') {
       if (conn.chatBudget-- <= 0) return;
@@ -161,6 +311,7 @@ wss.on('connection', (socket, req) => {
     }
 
     session.handle(id, msg);
+    notifyLobby();
   });
 
   socket.on('close', () => {
@@ -170,14 +321,10 @@ wss.on('connection', (socket, req) => {
     actors.delete(conn.actorId);
     session.disconnect(conn.actorId);
 
-    // 마지막 사람이 나가면 방을 버린다. 안 버리면 끝난 판이 방 코드에 눌러앉아,
-    // 단톡방에 뿌린 그 링크를 다시 열었을 때 예전 순위 화면으로 떨어진다.
-    if (session.connectedCount === 0) {
-      sessions.delete(room);
-      for (const key of [...seats.keys()]) {
-        if (key.startsWith(`${room}:`)) seats.delete(key);
-      }
-    }
+    // 방을 여기서 지우지 않는다. 새로고침 한 번에 0명이 되는 순간이 있어서,
+    // 그때 지우면 방 이름과 점수가 통째로 날아간다. 치우는 일은 sweepEmptyRooms가 맡는다.
+    if (session.connectedCount === 0) emptyAt.set(room, Date.now());
+    notifyLobby();
   });
 });
 

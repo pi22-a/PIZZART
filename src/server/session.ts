@@ -97,6 +97,21 @@ export class Session {
   /** 방장이 고른 주제. null이면 라운드마다 무작위. */
   private selectedTopic: string | null = null;
 
+  /** 방 이름과 코드. 로비 목록과 방 안의 링크 만들기에 쓴다. */
+  name = '';
+  code = '';
+
+  /**
+   * 새 사람의 입장이 막혀 있는가.
+   *
+   * 이미 자리가 있는 사람의 재접속은 막지 않는다 — 잠금은 모르는 사람을 막자는 것이지
+   * 끊긴 친구를 내쫓자는 것이 아니다. 그 판단은 자리 지도를 들고 있는 index.ts가 한다.
+   */
+  locked = false;
+
+  /** 만들어진 시각. 만든 사람이 도착하기 전에 빈 방으로 지워지는 것을 막는다. */
+  readonly bornAt = Date.now();
+
   /** 이번 게임에 이미 나온 제시어. 같은 판에서 두 번 나오면 정답을 흘리는 셈이다. */
   private usedWords = new Set<string>();
 
@@ -139,6 +154,13 @@ export class Session {
   /** 테스트에서 들여다보기 위한 것 */
   get strokeCount(): number {
     return this.strokes.length;
+  }
+
+  /** 로비 목록에 쓰는 값들. */
+  get totalRounds(): number { return this.order.length; }
+  get roundNow(): number { return this.round; }
+  get hostName(): string {
+    return this.players.find((p) => p.id === this.hostId)?.name ?? '';
   }
 
   get drawerId(): string {
@@ -223,6 +245,55 @@ export class Session {
     if (topic !== null && !this.topics.some((t) => t.topic === topic)) return;
     this.selectedTopic = topic;
     this.broadcastRoom();
+  }
+
+  /** 방장이 새 사람의 입장을 막거나 푼다. */
+  setLock(playerId: string, on: boolean): void {
+    if (playerId !== this.hostId) return;
+    if (this.locked === on) return;
+    this.locked = on;
+    this.broadcastRoom();
+  }
+
+  /**
+   * 방장이 내보낸다. 방장 전권이고, 자기 자신은 못 내보낸다.
+   *
+   * 이탈(disconnect)과 다르다. 이탈은 자리를 남겨두고 돌아오기를 기다리지만,
+   * 강퇴는 명단에서 아예 지운다 — 돌아올 자리를 남겨두면 강퇴가 아니다.
+   *
+   * 그 사람이 다시 못 들어오게 막는 것은 여기서 못 한다. 자리와 브라우저를 잇는
+   * 지도는 index.ts가 들고 있다. 여기서는 "내보냈다"만 알리고 나머지를 맡긴다.
+   */
+  kick(playerId: string, targetId: string): boolean {
+    if (playerId !== this.hostId) return false;
+    if (playerId === targetId) return false;
+    const idx = this.players.findIndex((p) => p.id === targetId);
+    if (idx === -1) return false;
+
+    const wasDrawer = targetId === this.drawerId;
+    this.players.splice(idx, 1);
+    this.order = this.order.filter((id) => id !== targetId);
+    this.seen.delete(targetId);
+    this.answers.delete(targetId);
+    this.solved.delete(targetId);
+    this.skippedThisAttempt.delete(targetId);
+    this.answerLog.delete(targetId);
+    this.doodleColors.delete(targetId);
+    this.doodle = this.doodle.filter((d) => d.by !== targetId);
+
+    // 그리던 사람을 내보냈으면 그 라운드는 접는다. 반쯤 그린 그림을 조각내봐야
+    // 아무도 못 맞히고, 출제자 없는 라운드를 계속 돌릴 수도 없다.
+    if (wasDrawer && (this.phase === 'drawing' || this.phase === 'guessing')) {
+      this.clearTimer();
+      this.round = Math.max(0, this.round - 1);   // endRound 뒤의 advance가 다음 사람을 집게 한다
+      this.endRound([]);
+      return true;
+    }
+
+    this.broadcastRoom();
+    // 남은 사람만으로 회차가 끝날 수 있는지 다시 본다. 기다릴 대상이 하나 줄었다.
+    if (this.phase === 'guessing') this.maybeEndAttempt();
+    return true;
   }
 
   /**
@@ -869,6 +940,7 @@ export class Session {
       case 'start': return this.start(playerId);
       case 'setTopic': return this.setTopic(playerId, msg.topic);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
+      case 'setLock': return this.setLock(playerId, msg.on);
       case 'stroke': return this.addStroke(playerId, msg.points);
       case 'undo': return this.undo(playerId);
       case 'drawDone': return this.drawDone(playerId);
@@ -1078,6 +1150,9 @@ export class Session {
       minPlayers: this.rules.minPlayers,
       topics: this.topics.map((t) => t.topic),
       selectedTopic: this.selectedTopic,
+      roomName: this.name,
+      roomCode: this.code,
+      locked: this.locked,
     });
   }
 }

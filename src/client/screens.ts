@@ -1,10 +1,10 @@
 import type { Point } from '../shared/drawing';
-import type { AnswerRow, ChatLine, PlayerInfo } from '../shared/protocol';
+import type { AnswerRow, ChatLine, PlayerInfo, RoomInfo } from '../shared/protocol';
 import { drawSlice, startSpinHint } from './slice-view';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const SCREENS = ['lobby', 'draw', 'wait', 'guess', 'round', 'final'] as const;
+const SCREENS = ['enter', 'rooms', 'lobby', 'draw', 'wait', 'guess', 'round', 'final'] as const;
 export type ScreenName = typeof SCREENS[number];
 
 export function show(name: ScreenName): void {
@@ -22,6 +22,10 @@ export function setTag(id: string, text: string): void {
 let flashHostId = '';
 export function flashHost(id: string): void { flashHostId = id; }
 
+/** 방장이 볼 때만 강퇴 버튼을 붙인다. 누른 사람을 알려주는 것은 부르는 쪽이 맡는다. */
+let onKick: ((playerId: string) => void) | null = null;
+export function setKickHandler(fn: (playerId: string) => void): void { onKick = fn; }
+
 export function renderPlayers(players: PlayerInfo[], youId: string, hostId: string = '', phase: string = ''): void {
   $('players').innerHTML = players
     .map((p) => {
@@ -34,11 +38,28 @@ export function renderPlayers(players: PlayerInfo[], youId: string, hostId: stri
       // 관전자는 점수가 없다. 0점을 붙이면 꼴찌로 읽힌다.
       const score = phase !== 'lobby' && !p.spectator ? ` ${p.score}` : '';
       const watch = p.spectator ? ' 👁' : '';
+      // 방장에게만, 자기 자신 말고. 강퇴는 방장 전권이다.
+      const kick = onKick && youId === hostId && p.id !== youId
+        ? `<button class="kick" data-kick="${p.id}" title="${escape(p.name)} 내보내기">✕</button>`
+        : '';
       return `<span class="${cls}" title="${p.spectator ? '관전 중 — 정답을 보고 있습니다' : ''}">`
-        + `${host}${escape(p.name)}${score}${mark}${watch}</span>`;
+        + `${host}${escape(p.name)}${score}${mark}${watch}${kick}</span>`;
     })
     .join('');
   flashHostId = '';
+
+  if (onKick) {
+    for (const el of $('players').querySelectorAll('[data-kick]')) {
+      el.addEventListener('click', () => {
+        const id = (el as HTMLElement).dataset.kick!;
+        const who = players.find((p) => p.id === id)?.name ?? '';
+        // 되돌릴 수 없는 일이다. 그 방에 다시 못 들어오고, 방이 잠긴다.
+        if (confirm(`${who} 님을 내보낼까요?\n\n이 방에 다시 들어올 수 없게 되고, 새 사람의 입장도 잠깁니다.`)) {
+          onKick?.(id);
+        }
+      });
+    }
+  }
 }
 
 export function renderLobbyNote(
@@ -349,4 +370,39 @@ export function toast(html: string, ms = 5000): void {
 export function scrollChatToBottom(boxId: string): void {
   const box = $(boxId);
   box.scrollTop = box.scrollHeight;
+}
+
+/**
+ * 로비의 방 목록.
+ *
+ * 게임 중인 방도 보여준다. 관전이 있는 게임이라 들어갈 데가 있고, 감추면 친구가 어느 방에
+ * 있는지 알 방법이 없다. 대신 들어가면 관전이 된다는 것을 줄에 적어둔다.
+ */
+export function renderRooms(rooms: RoomInfo[], onEnter: (code: string) => void): void {
+  const box = $('roomList');
+  box.innerHTML = '';
+  if (rooms.length === 0) {
+    box.innerHTML = '<li class="empty">아직 방이 없습니다 — 위에서 하나 만들어 보세요</li>';
+    return;
+  }
+  for (const r of rooms) {
+    const playing = r.phase !== 'lobby';
+    const li = document.createElement('li');
+    const state = playing
+      ? `<span class="r-state play">게임 중 · 라운드 ${r.round + 1}/${r.totalRounds}</span>`
+      : '<span class="r-state">대기 중</span>';
+    li.innerHTML = `
+      <span class="r-name">${escape(r.name)}</span>
+      ${state}
+      <span class="r-meta">${r.count}/${r.max}명${r.locked ? ' · 🔒 입장 잠김' : ''}</span>`;
+    const go = document.createElement('button');
+    go.className = 'r-go';
+    // 들어가면 무엇이 되는지 버튼에 적는다. 게임 중인 방은 관전으로만 들어갈 수 있다.
+    go.textContent = playing ? '관전으로 입장' : '입장';
+    go.disabled = r.locked || r.count >= r.max;
+    if (go.disabled) go.title = r.locked ? '방장이 입장을 막아두었습니다' : '방이 가득 찼습니다';
+    go.addEventListener('click', () => onEnter(r.code));
+    li.appendChild(go);
+    box.appendChild(li);
+  }
 }

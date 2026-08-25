@@ -105,6 +105,25 @@
   /* 관전 중에는 캔버스가 구경거리지 그리는 곳이 아니다. */
   #drawCanvas.watching, #doodleCanvas.watching { pointer-events:none; }
   .watchbar, .renamebar { margin-top:-4px; }
+  .roombar .spacer { margin-left:auto; }
+  .roombar button.on { background:#7a2f24; color:#f6efe2; border-color:#a03c2d; }
+
+  /* 방 목록 */
+  .rooms { list-style:none; padding:0; margin:12px 0 0; display:grid; gap:10px; }
+  .rooms li { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+              background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .rooms .r-name { font-weight:700; font-size:16px; }
+  .rooms .r-meta { font-size:13px; opacity:.6; }
+  .rooms .r-state { font-size:12px; border-radius:999px; padding:3px 10px; border:1px solid var(--line); }
+  .rooms .r-state.play { background:var(--sauce); color:#1c1712; border-color:var(--sauce); font-weight:700; }
+  .rooms .r-go { margin-left:auto; }
+  .rooms .empty { justify-content:center; opacity:.55; font-size:14px; }
+
+  /* 강퇴 — 방장에게만 보인다. 사람 알약에 붙는다. */
+  .players .p { position:relative; }
+  .players .kick { border:0; background:none; color:inherit; opacity:.45;
+                   font:inherit; font-size:12px; padding:0 0 0 6px; cursor:pointer; }
+  .players .kick:hover { opacity:1; color:#ff5c47; }
   .watchbar button.on, .renamebar button.on { background:var(--sauce); color:#1c1712; border-color:var(--sauce); }
   .renamebar input { max-width:180px; }
   /* 인원 알약 줄 바로 아래에 화면 내용(조각 액자, 그리기 버튼 등)이 틈 없이 붙어 있었다.
@@ -209,6 +228,15 @@
     <!-- 밝은 화면을 원하는 사람이 있다. 고른 값은 이 브라우저에 남는다. -->
     <button id="themeBtn" class="ghost icon" title="밝게 보기">🌙</button>
   </div>
+  <!-- 방 안에서만 뜬다. 코드를 알아야 직접 링크를 줄 수 있다. -->
+  <div class="bar roombar" id="roomBar" style="display:none">
+    <span class="pill" id="roomNameTag"></span>
+    <button id="copyLinkBtn" class="ghost">링크 복사</button>
+    <button id="lockBtn" class="ghost">입장 잠그기</button>
+    <span class="spacer"></span>
+    <button id="leaveBtn" class="ghost">나가기</button>
+  </div>
+
   <div class="players" id="players"></div>
 
   <!-- 관전자 전용 줄. 관전 중이 아니면 통째로 숨는다. -->
@@ -226,7 +254,38 @@
     <span class="muted" id="lateNameNote"></span>
   </div>
 
-  <section class="screen on" id="s-lobby">
+  <!-- 이름 정하기. 방에 들어가기 전에 한 번만 묻는다 — 브라우저에 남아서 두 번째부터는 건너뛴다. -->
+  <section class="screen" id="s-enter">
+    <h1>P I Z Z A</h1>
+    <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
+      자기 조각이 어디였는지 아무도 모릅니다. 먼저 알아맞히세요.</p>
+    <div class="lobby-name">
+      <label for="enterName">이름을 정해주세요</label>
+      <div class="bar">
+        <input id="enterName" placeholder="이름" maxlength="12" />
+        <button id="enterBtn">확인</button>
+      </div>
+      <p class="muted" id="enterHint">엔터를 쳐도 됩니다 · 최대 12자</p>
+    </div>
+  </section>
+
+  <!-- 방 목록. 여기가 진짜 로비다. -->
+  <section class="screen" id="s-rooms">
+    <div class="bar">
+      <h1 style="margin:0">방 목록</h1>
+      <span class="spacer"></span>
+      <span class="pill" id="whoami"></span>
+      <button id="renameMeBtn" class="ghost icon" title="이름 바꾸기">✎</button>
+    </div>
+    <div class="bar">
+      <button id="makeRoomBtn">방 만들기</button>
+      <input id="newRoomName" placeholder="방 이름 (비우면 자동)" maxlength="20" />
+    </div>
+    <p class="muted" id="roomsNote">방을 만들거나, 아래에서 골라 들어가세요.</p>
+    <ul class="rooms" id="roomList"></ul>
+  </section>
+
+  <section class="screen" id="s-lobby">
     <h1>P I Z Z A</h1>
     <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
       자기 조각이 어디였는지 아무도 모릅니다. 먼저 알아맞히세요.</p>
