@@ -221,37 +221,14 @@ $('doodleClearBtn').addEventListener('click', () => {
   net.send({ t: 'doodleClear' });
 });
 
-const nameInput = $('nameInput') as HTMLInputElement;
-const nameSaveBtn = $('nameSaveBtn') as HTMLButtonElement;
-const NAME_HINT_DEFAULT = '엔터를 쳐도 저장됩니다 · 최대 12자';
-// 새로고침해도 이름을 잃지 않는다. 잃으면 서버가 이름을 받아줘도 다시 '손님'이 된다.
-nameInput.value = params.get('name') ?? keep.get(NAME_KEY) ?? '';
-/** 지금까지 서버에 확정된 이름. 빈 이름 저장 시도를 되돌릴 때 여기로 복원한다. */
-let lastName = nameInput.value.trim() || '손님';
-// 여기서 바로 들어가지 않는다. 이름을 정하기 전에 입장하면 서버가 '손님'으로 앉히고,
-// 그러면 이름 화면이 떠 있어도 이미 방에 들어가 있다. 입장은 routeEntry가 맡는다.
-
-/**
- * 저장 버튼 클릭·엔터·change(포커스 이탈) 세 경로가 전부 여기로 모인다.
- * 세 경로가 각자 다른 걸 보내면 "엔터가 저장 버튼과 같은 일을 하는지" 아무도 확신할 수 없다.
+/*
+ * 이름칸은 두 곳뿐이다: 로비로 들어올 때(enterName)와 방 안(renameBar).
  *
- * 이름을 비우고 저장하면 서버는 조용히 '손님'으로 바꿔버린다 — 파티에서 그렇게 되면
- * 누가 자기인지 아무도 못 알아본다. 그래서 빈 이름은 거부하고 이전 이름을 지킨다.
+ * 예전에는 방 대기 화면에도 따로 있었다. 로비가 생기기 전에는 거기가 이름을 정하는
+ * 유일한 자리였기 때문인데, 이제는 같은 일을 하는 칸이 셋이 되어 한 곳을 고칠 때
+ * 나머지를 잊게 된다. 방 안의 것 하나로 합쳤다.
  */
-const saveName = () => {
-  const raw = nameInput.value.trim();
-  if (!raw) {
-    nameInput.value = lastName;
-    setTag('nameHint', `이름을 비워둘 수 없어 이전 이름(${lastName})을 유지합니다`);
-    return;
-  }
-  lastName = raw;
-  keep.set(NAME_KEY, raw);
-  net.send({ t: 'join', name: raw, cid: cid! });
-  setTag('nameHint', NAME_HINT_DEFAULT);
-};
-nameSaveBtn.addEventListener('click', saveName);
-nameInput.addEventListener('change', saveName);
+
 /**
  * 한글은 조합이 끝나기 전에 엔터가 먼저 온다.
  *
@@ -261,10 +238,6 @@ nameInput.addEventListener('change', saveName);
  * 눌렀는데 "고양"이 제출돼 오답으로 1점을 잃었다.
  */
 const enterSent = (e: KeyboardEvent) => e.key === 'Enter' && !e.isComposing;
-
-nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (enterSent(e)) saveName();
-});
 
 // ── 로비 ──
 const enterName = $('enterName') as HTMLInputElement;
@@ -561,7 +534,10 @@ function onMsg(m: ServerMsg): void {
     $('renameBar').style.display = canRename ? '' : 'none';
     if (canRename && document.activeElement !== lateNameInput && !lateNameInput.value) {
       lateNameInput.value = me?.name === '손님' ? '' : (me?.name ?? '');
-      setTag('lateNameNote', '새로 오셨네요 — 이름을 정해두면 결과 화면에서 알아보기 쉽습니다');
+      // 대기 중에는 누구나 고칠 수 있고, 게임 중에 뜬다면 도중에 들어온 사람이라는 뜻이다.
+      setTag('lateNameNote', m.phase === 'lobby'
+        ? ''
+        : '새로 오셨네요 — 이름을 정해두면 결과 화면에서 알아보기 쉽습니다');
     }
 
     // 관전 여부가 바뀌면 화면도 다시 잡아야 한다. 로비에서 관전을 켜고 시작하면

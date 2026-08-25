@@ -246,7 +246,11 @@
     <button id="viewDoodleBtn" class="ghost">같이 낙서판</button>
   </div>
 
-  <!-- 게임 도중에 들어온 사람만 뜬다. 계속 '손님'이면 결과 화면에서 누군지 알 수 없다. -->
+  <!--
+    방 안에서 이름을 고치는 유일한 자리.
+    대기 중에는 누구나, 게임 중에는 도중에 들어온 사람만 뜬다 — 원래 있던 사람이 중간에
+    이름을 갈면 그때까지 쌓인 답 기록과 이야기가 누구 것인지 어긋난다.
+  -->
   <div class="bar renamebar" id="renameBar" style="display:none">
     <label class="muted" for="lateNameInput">이름</label>
     <input id="lateNameInput" placeholder="이름" maxlength="12" />
@@ -328,15 +332,6 @@
         <li>즉 <b>조각으로는 못 알아보지만 합치면 알아보는</b> 그림이 가장 좋은 그림입니다</li>
       </ul>
     </details>
-    <div class="lobby-name">
-      <label for="nameInput">이름</label>
-      <div class="bar">
-        <input id="nameInput" placeholder="이름" maxlength="12" />
-        <button id="nameSaveBtn">저장</button>
-      </div>
-      <p class="muted" id="nameHint">엔터를 쳐도 저장됩니다 · 최대 12자</p>
-    </div>
-
     <!-- 주제 고르기. 방장에게만 버튼이 살아 있고, 나머지는 뭘 골랐는지 읽기만 한다. -->
     <div class="lobby-topic" id="topicPick">
       <label>주제</label>

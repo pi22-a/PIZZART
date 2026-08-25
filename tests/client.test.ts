@@ -90,6 +90,9 @@ async function guessing(): Promise<void> {
 }
 
 beforeEach(() => {
+  // 이름과 자리 식별자가 localStorage에 남는다. 안 비우면 앞 테스트가 정한 이름을 들고
+  // 다음 테스트가 시작해서, 이름 화면을 건너뛰어 버린다.
+  try { localStorage.clear(); } catch { /* 무시 */ }
   vi.useFakeTimers();
   // jsdom에는 캔버스 구현이 없다. 그리기 호출을 전부 삼키는 가짜 컨텍스트를 끼운다.
   const ctx = new Proxy({}, { get: () => () => {}, set: () => true });
@@ -314,55 +317,42 @@ describe('플레이어 카드 렌더링', () => {
   });
 });
 
-describe('로비 레이아웃 — 이름 블록과 저장 경로 (레이아웃 개선)', () => {
-  it('이름 라벨, 저장 버튼, 엔터 힌트가 마크업에 존재한다', async () => {
+describe('이름칸은 두 곳뿐이다', () => {
+  it('방 대기 화면에는 따로 이름칸이 없다', async () => {
+    // 로비가 생기기 전에는 여기가 이름을 정하는 유일한 자리였다. 이제 같은 일을 하는 칸이
+    // 셋이 되면 한 곳을 고칠 때 나머지를 잊는다.
     await boot();
-    const label = document.querySelector('label[for="nameInput"]');
-    expect(label?.textContent).toBe('이름');
-    expect($('nameSaveBtn').textContent).toBe('저장');
-    expect($('nameHint').textContent).toBe('엔터를 쳐도 저장됩니다 · 최대 12자');
+    expect(document.getElementById('nameInput')).toBeNull();
+    expect(document.getElementById('nameSaveBtn')).toBeNull();
   });
 
-  it('저장 버튼 클릭이 join 메시지를 보낸다', async () => {
+  it('들어올 때 이름을 정하면 저장되고 방 목록으로 간다', async () => {
     await boot();
-    const input = $<HTMLInputElement>('nameInput');
-    input.value = '피자';
-    $('nameSaveBtn').click();
-    const joinMsg = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
-    expect(joinMsg?.name).toBe('피자');
+    expect($('s-enter').classList.contains('on')).toBe(true);
+    $<HTMLInputElement>('enterName').value = '피자';
+    $('enterBtn').click();
+    expect($('s-rooms').classList.contains('on')).toBe(true);
+    expect($('whoami').textContent).toBe('피자');
   });
 
-  it('엔터 keydown이 저장 버튼과 같은 join 메시지를 보낸다', async () => {
+  it('빈 이름으로는 넘어가지 않는다 — 손님 다섯 줄이 되면 누가 누군지 모른다', async () => {
     await boot();
-    const input = $<HTMLInputElement>('nameInput');
-    input.value = '피자';
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    const joinMsg = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
-    expect(joinMsg?.name).toBe('피자');
+    $<HTMLInputElement>('enterName').value = '   ';
+    $('enterBtn').click();
+    expect($('s-enter').classList.contains('on')).toBe(true);
+    expect($('enterHint').textContent).toContain('비워둘 수 없습니다');
   });
 
-  it('change(포커스 이탈)도 같은 join 메시지를 보낸다 — 세 경로가 일치해야 한다', async () => {
+  it('방 안에서는 대기 중일 때 이름칸이 열린다', async () => {
     await boot();
-    const input = $<HTMLInputElement>('nameInput');
-    input.value = '피자';
-    input.dispatchEvent(new Event('change'));
-    const joinMsg = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
-    expect(joinMsg?.name).toBe('피자');
-  });
-
-  it('빈 이름으로 저장하면 손님이 되지 않고 이전 이름을 유지한다', async () => {
-    await boot();
-    const input = $<HTMLInputElement>('nameInput');
-    input.value = '피자';
-    $('nameSaveBtn').click();
-    live.out = [];
-
-    input.value = '';
-    $('nameSaveBtn').click();
-
-    expect(live.out.some((m) => m.t === 'join')).toBe(false);
-    expect(input.value).toBe('피자');
-    expect($('nameHint').textContent).toContain('피자');
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby',
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true } : p)),
+    }));
+    expect($('renameBar').style.display).not.toBe('none');
+    // 대기 중에는 굳이 설명을 붙이지 않는다 — 새로 온 사람에게만 하는 말이다.
+    expect($('lateNameNote').textContent).toBe('');
   });
 });
 

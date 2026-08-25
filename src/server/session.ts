@@ -1132,8 +1132,9 @@ export class Session {
         : this.solved.get(p.id) ?? this.scoreFor(p.id),
       doodleColor: this.doodleColors.get(p.id) ?? '',
       spectator: p.spectator,
-      // 로비에서는 이름칸이 원래 열려 있으므로 따로 표시하지 않는다.
-      canRename: this.phase !== 'lobby' && p.lateJoin,
+      // 서버가 실제로 이름을 받아주는 조건과 같아야 한다(join 참조).
+      // 어긋나면 화면에는 칸이 떠 있는데 저장이 조용히 무시된다.
+      canRename: this.phase === 'lobby' || p.lateJoin,
     }));
     this.broadcast({
       t: 'room',
