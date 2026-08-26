@@ -88,6 +88,52 @@ http://localhost:5173/
   PowerShell이나 Windows Terminal을 쓰거나 `chcp 65001`을 한 번 치면 멀쩡해진다.
 - 터널을 쓰려면 `cloudflared`를 따로 깔아야 한다: `winget install --id Cloudflare.cloudflared`
 
+## 놀면서 동시에 고치기
+
+친구들이 놀고 있는데 코드를 고치면 화면 서버가 모두의 브라우저를 새로고침해 버린다.
+**안정된 판과 고치는 판을 따로 띄우면** 된다.
+
+`git worktree`로 같은 저장소를 **다른 버전으로 한 벌 더** 꺼낸다. 복제가 아니라
+같은 `.git`을 나눠 쓰는 것이라 새로 받을 것이 없다.
+
+```bash
+git worktree add ../PIZZA-play v1.3.0
+ln -s ../PIZZA/node_modules ../PIZZA-play/node_modules
+```
+
+두 번째 줄은 패키지를 다시 받지 않으려는 것이다. 네이티브 컴파일이 없어서 그냥 이어도 된다.
+윈도우처럼 링크가 번거로우면 그 자리에서 `npm install`을 한 번 하면 된다.
+
+이제 두 터미널에서 각각 띄운다.
+
+| | 어디서 | 명령 | 주소 |
+|---|---|---|---|
+| **놀이판** | `../PIZZA-play` | `npm run play` | `localhost:5174` |
+| **고치는 판** | `PIZZA` | `npm run dev` | `localhost:5173` |
+
+포트가 갈려 있어 **서로 아무 상관이 없다.** 고치는 쪽을 아무리 저장해도 놀이판은 안 흔들린다.
+
+밖에서 들어올 링크는 놀이판 쪽으로 뚫는다.
+
+```bash
+cd ../PIZZA-play && npm run tunnel:play
+```
+
+놀 버전을 바꾸려면 그 자리에서 갈아탄다.
+
+```bash
+cd ../PIZZA-play && git checkout v1.4.0
+```
+
+그림 기록(`data/drawings.jsonl`)은 판마다 따로 쌓인다. 놀이판에서 논 그림은
+`../PIZZA-play/data/`에 있다.
+
+다 놀았으면 치운다.
+
+```bash
+git worktree remove ../PIZZA-play
+```
+
 ## 밖에서 접속하기
 
 ```bash

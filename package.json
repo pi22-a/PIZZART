@@ -12,7 +12,9 @@
     "dev:server": "tsx src/server/index.ts",
     "dev:server:watch": "tsx watch src/server/index.ts",
     "dev:client": "vite",
+    "play": "node scripts/serve.mjs 5174 8081",
     "tunnel": "cloudflared tunnel --url http://localhost:5173",
+    "tunnel:play": "cloudflared tunnel --url http://localhost:5174",
     "test": "vitest run",
     "test:watch": "vitest"
   },
