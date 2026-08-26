@@ -1942,3 +1942,33 @@ describe('제시어 기억은 방 단위다', () => {
     expect(s.usedWordCount).toBe(got.length);
   });
 });
+
+describe('방 이름', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+
+  it('이름 없는 방은 첫 사람 이름으로 정해진다', () => {
+    // 로비에서 만든 방에는 이름이 붙지만, 직링크로 들어가거나 서버가 다시 뜬 뒤
+    // 재접속해서 생긴 방은 이름이 없다.
+    newSession([]);
+    s.join('p1', '초코비');
+    expect(roomNow().roomName).toBe('초코비의 방');
+  });
+
+  it('사람이 바뀌어도 방 이름은 그대로다', () => {
+    // 예전에는 목록이 '지금 방장의 이름'으로 이름을 지어내서,
+    // 초코비가 나가자 방 이름이 '피자의 방'으로 바뀌었다.
+    newSession([]);
+    s.join('p1', '초코비');
+    s.join('p2', '피자');
+    s.disconnect('p1');
+    expect(roomNow().hostId).toBe('p2');
+    expect(roomNow().roomName).toBe('초코비의 방');
+  });
+
+  it('로비에서 붙인 이름은 덮어쓰지 않는다', () => {
+    newSession([]);
+    s.name = '초보만';
+    s.join('p1', '초코비');
+    expect(roomNow().roomName).toBe('초보만');
+  });
+});

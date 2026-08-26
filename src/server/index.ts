@@ -70,7 +70,9 @@ function roomList(): RoomInfo[] {
   return [...sessions.entries()]
     .map(([code, s]) => ({
       code,
-      name: s.name || `${s.hostName || '누군가'}의 방`,
+      // 이름은 세션이 들고 있다(join에서 한 번 정한다). 여기서 지어내면 방 안에서
+      // 보이는 이름과 목록의 이름이 어긋난다.
+      name: s.name || '방',
       count: s.connectedCount,
       max: s.rules.maxPlayers,
       phase: s.phase,

@@ -184,6 +184,14 @@ export class Session {
   // ---------- 로비 ----------
 
   join(id: string, name: string): void {
+    // 이름 없는 방에 첫 사람이 들어오면 그 사람 이름으로 한 번 정한다.
+    //
+    // 이름은 로비에서 방을 만들 때만 붙는다. 직링크로 들어가거나 서버가 다시 뜬 뒤
+    // 재접속하면 방은 새로 생기고 이름은 빈 채로 남는다. 그러면 목록이 '지금 방장의
+    // 이름'으로 이름을 지어내는데, 방장이 바뀔 때마다 방 이름이 따라 바뀐다.
+    // 실제로 '초코비의 방'이 사람이 나가자 '피자의 방'이 됐다.
+    if (!this.name && this.players.length === 0) this.name = `${name || '누군가'}의 방`;
+
     const existing = this.players.find((p) => p.id === id);
     if (existing) {
       existing.connected = true;
