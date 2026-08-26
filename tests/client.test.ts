@@ -740,11 +740,13 @@ describe('상단바는 조용해야 한다', () => {
     expect($('netTag').textContent).toBe('');
   });
 
-  it('방 코드는 로비에서만 뜬다', async () => {
-    await guessing();
-    expect($('roomTag').textContent).toBe('');
+  it('방 코드는 상단바가 아니라 방 표시줄에만 있다', async () => {
+    // 두 군데 적으면 같은 코드가 화면에 두 번 나온다.
+    await boot();
+    expect(document.getElementById('roomTag')).toBeNull();
+    deliver({ t: 'joined', youId: 'me' });
     deliver(room({ phase: 'lobby' }));
-    expect($('roomTag').textContent).toContain('방 ');
+    expect($('roomNameTag').textContent).toContain('TEST');
   });
 
   it('라운드는 점으로 센다', async () => {
@@ -1096,5 +1098,27 @@ describe('도중에 들어온 사람 이름칸', () => {
     $('lateNameBtn').click();
     const sentJoin = live.out.find((m) => m.t === 'join') as { name: string } | undefined;
     expect(sentJoin?.name).toBe('늦둥이');
+  });
+});
+
+describe('방 대기 화면은 방에 대한 것만 보여준다', () => {
+  it('PIZZA 제목과 소개문은 이름 화면에만 있다', async () => {
+    // 로비로 들어올 때 이미 읽은 것이다. 방 안에서 또 나오면 주제와 시작 버튼이
+    // 그만큼 아래로 밀린다.
+    await boot();
+    const lobby = $('s-lobby');
+    expect(lobby.querySelector('h1')).toBeNull();
+    expect($('s-enter').querySelector('h1')?.textContent).toContain('P I Z Z A');
+  });
+
+  it('주제와 시작이 게임 방법보다 먼저 온다', async () => {
+    await boot();
+    const kids = [...$('s-lobby').children];
+    const topic = kids.findIndex((e) => e.id === 'topicPick');
+    const start = kids.findIndex((e) => e.classList.contains('lobby-start'));
+    const rules = kids.findIndex((e) => e.id === 'rules');
+    expect(topic).toBeGreaterThanOrEqual(0);
+    expect(rules).toBeGreaterThan(start);
+    expect(start).toBeGreaterThan(topic);
   });
 });

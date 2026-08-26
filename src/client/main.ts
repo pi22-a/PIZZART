@@ -452,8 +452,6 @@ function onMsg(m: ServerMsg): void {
     // 색은 서버가 정하고 room으로 내려온다. 남이 색을 바꿔도 바로 팔레트에 반영돼야
     // "임자 있는 색"을 눌러보는 일이 없다.
     if (m.phase === 'drawing') renderDoodleColors(m.players);
-    // 방 코드는 초대할 때만 필요하다. 게임이 돌기 시작하면 자리를 비운다.
-    setTag('roomTag', m.phase === 'lobby' ? `방 ${room}` : '');
     renderRoundDots(m.round, m.phase === 'lobby' ? 0 : m.totalRounds);
     // 주제는 상단이 아니라 조각 옆에 있다. 시선이 이미 가 있는 자리라야 읽힌다.
     setTag('guessTopic', m.topic);

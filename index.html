@@ -104,7 +104,9 @@
 
   /* 관전 중에는 캔버스가 구경거리지 그리는 곳이 아니다. */
   #drawCanvas.watching, #doodleCanvas.watching { pointer-events:none; }
-  .watchbar, .renamebar { margin-top:-4px; }
+  /* 인원 알약 줄에도 아래 여백을 준다. 없으면 바로 아래 줄(관전 전환·이름 고치기)이
+     알약을 파고들어, 입력칸 테두리와 알약 테두리가 겹쳐 보인다. */
+  .players { margin-bottom:12px; }
   .roombar .spacer { margin-left:auto; }
   .roombar button.on { background:#7a2f24; color:#f6efe2; border-color:#a03c2d; }
 
@@ -215,8 +217,6 @@
   -->
   <div class="bar topbar">
     <span class="brand">PIZZA</span>
-    <!-- 초대할 때만 필요하다. 로비에서만 뜬다. -->
-    <span class="pill" id="roomTag"></span>
     <!-- 라운드는 읽는 것보다 세는 것이 빠르다. -->
     <span class="dots" id="roundDots"></span>
     <!-- 끊겼을 때만 뜬다. 늘 떠 있는 상태 표시는 신호가 될 수 없다 —
@@ -290,9 +290,29 @@
   </section>
 
   <section class="screen" id="s-lobby">
-    <h1>P I Z Z A</h1>
-    <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
-      자기 조각이 어디였는지 아무도 모릅니다. 먼저 알아맞히세요.</p>
+    <!-- 주제 고르기. 방장에게만 버튼이 살아 있고, 나머지는 뭘 골랐는지 읽기만 한다. -->
+    <div class="lobby-topic" id="topicPick">
+      <label>주제</label>
+      <div class="bar" id="topicBtns"></div>
+      <p class="muted" id="topicNote"></p>
+    </div>
+
+    <!-- 관전은 여기서만 고른다. 시작 뒤에는 못 바꾸고, 도중에 들어온 사람은
+         판이 끝나 로비로 돌아오기 전까지 관전으로 묶인다. -->
+    <div class="lobby-topic">
+      <label>참여</label>
+      <div class="bar">
+        <button id="playBtn" class="ghost">참여</button>
+        <button id="watchBtn" class="ghost">관전</button>
+      </div>
+      <p class="muted" id="watchNote"></p>
+    </div>
+
+    <p class="muted" id="lobbyNote"></p>
+
+    <div class="lobby-start">
+      <button id="startBtn">시작</button>
+    </div>
 
     <!-- 처음 들어온 사람은 점수가 깎인다는 것도, 마지막에 조립판이 나온다는 것도
          알 방법이 없었다. 펼친 채로 두되, 두 번째부터는 접을 수 있게 details로 둔다. -->
@@ -332,29 +352,6 @@
         <li>즉 <b>조각으로는 못 알아보지만 합치면 알아보는</b> 그림이 가장 좋은 그림입니다</li>
       </ul>
     </details>
-    <!-- 주제 고르기. 방장에게만 버튼이 살아 있고, 나머지는 뭘 골랐는지 읽기만 한다. -->
-    <div class="lobby-topic" id="topicPick">
-      <label>주제</label>
-      <div class="bar" id="topicBtns"></div>
-      <p class="muted" id="topicNote"></p>
-    </div>
-
-    <!-- 관전은 여기서만 고른다. 시작 뒤에는 못 바꾸고, 도중에 들어온 사람은
-         판이 끝나 로비로 돌아오기 전까지 관전으로 묶인다. -->
-    <div class="lobby-topic">
-      <label>참여</label>
-      <div class="bar">
-        <button id="playBtn" class="ghost">참여</button>
-        <button id="watchBtn" class="ghost">관전</button>
-      </div>
-      <p class="muted" id="watchNote"></p>
-    </div>
-
-    <p class="muted" id="lobbyNote"></p>
-
-    <div class="lobby-start">
-      <button id="startBtn">시작</button>
-    </div>
   </section>
 
   <!-- 관전자도 이 화면을 본다. 제시어와 그려지는 원본이 여기 다 있어서,
