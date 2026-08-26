@@ -7,12 +7,11 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "concurrently --names 서버,화면 --prefix-colors cyan,magenta --kill-others \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:watch": "concurrently --names 서버,화면 --prefix-colors cyan,magenta --kill-others \"npm:dev:server:watch\" \"npm:dev:client\"",
-    "dev:server": "tsx src/server/index.ts",
-    "dev:server:watch": "tsx watch src/server/index.ts",
-    "dev:client": "vite",
+    "dev": "node scripts/serve.mjs 5173 8080",
+    "dev:all": "node scripts/serve.mjs 5173 8080 --tunnel",
+    "dev:watch": "node scripts/serve.mjs 5173 8080 --watch",
     "play": "node scripts/serve.mjs 5174 8081",
+    "play:all": "node scripts/serve.mjs 5174 8081 --tunnel",
     "tunnel": "cloudflared tunnel --url http://localhost:5173",
     "tunnel:play": "cloudflared tunnel --url http://localhost:5174",
     "test": "vitest run",
@@ -24,7 +23,6 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
-    "concurrently": "^9.2.1",
     "jsdom": "^29.1.1",
     "tsx": "^4.23.10",
     "typescript": "^7.0.2",

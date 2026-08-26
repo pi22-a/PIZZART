@@ -48,10 +48,18 @@
 
 ```bash
 npm install     # 처음 한 번만
-npm run dev
+npm run dev:all
 ```
 
-명령 하나로 게임 서버(8080)와 페이지 서버(5173)가 함께 뜬다. 끄려면 `Ctrl + C` 한 번.
+**터미널 하나면 된다.** 게임 서버(8080), 페이지 서버(5173), 그리고 밖에서 들어올
+터널까지 함께 뜬다. 친구에게 보낼 주소는 초록색으로 따로 크게 나온다.
+끄려면 `Ctrl + C` 한 번 — 셋 다 같이 내려간다.
+
+밖에서 들어올 일이 없으면 터널을 뺀다.
+
+```bash
+npm run dev     # 5173 + 8080 만
+```
 
 ```
 http://localhost:5173/
@@ -108,16 +116,11 @@ ln -s ../PIZZA/node_modules ../PIZZA-play/node_modules
 
 | | 어디서 | 명령 | 주소 |
 |---|---|---|---|
-| **놀이판** | `../PIZZA-play` | `npm run play` | `localhost:5174` |
+| **놀이판** | `../PIZZA-play` | `npm run play:all` | `localhost:5174` + 터널 |
 | **고치는 판** | `PIZZA` | `npm run dev` | `localhost:5173` |
 
 포트가 갈려 있어 **서로 아무 상관이 없다.** 고치는 쪽을 아무리 저장해도 놀이판은 안 흔들린다.
-
-밖에서 들어올 링크는 놀이판 쪽으로 뚫는다.
-
-```bash
-cd ../PIZZA-play && npm run tunnel:play
-```
+친구에게 보낼 주소는 놀이판 터미널에 초록색으로 뜬다.
 
 놀 버전을 바꾸려면 그 자리에서 갈아탄다.
 
