@@ -36,6 +36,11 @@ export class Net {
     this.socket.addEventListener('error', () => this.statusFn?.(false));
   }
 
+  /** 지금 서버에 붙어 있는가. 끊긴 채로 뭘 보내봐야 조용히 사라진다. */
+  get open(): boolean {
+    return this.socket.readyState === WebSocket.OPEN;
+  }
+
   onStatus(fn: (ok: boolean) => void): void {
     this.statusFn = fn;
   }

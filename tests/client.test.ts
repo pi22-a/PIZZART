@@ -1122,3 +1122,44 @@ describe('방 대기 화면은 방에 대한 것만 보여준다', () => {
     expect(start).toBeGreaterThan(topic);
   });
 });
+
+describe('방 목록 새로고침', () => {
+  it('붙어 있으면 목록을 다시 달라고 한다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    live.out = [];
+    $('refreshRoomsBtn').click();
+    expect(live.out.filter((m) => m.t === 'rooms').length).toBe(1);
+  });
+
+  it('눌린 티를 낸다 — 목록이 그대로면 아무 일도 없어 보인다', async () => {
+    await boot();
+    const before = $('roomsNote').textContent;
+    $('refreshRoomsBtn').click();
+    expect($('roomsNote').textContent).toContain('다시 받았습니다');
+    vi.advanceTimersByTime(2000);
+    expect($('roomsNote').textContent).toBe(before);
+  });
+});
+
+describe('방 목록 새로고침 — 끊겼을 때', () => {
+  it('끊긴 소켓으로는 보내지 않는다', async () => {
+    // 끊긴 채로 보내면 조용히 사라진다. 화면에는 마지막 목록이 그대로 남아 있어서
+    // 멀쩡해 보이는데 실제로는 아무것도 안 온다 — 그래서 이때는 페이지를 새로 연다.
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    live.readyState = FakeSocket.CLOSED;
+    live.out = [];
+    let reloaded = false;
+    const reload = () => { reloaded = true; };
+    // jsdom의 location.reload는 그냥 부르면 "구현 안 됨" 오류를 낸다. 갈아 끼운다.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...window.location, reload, search: '', pathname: '/', hostname: 'localhost' },
+    });
+
+    $('refreshRoomsBtn').click();
+    expect(live.out.filter((m) => m.t === 'rooms').length).toBe(0);
+    expect(reloaded).toBe(true);
+  });
+});

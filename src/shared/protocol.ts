@@ -82,6 +82,8 @@ export type ClientMsg =
   | { t: 'reroll' }
   /** 로비에서 방을 만든다. 서버가 코드를 발급해 roomCreated로 돌려준다. */
   | { t: 'createRoom'; name: string }
+  /** 방 목록을 다시 달라고 한다. 목록은 원래 저절로 오지만 손으로 확인하고 싶을 때가 있다. */
+  | { t: 'rooms' }
   /** 방장이 내보낸다. 그 방에 한해 다시 못 들어온다. */
   | { t: 'kick'; playerId: string }
   /** 방장이 새 사람의 입장을 막거나 푼다. 이미 자리가 있는 사람의 재접속은 통과한다. */

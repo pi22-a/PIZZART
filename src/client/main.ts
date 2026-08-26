@@ -240,6 +240,7 @@ $('doodleClearBtn').addEventListener('click', () => {
 const enterSent = (e: KeyboardEvent) => e.key === 'Enter' && !e.isComposing;
 
 // ── 로비 ──
+const ROOMS_NOTE = '방을 만들거나, 아래에서 골라 들어가세요. 목록은 저절로 바뀝니다.';
 const enterName = $('enterName') as HTMLInputElement;
 const newRoomName = $('newRoomName') as HTMLInputElement;
 
@@ -271,6 +272,22 @@ $('renameMeBtn').addEventListener('click', () => {
   enterName.value = myName;
   setTag('enterHint', '엔터를 쳐도 됩니다 · 최대 12자');
   show('enter');
+});
+
+/**
+ * 방 목록 새로고침.
+ *
+ * 목록은 원래 저절로 온다 — 누가 방을 만들면 서버가 바로 밀어준다. 그런데 소켓이
+ * 끊기면 그 길이 막히고, 화면에는 마지막에 받은 목록이 그대로 남아 있어서 멀쩡해 보인다.
+ * 그래서 이 버튼은 두 가지를 한다: 붙어 있으면 다시 달라고 하고, 끊겼으면 페이지를 새로 연다.
+ * 로비에는 잃을 상태가 없으므로(이름은 브라우저에 남는다) 새로 여는 것이 가장 확실하다.
+ */
+$('refreshRoomsBtn').addEventListener('click', () => {
+  if (!net.open) { location.reload(); return; }
+  net.send({ t: 'rooms' });
+  // 목록이 그대로면 눌린 티가 안 난다. 잠깐이라도 뭐라도 말해준다.
+  setTag('roomsNote', '목록을 다시 받았습니다.');
+  setTimeout(() => setTag('roomsNote', ROOMS_NOTE), 1400);
 });
 
 $('makeRoomBtn').addEventListener('click', () => {

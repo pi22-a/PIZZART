@@ -280,12 +280,14 @@
       <span class="spacer"></span>
       <span class="pill" id="whoami"></span>
       <button id="renameMeBtn" class="ghost icon" title="이름 바꾸기">✎</button>
+      <!-- 목록은 저절로 갱신되지만, 끊겼을 때 되살릴 길이 여기밖에 없다. -->
+      <button id="refreshRoomsBtn" class="ghost">새로고침</button>
     </div>
     <div class="bar">
       <button id="makeRoomBtn">방 만들기</button>
       <input id="newRoomName" placeholder="방 이름 (비우면 자동)" maxlength="20" />
     </div>
-    <p class="muted" id="roomsNote">방을 만들거나, 아래에서 골라 들어가세요.</p>
+    <p class="muted" id="roomsNote">방을 만들거나, 아래에서 골라 들어가세요. 목록은 저절로 바뀝니다.</p>
     <ul class="rooms" id="roomList"></ul>
   </section>
 

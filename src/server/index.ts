@@ -201,7 +201,12 @@ wss.on('connection', (socket, req) => {
     socket.on('message', (raw) => {
       let msg: ClientMsg;
       try { msg = JSON.parse(String(raw)) as ClientMsg; } catch { return; }
-      if (!msg || msg.t !== 'createRoom') return;
+      if (!msg) return;
+      if (msg.t === 'rooms') {
+        socket.send(JSON.stringify({ t: 'roomList', rooms: roomList() } satisfies ServerMsg));
+        return;
+      }
+      if (msg.t !== 'createRoom') return;
       const code = newRoomCode();
       const s = sessionFor(code);
       s.name = String(msg.name ?? '').trim().slice(0, 20) || '새 방';
