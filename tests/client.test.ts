@@ -60,6 +60,7 @@ function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg 
     t: 'room', phase: 'guessing', players: PLAYERS, hostId: 'd',
     round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    left: 480, total: 500, wordsRecycled: false,
     ...over,
   } as ServerMsg;
 }
@@ -368,6 +369,7 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    left: 480, total: 500, wordsRecycled: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
   });
@@ -386,6 +388,7 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    left: 480, total: 500, wordsRecycled: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 4/4 — 시작할 수 있습니다');
   });
@@ -404,6 +407,7 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    left: 480, total: 500, wordsRecycled: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 4/4 — 방장이 시작하기를 기다립니다');
   });
@@ -420,6 +424,7 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    left: 480, total: 500, wordsRecycled: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
   });
@@ -620,7 +625,8 @@ describe('그린 획이 서버까지 간다', () => {
 
 const TEST_RULES_CLIENT = {
   minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
-    roomName: '테스트 방', roomCode: 'TEST', locked: false, maxPlayers: 9, sliceCountMin: 8,
+    roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    left: 480, total: 500, wordsRecycled: false, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
   startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5, wordRerolls: 2,

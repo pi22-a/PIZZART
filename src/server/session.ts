@@ -112,8 +112,19 @@ export class Session {
   /** 만들어진 시각. 만든 사람이 도착하기 전에 빈 방으로 지워지는 것을 막는다. */
   readonly bornAt = Date.now();
 
-  /** 이번 게임에 이미 나온 제시어. 같은 판에서 두 번 나오면 정답을 흘리는 셈이다. */
+  /**
+   * 이 방에서 이미 나온 제시어.
+   *
+   * 판이 아니라 **방** 단위다. 예전에는 '한 판 더'를 누를 때마다 비웠는데, 테스터들이
+   * 이어서 여러 판을 돌리자 방금 나온 단어가 다음 판에 바로 다시 나왔다.
+   * 판 안에서 안 겹치는 것만으로는 부족했다.
+   *
+   * 고를 수 있는 단어를 다 쓰면 그때 비우고 처음부터 다시 돈다(nextWord 참조).
+   */
   private usedWords = new Set<string>();
+
+  /** 제시어를 한 바퀴 다 돌아 기억을 비운 적이 있는가. 남은 개수 표시에 쓴다. */
+  private wordsRecycled = false;
 
   /** 이번 라운드에 출제자가 제시어를 더 바꿀 수 있는 횟수. 라운드마다 다시 찬다. */
   private rerollsLeft = 0;
@@ -346,7 +357,7 @@ export class Session {
     this.round = 0;
     // 새 판이 시작되면 아무도 '늦게 온 사람'이 아니다. 이름은 로비에서 바꾼다.
     for (const p of this.players) p.lateJoin = false;
-    this.usedWords.clear();
+    // 이미 나온 제시어는 비우지 않는다. 방을 이어 쓰는 동안 계속 기억한다.
     this.chatLog = [];
     this.doodleColors.clear();
     for (const p of this.players) p.score = 0;
@@ -872,7 +883,7 @@ export class Session {
     this.round = 0;
     this.attempt = 1;
     this.answers.clear();
-    this.usedWords.clear();
+    // usedWords는 여기서도 비우지 않는다 — 한 판 더는 '새 방'이 아니라 '이어서 한 판'이다.
     this.chatLog = [];
     this.lastFinal = null;
     this.lastRoundEnd = null;
@@ -995,13 +1006,37 @@ export class Session {
     const pool = this.selectedTopic
       ? this.topics.filter((t) => t.topic === this.selectedTopic)
       : this.topics;
-    const fresh = pool
+    const unused = () => pool
       .map((t) => ({ topic: t.topic, words: t.words.filter((w) => !this.usedWords.has(w)) }))
       .filter((t) => t.words.length > 0);
-    // 고른 주제의 단어가 바닥나도 주제를 바꾸지 않는다 — 중복을 허용하는 편이 덜 놀랍다.
-    const chosen = pickWord(fresh.length > 0 ? fresh : pool, this.pick);
+
+    let fresh = unused();
+    if (fresh.length === 0) {
+      // 고를 수 있는 단어를 다 썼다. 기억을 비우고 처음부터 다시 돈다.
+      //
+      // 비우는 것은 지금 후보군의 단어뿐이다. 주제를 고정해 두고 그 50개를 다 쓴 경우에
+      // 나머지 아홉 주제의 기억까지 날리면, 나중에 랜덤으로 돌렸을 때 이미 나온 단어가
+      // 무더기로 되돌아온다.
+      for (const t of pool) for (const w of t.words) this.usedWords.delete(w);
+      this.wordsRecycled = true;
+      fresh = unused();
+    }
+    const chosen = pickWord(fresh, this.pick);
     this.usedWords.add(chosen.word);
     return chosen;
+  }
+
+  /** 지금 후보군에서 아직 안 나온 제시어 수와 전체 수. 방 표시줄에 조용히 적는다. */
+  private wordsLeft(): { left: number; total: number } {
+    const pool = this.selectedTopic
+      ? this.topics.filter((t) => t.topic === this.selectedTopic)
+      : this.topics;
+    let left = 0, total = 0;
+    for (const t of pool) {
+      total += t.words.length;
+      left += t.words.filter((w) => !this.usedWords.has(w)).length;
+    }
+    return { left, total };
   }
 
   protected livePlayer(id: string): boolean {
@@ -1154,6 +1189,8 @@ export class Session {
       roomName: this.name,
       roomCode: this.code,
       locked: this.locked,
+      ...this.wordsLeft(),
+      wordsRecycled: this.wordsRecycled,
     });
   }
 }

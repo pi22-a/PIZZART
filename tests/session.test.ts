@@ -1854,3 +1854,87 @@ describe('입장 잠그기', () => {
     expect(roomNow().locked).toBe(false);
   });
 });
+
+describe('제시어 기억은 방 단위다', () => {
+  const roomNow = () => msgsOfType('room').at(-1)!;
+  const drawStar = (id: string) => s.addStroke(id, [[300, 200], [400, 300], [200, 400], [300, 200]]);
+  const wordFor = (drawer: string) =>
+    (msgsTo(drawer).filter((m) => m.t === 'word').at(-1) as Extract<ServerMsg, { t: 'word' }>).word;
+
+  /** 한 판을 끝까지 돌리고 그동안 나온 제시어를 모은다. */
+  function playGame(): string[] {
+    const got: string[] = [];
+    s.start('p1');
+    while (s.phase !== 'final') {
+      const drawer = s.drawerId;
+      got.push(wordFor(drawer));
+      drawStar(drawer);
+      s.drawDone(drawer);
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+    return got;
+  }
+
+  beforeEach(() => { newSession(); });
+
+  it('한 판 더를 해도 방금 나온 제시어가 다시 안 나온다', () => {
+    // 예전에는 again()에서 기억을 비웠다. 테스터들이 이어서 여러 판을 돌리자
+    // 방금 나온 단어가 다음 판에 바로 다시 나왔다.
+    const first = playGame();
+    s.again('p1');
+    const second = playGame();
+    for (const w of second) expect(first).not.toContain(w);
+  });
+
+  it('다 쓰면 기억을 비우고 처음부터 다시 돈다', () => {
+    // 단어가 딱 네 개뿐인 주제를 주고 두 판을 돌린다.
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs,
+      topics: [{ topic: '작은주제', words: ['가', '나', '다', '라'] }],
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+
+    const first = playGame();
+    expect(new Set(first).size).toBe(4);   // 네 개를 다 썼다
+    expect(roomNow().left).toBe(0);
+
+    s.again('p1');
+    const second = playGame();
+    expect(new Set(second).size).toBe(4);  // 멈추지 않고 다시 네 개
+    expect(roomNow().wordsRecycled).toBe(true);
+  });
+
+  it('주제를 고정해 다 써도 다른 주제의 기억은 남는다', () => {
+    // 고정 주제 50개를 다 썼다고 나머지 아홉 주제의 기억까지 날리면,
+    // 랜덤으로 돌렸을 때 이미 나온 단어가 무더기로 되돌아온다.
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs,
+      topics: [
+        { topic: '작은주제', words: ['가', '나', '다', '라'] },
+        { topic: '다른주제', words: ['마', '바', '사', '아'] },
+      ],
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+
+    s.setTopic('p1', '작은주제');
+    playGame();                       // 작은주제 넷을 다 쓴다
+    s.again('p1');
+    playGame();                       // 비우고 다시 넷
+    s.again('p1');
+    s.setTopic('p1', '다른주제');
+    // 다른주제는 아직 하나도 안 썼으므로 넷이 통째로 남아 있어야 한다
+    expect(roomNow().left).toBe(4);
+  });
+
+  it('남은 개수를 방 상태에 실어 보낸다', () => {
+    const before = roomNow().left;
+    expect(before).toBe(roomNow().total);
+    playGame();
+    expect(roomNow().left).toBeLessThan(before);
+  });
+});
