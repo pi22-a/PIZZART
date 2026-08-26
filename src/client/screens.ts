@@ -76,13 +76,16 @@ export function renderLobbyNote(
   // 다섯이 앉아 있는데 4/4라고 하면 틀려 보인다. 어디로 갔는지 적어준다.
   const aside = watching > 0 ? ` · 관전 ${watching}명` : '';
 
+  // 'N/4'로 적지 않는다. 분수로 보이면 4가 정원처럼 읽혀서 다섯 명, 여섯 명은
+  // 안 되는 줄 안다. 4는 하한이지 상한이 아니다(상한은 maxPlayers다).
   if (playing < minPlayers) {
     const needMore = minPlayers - playing;
-    setTag('lobbyNote', `참가자 ${playing}/${minPlayers}${aside} — ${needMore}명 더 모이면 시작할 수 있습니다`);
+    setTag('lobbyNote',
+      `참가자 ${playing}명${aside} — 최소 ${minPlayers}명이 모여야 시작할 수 있습니다 (${needMore}명 더)`);
   } else if (isHost) {
-    setTag('lobbyNote', `참가자 ${playing}/${minPlayers}${aside} — 시작할 수 있습니다`);
+    setTag('lobbyNote', `참가자 ${playing}명${aside} — 시작할 수 있습니다`);
   } else {
-    setTag('lobbyNote', `참가자 ${playing}/${minPlayers}${aside} — 방장이 시작하기를 기다립니다`);
+    setTag('lobbyNote', `참가자 ${playing}명${aside} — 방장이 시작하기를 기다립니다`);
   }
 }
 

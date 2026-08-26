@@ -522,10 +522,6 @@ function onMsg(m: ServerMsg): void {
 
     roomLocked = m.locked;
     roomLabel = `${m.roomName || '방'} · ${m.roomCode}`;
-    // 한 바퀴 돌기 전에는 남은 개수를, 돌고 나면 그 사실을 알린다.
-    setTag('wordsLeftTag', m.wordsRecycled
-      ? `제시어 한 바퀴 돌았습니다 · 남은 ${m.left}/${m.total}`
-      : `제시어 ${m.left}/${m.total}`);
     $('roomBar').style.display = '';
     paintRoomBar();
 

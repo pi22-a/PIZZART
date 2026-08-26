@@ -123,8 +123,6 @@ export class Session {
    */
   private usedWords = new Set<string>();
 
-  /** 제시어를 한 바퀴 다 돌아 기억을 비운 적이 있는가. 남은 개수 표시에 쓴다. */
-  private wordsRecycled = false;
 
   /** 이번 라운드에 출제자가 제시어를 더 바꿀 수 있는 횟수. 라운드마다 다시 찬다. */
   private rerollsLeft = 0;
@@ -160,6 +158,11 @@ export class Session {
     this.rules = opts.rules ?? loadRules();
     this.topics = opts.topics ?? loadTopics();
     this.onDrawing = opts.onDrawing;
+  }
+
+  /** 테스트에서 들여다보기 위한 것 */
+  get usedWordCount(): number {
+    return this.usedWords.size;
   }
 
   /** 테스트에서 들여다보기 위한 것 */
@@ -1018,7 +1021,6 @@ export class Session {
       // 나머지 아홉 주제의 기억까지 날리면, 나중에 랜덤으로 돌렸을 때 이미 나온 단어가
       // 무더기로 되돌아온다.
       for (const t of pool) for (const w of t.words) this.usedWords.delete(w);
-      this.wordsRecycled = true;
       fresh = unused();
     }
     const chosen = pickWord(fresh, this.pick);
@@ -1026,18 +1028,6 @@ export class Session {
     return chosen;
   }
 
-  /** 지금 후보군에서 아직 안 나온 제시어 수와 전체 수. 방 표시줄에 조용히 적는다. */
-  private wordsLeft(): { left: number; total: number } {
-    const pool = this.selectedTopic
-      ? this.topics.filter((t) => t.topic === this.selectedTopic)
-      : this.topics;
-    let left = 0, total = 0;
-    for (const t of pool) {
-      total += t.words.length;
-      left += t.words.filter((w) => !this.usedWords.has(w)).length;
-    }
-    return { left, total };
-  }
 
   protected livePlayer(id: string): boolean {
     return this.players.some((p) => p.id === id && p.connected);
@@ -1189,8 +1179,6 @@ export class Session {
       roomName: this.name,
       roomCode: this.code,
       locked: this.locked,
-      ...this.wordsLeft(),
-      wordsRecycled: this.wordsRecycled,
     });
   }
 }

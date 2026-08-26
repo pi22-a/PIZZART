@@ -144,16 +144,6 @@ export type ServerMsg =
       roomCode: string;
       /** 새 사람의 입장이 막혀 있는가 */
       locked: boolean;
-      /**
-       * 지금 후보군에서 아직 안 나온 제시어 수와 전체 수.
-       *
-       * 단어가 새어 나가지는 않는다 — 개수뿐이다. 제시어가 바닥나 가는 것을 방장이
-       * 미리 알아야 주제를 풀거나 판을 갈아탈지 정할 수 있다.
-       */
-      left: number;
-      total: number;
-      /** 한 바퀴를 다 돌아 기억을 비운 적이 있는가 */
-      wordsRecycled: boolean;
       /** 고를 수 있는 주제 목록 */
       topics: string[];
       /** 방장이 고정한 주제. null이면 라운드마다 무작위로 뽑는다 */

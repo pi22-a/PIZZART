@@ -1899,12 +1899,13 @@ describe('제시어 기억은 방 단위다', () => {
 
     const first = playGame();
     expect(new Set(first).size).toBe(4);   // 네 개를 다 썼다
-    expect(roomNow().left).toBe(0);
+    expect(s.usedWordCount).toBe(4);
 
     s.again('p1');
     const second = playGame();
     expect(new Set(second).size).toBe(4);  // 멈추지 않고 다시 네 개
-    expect(roomNow().wordsRecycled).toBe(true);
+    // 비우고 다시 돌았으므로 여덟이 아니라 넷만 기억하고 있다
+    expect(s.usedWordCount).toBe(4);
   });
 
   it('주제를 고정해 다 써도 다른 주제의 기억은 남는다', () => {
@@ -1925,16 +1926,19 @@ describe('제시어 기억은 방 단위다', () => {
     playGame();                       // 작은주제 넷을 다 쓴다
     s.again('p1');
     playGame();                       // 비우고 다시 넷
+    // 작은주제를 비웠어도 다른주제의 기억은 건드리지 않았어야 한다.
+    // 지금 기억하고 있는 넷은 전부 작은주제의 것이다.
+    expect(s.usedWordCount).toBe(4);
     s.again('p1');
     s.setTopic('p1', '다른주제');
-    // 다른주제는 아직 하나도 안 썼으므로 넷이 통째로 남아 있어야 한다
-    expect(roomNow().left).toBe(4);
+    const third = playGame();
+    expect(new Set(third).size).toBe(4);
+    for (const w of third) expect(['마', '바', '사', '아']).toContain(w);
   });
 
-  it('남은 개수를 방 상태에 실어 보낸다', () => {
-    const before = roomNow().left;
-    expect(before).toBe(roomNow().total);
-    playGame();
-    expect(roomNow().left).toBeLessThan(before);
+  it('한 판을 돌면 그만큼 기억이 쌓인다', () => {
+    expect(s.usedWordCount).toBe(0);
+    const got = playGame();
+    expect(s.usedWordCount).toBe(got.length);
   });
 });

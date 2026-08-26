@@ -60,7 +60,6 @@ function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg 
     t: 'room', phase: 'guessing', players: PLAYERS, hostId: 'd',
     round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
-    left: 480, total: 500, wordsRecycled: false,
     ...over,
   } as ServerMsg;
 }
@@ -369,9 +368,8 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
-    left: 480, total: 500, wordsRecycled: false,
     }));
-    expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
+    expect($('lobbyNote').textContent).toBe('참가자 2명 — 최소 4명이 모여야 시작할 수 있습니다 (2명 더)');
   });
 
   it('참가자가 충분하고 내가 방장이면 시작 가능 메시지를 보여준다', async () => {
@@ -388,9 +386,8 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
-    left: 480, total: 500, wordsRecycled: false,
     }));
-    expect($('lobbyNote').textContent).toBe('참가자 4/4 — 시작할 수 있습니다');
+    expect($('lobbyNote').textContent).toBe('참가자 4명 — 시작할 수 있습니다');
   });
 
   it('참가자가 충분하지만 내가 방장이 아니면 대기 메시지를 보여준다', async () => {
@@ -407,9 +404,8 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
-    left: 480, total: 500, wordsRecycled: false,
     }));
-    expect($('lobbyNote').textContent).toBe('참가자 4/4 — 방장이 시작하기를 기다립니다');
+    expect($('lobbyNote').textContent).toBe('참가자 4명 — 방장이 시작하기를 기다립니다');
   });
 
   it('접속 해제된 참가자는 카운트에 포함되지 않는다', async () => {
@@ -424,9 +420,8 @@ describe('로비 카운트 라인', () => {
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
-    left: 480, total: 500, wordsRecycled: false,
     }));
-    expect($('lobbyNote').textContent).toBe('참가자 2/4 — 2명 더 모이면 시작할 수 있습니다');
+    expect($('lobbyNote').textContent).toBe('참가자 2명 — 최소 4명이 모여야 시작할 수 있습니다 (2명 더)');
   });
 });
 
@@ -625,8 +620,7 @@ describe('그린 획이 서버까지 간다', () => {
 
 const TEST_RULES_CLIENT = {
   minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
-    roomName: '테스트 방', roomCode: 'TEST', locked: false,
-    left: 480, total: 500, wordsRecycled: false, maxPlayers: 9, sliceCountMin: 8,
+    roomName: '테스트 방', roomCode: 'TEST', locked: false, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
   startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5, wordRerolls: 2,
@@ -768,7 +762,7 @@ describe('상단바는 조용해야 한다', () => {
 
 describe('로비 인원은 관전자를 빼고 센다', () => {
   it('관전자는 참가자 수에 안 들어가고, 몇 명이 관전 중인지는 따로 적는다', async () => {
-    // 같이 세면 "참가자 5/4 — 시작할 수 있습니다"라고 해놓고 서버가 시작을 거절한다.
+    // 같이 세면 인원이 찼다고 해놓고 서버가 시작을 거절한다.
     await boot();
     deliver({ t: 'joined', youId: 'me' });
     deliver(room({
@@ -778,7 +772,7 @@ describe('로비 인원은 관전자를 빼고 센다', () => {
         { id: 'w', name: '구경꾼', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 0, pendingScore: 0, doodleColor: '', spectator: true, canRename: false },
       ],
     }));
-    expect($('lobbyNote').textContent).toBe('참가자 3/4 · 관전 1명 — 1명 더 모이면 시작할 수 있습니다');
+    expect($('lobbyNote').textContent).toBe('참가자 3명 · 관전 1명 — 최소 4명이 모여야 시작할 수 있습니다 (1명 더)');
   });
 });
 
