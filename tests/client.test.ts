@@ -1231,3 +1231,32 @@ describe('주제는 여러 개 고른다', () => {
     expect($('topicNote').textContent).toBe('방장이 고른 주제: 음식');
   });
 });
+
+describe('관전자는 명단 맨 뒤로', () => {
+  const P = (id: string, over = {}) => ({
+    id, name: id, connected: true, score: 0, isDrawer: false, answered: false,
+    skipped: false, solved: false, sliceCount: 1, pendingScore: 10,
+    doodleColor: '', spectator: false, canRename: false, ...over,
+  });
+  const names = () => [...document.querySelectorAll('#players .p')]
+    .map((e) => (e.textContent ?? '').replace(/[^가-힣A-Za-z0-9]/g, ''));
+
+  it('중간에 낀 관전자가 뒤로 간다', async () => {
+    // 이 줄은 사실상 출제 순번표다. 안 그리는 사람이 중간에 끼면 다음이 누구인지
+    // 세는 데 방해가 된다.
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({
+      phase: 'lobby',
+      players: [P('가'), P('구경1', { spectator: true }), P('나'), P('구경2', { spectator: true }), P('다')],
+    }));
+    expect(names()).toEqual(['가', '나', '다', '구경1', '구경2']);
+  });
+
+  it('참가자끼리의 순서는 그대로다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'lobby', players: [P('다'), P('가'), P('나')] }));
+    expect(names()).toEqual(['다', '가', '나']);
+  });
+});

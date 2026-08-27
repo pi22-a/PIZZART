@@ -27,7 +27,10 @@ let onKick: ((playerId: string) => void) | null = null;
 export function setKickHandler(fn: (playerId: string) => void): void { onKick = fn; }
 
 export function renderPlayers(players: PlayerInfo[], youId: string, hostId: string = '', phase: string = ''): void {
-  $('players').innerHTML = players
+  // 관전자는 항상 뒤로 보낸다. 이 줄은 사실상 출제 순번표라서, 중간에 안 그리는 사람이
+  // 끼면 "다음이 누구지"를 세는 데 방해가 된다. 참가자끼리의 순서는 그대로 둔다(안정 정렬).
+  const ordered = [...players].sort((a, b) => Number(a.spectator) - Number(b.spectator));
+  $('players').innerHTML = ordered
     .map((p) => {
       const meClass = p.id === youId ? ' me' : '';
       const cls = ['p', p.connected ? '' : 'off', p.isDrawer ? 'drawer' : '',
@@ -52,7 +55,7 @@ export function renderPlayers(players: PlayerInfo[], youId: string, hostId: stri
     for (const el of $('players').querySelectorAll('[data-kick]')) {
       el.addEventListener('click', () => {
         const id = (el as HTMLElement).dataset.kick!;
-        const who = players.find((p) => p.id === id)?.name ?? '';
+        const who = ordered.find((p) => p.id === id)?.name ?? '';
         // 되돌릴 수 없는 일이다. 그 방에 다시 못 들어오고, 방이 잠긴다.
         if (confirm(`${who} 님을 내보낼까요?\n\n이 방에 다시 들어올 수 없게 되고, 새 사람의 입장도 잠깁니다.`)) {
           onKick?.(id);
