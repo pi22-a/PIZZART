@@ -171,7 +171,7 @@ cd ../PIZZA      && npm run dev              # 5173, 여기서 고친다
 
 ### 손잡이
 
-없다. `rules.json`은 v1.3.0 그대로다.
+없다. `content/rules.json`은 v1.3.0 그대로다.
 
 ### 고친 것
 
