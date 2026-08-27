@@ -518,8 +518,8 @@ function onMsg(m: ServerMsg): void {
     }
 
     if (m.phase === 'lobby') {
-      renderTopics(m.topics, m.selectedTopic, youId === hostId,
-        (topic) => net.send({ t: 'setTopic', topic }));
+      renderTopics(m.topics, m.selectedTopics, youId === hostId,
+        (topics) => net.send({ t: 'setTopics', topics }));
       $('playBtn').classList.toggle('on', !iWatch);
       $('watchBtn').classList.toggle('on', iWatch);
       $('watchNote').textContent = iWatch

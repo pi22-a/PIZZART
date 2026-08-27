@@ -178,33 +178,51 @@ export function renderAnswers(target: string, rows: AnswerRow[], names: Map<stri
 }
 
 /**
- * 주제 고르기 버튼. 방장에게만 누를 수 있게 두고, 나머지에게는 무엇이 골라졌는지만 보여준다.
+ * 주제 고르기. 방장에게만 누를 수 있게 두고, 나머지에게는 무엇이 골라졌는지만 보여준다.
  * 남이 고른 것을 못 보면 "왜 계속 동물만 나오지?"가 된다.
+ *
+ * 여러 개를 고를 수 있다. 맨 앞의 `전체`는 고른 것을 지우는 버튼이다 —
+ * 아무것도 안 고른 상태가 곧 전체이므로 따로 둘 필요가 없다.
  */
 export function renderTopics(
   topics: string[],
-  selected: string | null,
+  selected: string[],
   isHost: boolean,
-  onPick: (topic: string | null) => void,
+  onPick: (topics: string[]) => void,
 ): void {
   const box = $('topicBtns');
   box.innerHTML = '';
   // 주제 목록이 안 왔으면 조용히 비워둔다. 로비가 통째로 죽는 것보다 낫다.
-  const opts: Array<{ label: string; value: string | null }> = [
-    ...(topics ?? []).map((t) => ({ label: t, value: t as string | null })),
-    { label: '랜덤', value: null },
-  ];
-  for (const o of opts) {
+  const list = topics ?? [];
+  const picked = new Set(selected ?? []);
+
+  const all = document.createElement('button');
+  all.textContent = '전체';
+  all.className = picked.size === 0 ? 'on' : '';
+  all.disabled = !isHost;
+  all.addEventListener('click', () => onPick([]));
+  box.appendChild(all);
+
+  for (const t of list) {
     const b = document.createElement('button');
-    b.textContent = o.label;
-    b.className = o.value === selected ? 'on' : '';
+    b.textContent = t;
+    b.className = picked.has(t) ? 'on' : '';
     b.disabled = !isHost;
-    b.addEventListener('click', () => onPick(o.value));
+    b.addEventListener('click', () => {
+      // 누른 것을 넣거나 뺀다. 전부 빼면 저절로 전체가 된다.
+      const next = new Set(picked);
+      if (next.has(t)) next.delete(t); else next.add(t);
+      onPick([...next]);
+    });
     box.appendChild(b);
   }
+
+  const names = [...picked].join(' · ');
   $('topicNote').textContent = isHost
-    ? '고른 주제로만 문제가 나옵니다. 랜덤이면 라운드마다 바뀝니다.'
-    : `방장이 고른 주제: ${selected ?? '랜덤'}`;
+    ? (picked.size === 0
+        ? '전체 — 모든 주제에서 나옵니다. 눌러서 원하는 것만 고를 수 있습니다.'
+        : `고른 ${picked.size}개에서만 나옵니다: ${names}`)
+    : (picked.size === 0 ? '방장이 고른 주제: 전체' : `방장이 고른 주제: ${names}`);
 }
 
 export function renderRanking(rows: Array<{ playerId: string; name: string; score: number }>): void {

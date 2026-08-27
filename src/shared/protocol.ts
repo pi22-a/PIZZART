@@ -56,7 +56,7 @@ export type ClientMsg =
   | { t: 'join'; name: string; cid: string }
   | { t: 'start' }
   /** 로비에서 방장이 주제를 고정한다. null이면 라운드마다 무작위. */
-  | { t: 'setTopic'; topic: string | null }
+  | { t: 'setTopics'; topics: string[] }
   /**
    * 관전으로 돌리거나 참여로 돌아온다. 로비에서만, 본인만.
    *
@@ -149,7 +149,13 @@ export type ServerMsg =
       /** 고를 수 있는 주제 목록 */
       topics: string[];
       /** 방장이 고정한 주제. null이면 라운드마다 무작위로 뽑는다 */
-      selectedTopic: string | null;
+      /**
+       * 방장이 고른 주제들. 비어 있으면 전체다.
+       *
+       * 하나만 고를 수 있던 때는 null이 전체를 뜻했는데, 여러 개를 고르게 되면서
+       * "아무것도 안 고름"과 "전체"가 같은 뜻이 됐다. 빈 배열 하나로 둘 다 표현한다.
+       */
+      selectedTopics: string[];
     }
   /**
    * 제시어. 정답을 아는 쪽(출제자·관전자)에게만 간다.

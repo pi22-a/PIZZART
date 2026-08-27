@@ -58,7 +58,7 @@ const PLAYERS = [
 function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg {
   return {
     t: 'room', phase: 'guessing', players: PLAYERS, hostId: 'd',
-    round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
+    round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
     ...over,
   } as ServerMsg;
@@ -366,7 +366,7 @@ describe('로비 카운트 라인', () => {
         { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
         { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
       ],
-      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
+      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 2명 — 최소 4명이 모여야 시작할 수 있습니다 (2명 더)');
@@ -384,7 +384,7 @@ describe('로비 카운트 라인', () => {
         { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
         { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
       ],
-      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
+      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 4명 — 시작할 수 있습니다');
@@ -402,7 +402,7 @@ describe('로비 카운트 라인', () => {
         { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
         { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
       ],
-      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
+      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 4명 — 방장이 시작하기를 기다립니다');
@@ -418,7 +418,7 @@ describe('로비 카운트 라인', () => {
         { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
         { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
       ],
-      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
+      minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
     }));
     expect($('lobbyNote').textContent).toBe('참가자 2명 — 최소 4명이 모여야 시작할 수 있습니다 (2명 더)');
@@ -619,7 +619,7 @@ describe('그린 획이 서버까지 간다', () => {
 });
 
 const TEST_RULES_CLIENT = {
-  minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopic: null,
+  minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false, maxPlayers: 9, sliceCountMin: 8,
   drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
@@ -1161,5 +1161,73 @@ describe('방 목록 새로고침 — 끊겼을 때', () => {
     $('refreshRoomsBtn').click();
     expect(live.out.filter((m) => m.t === 'rooms').length).toBe(0);
     expect(reloaded).toBe(true);
+  });
+});
+
+describe('주제는 여러 개 고른다', () => {
+  const lobby = (over = {}) => room({
+    phase: 'lobby', hostId: 'me',
+    topics: ['동물', '음식', '도구'], selectedTopics: [], ...over,
+  });
+  const btns = () => [...document.querySelectorAll('#topicBtns button')] as HTMLButtonElement[];
+
+  it('전체가 맨 앞이고, 아무것도 안 고르면 전체가 켜져 있다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby());
+    expect(btns().map((b) => b.textContent)).toEqual(['전체', '동물', '음식', '도구']);
+    expect(btns()[0].classList.contains('on')).toBe(true);
+  });
+
+  it('주제를 누르면 그것만 담아 보낸다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby());
+    live.out = [];
+    btns()[1].click();   // 동물
+    expect(live.out.at(-1)).toEqual({ t: 'setTopics', topics: ['동물'] });
+  });
+
+  it('이미 고른 것 위에 하나 더 누르면 둘이 된다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ selectedTopics: ['동물'] }));
+    live.out = [];
+    btns()[3].click();   // 도구
+    expect((live.out.at(-1) as { topics: string[] }).topics.sort()).toEqual(['도구', '동물']);
+  });
+
+  it('고른 것을 다시 누르면 빠진다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ selectedTopics: ['동물', '음식'] }));
+    live.out = [];
+    btns()[1].click();   // 동물을 뺀다
+    expect((live.out.at(-1) as { topics: string[] }).topics).toEqual(['음식']);
+  });
+
+  it('전체를 누르면 고른 것이 비워진다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ selectedTopics: ['동물', '음식'] }));
+    live.out = [];
+    btns()[0].click();
+    expect(live.out.at(-1)).toEqual({ t: 'setTopics', topics: [] });
+  });
+
+  it('고른 것을 안내문에 적는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ selectedTopics: ['동물', '도구'] }));
+    expect($('topicNote').textContent).toContain('2개');
+    expect($('topicNote').textContent).toContain('동물 · 도구');
+  });
+
+  it('방장이 아니면 못 누르고, 뭘 골랐는지만 본다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ hostId: 'd', selectedTopics: ['음식'] }));
+    expect(btns().every((b) => b.disabled)).toBe(true);
+    expect($('topicNote').textContent).toBe('방장이 고른 주제: 음식');
   });
 });

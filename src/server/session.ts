@@ -95,7 +95,7 @@ export class Session {
   private lastFinal: ServerMsg | null = null;
 
   /** 방장이 고른 주제. null이면 라운드마다 무작위. */
-  private selectedTopic: string | null = null;
+  private selectedTopics: string[] = [];
 
   /** 방 이름과 코드. 로비 목록과 방 안의 링크 만들기에 쓴다. */
   name = '';
@@ -258,14 +258,18 @@ export class Session {
   }
 
   /**
-   * 방장이 주제를 고정한다. 로비에서만, 방장만.
-   * null이면 예전처럼 라운드마다 무작위로 뽑는다.
+   * 방장이 어느 주제에서 뽑을지 고른다. 로비에서만, 방장만.
+   *
+   * 비어 있으면 전체다. 하나만 고를 수 있던 때는 null이 전체를 뜻했는데, 여러 개를
+   * 고르게 되면서 "아무것도 안 고름"과 "전체"가 같은 뜻이 됐다. 빈 배열이 그 둘이다.
    */
-  setTopic(playerId: string, topic: string | null): void {
+  setTopics(playerId: string, topics: string[]): void {
     if (playerId !== this.hostId) return;
     if (this.phase !== 'lobby') return;
-    if (topic !== null && !this.topics.some((t) => t.topic === topic)) return;
-    this.selectedTopic = topic;
+    if (!Array.isArray(topics)) return;
+    // 목록에 없는 이름은 버린다. 남는 것이 없으면 전체가 된다.
+    const known = new Set(this.topics.map((t) => t.topic));
+    this.selectedTopics = [...new Set(topics)].filter((t) => known.has(t));
     this.broadcastRoom();
   }
 
@@ -438,10 +442,10 @@ export class Session {
 
     this.rerollsLeft--;
     // 같은 주제 안에서만 다시 뽑는다.
-    const before = this.selectedTopic;
-    this.selectedTopic = this.topic;
+    const before = this.selectedTopics;
+    this.selectedTopics = [this.topic];
     const chosen = this.nextWord();
-    this.selectedTopic = before;
+    this.selectedTopics = before;
     this.word = chosen.word;
 
     // 그리던 것은 지운다. 다른 단어를 보고 그린 선이라 남겨두면 정답과 어긋난다.
@@ -960,7 +964,7 @@ export class Session {
       case 'again': return this.again(playerId);
       case 'join': return this.join(playerId, msg.name);
       case 'start': return this.start(playerId);
-      case 'setTopic': return this.setTopic(playerId, msg.topic);
+      case 'setTopics': return this.setTopics(playerId, msg.topics);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'setLock': return this.setLock(playerId, msg.on);
       case 'stroke': return this.addStroke(playerId, msg.points);
@@ -1014,8 +1018,8 @@ export class Session {
    */
   private nextWord(): { topic: string; word: string } {
     // 방장이 주제를 골랐으면 그 안에서만 뽑는다. 안 골랐으면 전부가 후보다.
-    const pool = this.selectedTopic
-      ? this.topics.filter((t) => t.topic === this.selectedTopic)
+    const pool = this.selectedTopics.length > 0
+      ? this.topics.filter((t) => this.selectedTopics.includes(t.topic))
       : this.topics;
     const unused = () => pool
       .map((t) => ({ topic: t.topic, words: t.words.filter((w) => !this.usedWords.has(w)) }))
@@ -1183,7 +1187,7 @@ export class Session {
       now: Date.now(),
       minPlayers: this.rules.minPlayers,
       topics: this.topics.map((t) => t.topic),
-      selectedTopic: this.selectedTopic,
+      selectedTopics: this.selectedTopics,
       roomName: this.name,
       roomCode: this.code,
       locked: this.locked,

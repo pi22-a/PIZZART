@@ -1050,16 +1050,16 @@ describe('주제 고르기', () => {
     for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
   }
 
-  it('기본은 랜덤이고, 고를 수 있는 주제가 함께 온다', () => {
+  it('기본은 전체이고, 고를 수 있는 주제가 함께 온다', () => {
     withTopics();
     const room = msgsOfType('room').at(-1)!;
-    expect(room.selectedTopic).toBeNull();
+    expect(room.selectedTopics).toEqual([]);
     expect(room.topics).toEqual(['동물', '음식']);
   });
 
   it('방장이 고른 주제로만 문제가 나온다', () => {
     withTopics();
-    s.setTopic('p1', '음식');
+    s.setTopics('p1', ['음식']);
     s.start('p1');
     for (let i = 0; i < 3; i++) {
       expect(msgsOfType('room').at(-1)!.topic).toBe('음식');
@@ -1068,31 +1068,60 @@ describe('주제 고르기', () => {
     }
   });
 
-  it('방장이 아니면 못 고른다', () => {
-    withTopics();
-    s.setTopic('p2', '음식');
-    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+  it('여러 개를 고르면 그 안에서만 나온다', () => {
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES }, pick: () => 0, shuffle: (xs) => xs,
+      topics: [
+        { topic: '동물', words: ['호랑이', '펭귄', '토끼'] },
+        { topic: '음식', words: ['피자', '라면', '김밥'] },
+        { topic: '도구', words: ['망치', '톱', '가위'] },
+      ],
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.setTopics('p1', ['동물', '도구']);
+    s.start('p1');
+    const 나온주제 = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      나온주제.add(msgsOfType('room').at(-1)!.topic);
+      playRound();
+      s.next('p1');
+    }
+    expect(나온주제.has('음식')).toBe(false);
   });
 
-  it('없는 주제는 무시한다', () => {
+  it('방장이 아니면 못 고른다', () => {
     withTopics();
-    s.setTopic('p1', '우주');
-    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+    s.setTopics('p2', ['음식']);
+    expect(msgsOfType('room').at(-1)!.selectedTopics).toEqual([]);
+  });
+
+  it('없는 주제는 버린다', () => {
+    withTopics();
+    s.setTopics('p1', ['우주', '음식']);
+    expect(msgsOfType('room').at(-1)!.selectedTopics).toEqual(['음식']);
+  });
+
+  it('같은 주제를 두 번 넣어도 하나로 센다', () => {
+    withTopics();
+    s.setTopics('p1', ['음식', '음식']);
+    expect(msgsOfType('room').at(-1)!.selectedTopics).toEqual(['음식']);
   });
 
   it('게임이 시작된 뒤에는 못 바꾼다', () => {
     withTopics();
     s.start('p1');
-    s.setTopic('p1', '음식');
-    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+    s.setTopics('p1', ['음식']);
+    expect(msgsOfType('room').at(-1)!.selectedTopics).toEqual([]);
   });
 
-  it('랜덤으로 되돌릴 수 있다', () => {
+  it('전부 빼면 전체로 돌아간다', () => {
     withTopics();
-    s.setTopic('p1', '음식');
-    expect(msgsOfType('room').at(-1)!.selectedTopic).toBe('음식');
-    s.setTopic('p1', null);
-    expect(msgsOfType('room').at(-1)!.selectedTopic).toBeNull();
+    s.setTopics('p1', ['음식']);
+    expect(msgsOfType('room').at(-1)!.selectedTopics).toEqual(['음식']);
+    s.setTopics('p1', []);
+    expect(msgsOfType('room').at(-1)!.selectedTopics).toEqual([]);
   });
 
   it('고른 주제의 단어가 바닥나도 주제를 바꾸지 않는다', () => {
@@ -1103,7 +1132,7 @@ describe('주제 고르기', () => {
       topics: [{ topic: '동물', words: ['호랑이', '펭귄'] }, { topic: '음식', words: ['피자'] }],
     });
     for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
-    s.setTopic('p1', '동물');
+    s.setTopics('p1', ['동물']);
     s.start('p1');
     for (let i = 0; i < 4; i++) {
       expect(msgsOfType('room').at(-1)!.topic).toBe('동물'); // 단어가 떨어져도 음식으로 안 샌다
@@ -1922,7 +1951,7 @@ describe('제시어 기억은 방 단위다', () => {
     });
     for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
 
-    s.setTopic('p1', '작은주제');
+    s.setTopics('p1', ['작은주제']);
     playGame();                       // 작은주제 넷을 다 쓴다
     s.again('p1');
     playGame();                       // 비우고 다시 넷
@@ -1930,7 +1959,7 @@ describe('제시어 기억은 방 단위다', () => {
     // 지금 기억하고 있는 넷은 전부 작은주제의 것이다.
     expect(s.usedWordCount).toBe(4);
     s.again('p1');
-    s.setTopic('p1', '다른주제');
+    s.setTopics('p1', ['다른주제']);
     const third = playGame();
     expect(new Set(third).size).toBe(4);
     for (const w of third) expect(['마', '바', '사', '아']).toContain(w);
