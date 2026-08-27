@@ -100,6 +100,25 @@ export function drawShareCard(
 }
 
 /**
+ * 이 브라우저가 그림을 공유창으로 넘길 수 있는가.
+ *
+ * 기기 이름(user agent)으로 폰인지 보지 않는다 — 그건 자주 틀리고, 되는지 안 되는지를
+ * 직접 물어볼 수 있는 자리에서 굳이 짐작할 이유가 없다. 가짜 파일 하나로 물어본다.
+ *
+ * 이걸로 버튼 글자를 정한다. 폰에서 '그림으로 저장'이라고 적어두면 공유창이 뜨는 것이
+ * 놀랍고, PC에서 '공유하기'라고 적어두면 파일이 내려와서 또 놀란다.
+ */
+export function canSharePng(): boolean {
+  try {
+    const probe = new File([new Uint8Array(1)], 'p.png', { type: 'image/png' });
+    const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
+    return typeof nav.share === 'function' && nav.canShare?.({ files: [probe] }) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 만든 그림을 내보낸다. 폰에서는 공유창을, 아니면 내려받기를 쓴다.
  *
  * 세 갈래를 두는 것은 브라우저마다 되는 것이 다르기 때문이다. 폰에서 바로 카톡으로
@@ -112,7 +131,7 @@ export async function shareCard(canvas: HTMLCanvasElement, word: string): Promis
 
   const file = new File([blob], `pizza-${word}.png`, { type: 'image/png' });
   const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
-  if (nav.share && nav.canShare?.({ files: [file] })) {
+  if (typeof nav.share === 'function' && nav.canShare?.({ files: [file] }) === true) {
     try {
       await nav.share({ files: [file], text: `PIZZA — 정답은 ${word}` });
       return '';

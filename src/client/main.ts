@@ -13,7 +13,7 @@ import {
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
-import { drawShareCard, shareCard, type ShareRow } from './share';
+import { canSharePng, drawShareCard, shareCard, type ShareRow } from './share';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -306,6 +306,16 @@ $('makeRoomBtn').addEventListener('click', () => {
 // ── 방 안 ──
 /** 방금 공개된 라운드. 공유 그림을 만들 때 쓴다. */
 let lastReveal: { word: string; drawing: Point[][]; sliceCount: number; rows: ShareRow[] } | null = null;
+
+/*
+ * 무엇이 일어날지를 버튼에 그대로 적는다. 폰에서는 공유창이 뜨고 PC에서는 파일이
+ * 내려오는데, 한쪽 글자만 적어두면 다른 쪽 사람은 매번 놀란다.
+ */
+const 공유가능 = canSharePng();
+($('shareBtn') as HTMLButtonElement).textContent = 공유가능 ? '공유하기' : '그림으로 저장';
+$('shareBtn').title = 공유가능
+  ? '정답과 다들 뭐라고 답했는지를 한 장으로 만들어 공유합니다'
+  : '정답과 다들 뭐라고 답했는지를 한 장의 그림으로 내려받습니다';
 
 $('shareBtn').addEventListener('click', async () => {
   if (!lastReveal) return;

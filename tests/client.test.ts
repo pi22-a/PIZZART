@@ -1403,3 +1403,33 @@ describe('결과를 그림으로 내보낸다', () => {
     expect($('shareNote').textContent).toBe('');
   });
 });
+
+describe('공유 버튼은 무슨 일이 일어날지 그대로 적는다', () => {
+  /** navigator를 잠깐 갈아 끼운다. 되돌리는 것을 잊으면 뒤 테스트가 휘말린다. */
+  async function bootWith(share: boolean) {
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: share
+        ? { ...navigator, share: () => Promise.resolve(), canShare: () => true }
+        : { ...navigator, share: undefined, canShare: undefined },
+    });
+    try { await boot(); } finally {
+      if (real) Object.defineProperty(window, 'navigator', real);
+    }
+  }
+
+  it('공유창이 되는 기기에서는 공유하기', async () => {
+    await bootWith(true);
+    expect($('shareBtn').textContent).toBe('공유하기');
+    expect($('shareBtn').title).toContain('공유합니다');
+  });
+
+  it('안 되는 기기에서는 그림으로 저장', async () => {
+    // 폰에서 '그림으로 저장'이라고 적어두면 공유창이 뜨는 것이 놀랍고,
+    // PC에서 '공유하기'라고 적어두면 파일이 내려와서 또 놀란다.
+    await bootWith(false);
+    expect($('shareBtn').textContent).toBe('그림으로 저장');
+    expect($('shareBtn').title).toContain('내려받습니다');
+  });
+});
