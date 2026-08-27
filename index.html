@@ -147,6 +147,17 @@
   .chat-row { margin-bottom:0; margin-top:8px; }
   .chat-row input { flex:1; min-width:0; }
   /* 최종 화면은 시간이 없는 화면이라 더 길게 편다. */
+  /* 그림 모아 보기. 아홉 장이 한눈에 들어와야 한다 — 크게 잡으면 폰에서 스크롤만
+     한참 하다가 '한 판 더'를 못 찾는다. */
+  .gallery { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+             max-width:640px; margin:4px 0 16px; }
+  .gallery figure { margin:0; }
+  .gallery canvas { width:100%; aspect-ratio:1; display:block; border-radius:50%;
+                    background:var(--dough); }
+  /* 한글은 아무 데서나 끊지 않는다 — '아무도 못 맞힘'이 낱자로 쪼개지면 못 읽는다. */
+  .gallery figcaption { text-align:center; margin-top:6px; font-size:.88rem; word-break:keep-all; }
+  .gallery .word { font-weight:700; }
+  .gallery .who { display:block; font-size:.74rem; opacity:.65; }
   #s-final .chat { max-width:640px; }
   #s-final .chat-log { --chat-h:220px; }
 
@@ -468,12 +479,9 @@
           </div>
         </div>
         <div class="bar">
-          <!-- 다음 버튼은 이야기 아래다. 위에 두면 읽기도 전에 눌러버린다. -->
+          <!-- 다음 버튼은 이야기 아래다. 위에 두면 읽기도 전에 눌러버린다.
+               저장 버튼은 여기 없다 — 그림은 판이 끝난 뒤 한자리에 모아 내보낸다. -->
           <button id="nextBtn">다음</button>
-          <!-- 이 판이 밖으로 나가는 유일한 통로다. 최종 순위는 숫자뿐이라 남에게
-               보여줄 것이 못 되고, 남는 것은 정답이 뜨는 이 순간이다. -->
-          <button id="shareBtn" class="ghost">공유하기</button>
-          <span class="muted" id="shareNote"></span>
         </div>
       </div>
     </div>
@@ -482,6 +490,13 @@
   <section class="screen" id="s-final">
     <h1>최종 결과</h1>
     <ul class="answers" id="ranking"></ul>
+    <!-- 이 판이 밖으로 나가는 유일한 통로다. 순위는 숫자뿐이라 남에게 보여줄 것이
+         못 되고, 남는 것은 그림이다. 판이 끝나야 다 모이므로 자리도 여기다. -->
+    <div class="gallery" id="gallery"></div>
+    <div class="bar" id="galleryBar" style="display:none">
+      <button id="galleryShareBtn" class="ghost">공유하기</button>
+      <span class="muted" id="galleryNote"></span>
+    </div>
         <!-- 정답이 공개된 뒤에만 열린다. 회차 중에는 정답을 아는 사람(출제자·관전자·
              먼저 맞힌 사람)이 한 줄만 흘려도 점수가 통째로 무너진다. -->
         <div class="chat">

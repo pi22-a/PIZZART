@@ -1770,6 +1770,68 @@ describe('관전자는 점수판 어디에도 안 나온다', () => {
   });
 });
 
+describe('판이 끝나면 그림을 전부 실어 보낸다', () => {
+  /** 한 판을 끝까지 돌린다. 라운드마다 획을 남겨야 그림이 기록으로 남는다. */
+  function playThrough(): void {
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (s.phase === 'drawing') {
+        s.addStroke(s.drawerId, [[300, 200], [400, 300], [200, 400], [300, 200]]);
+        s.drawDone(s.drawerId);
+      }
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+  }
+
+  it('라운드 수만큼 그림이 붙어 온다', () => {
+    newSession();
+    s.start('p1');
+    playThrough();
+    const fin = msgsOfType('final').at(-1)!;
+    expect(fin.rounds.length).toBe(s.totalRounds);
+    expect(fin.rounds[0].drawing.length).toBeGreaterThan(0);
+    expect(fin.rounds[0].word.length).toBeGreaterThan(0);
+  });
+
+  it('그린 사람과 맞힌 사람을 이름으로 담는다', () => {
+    // id가 아니라 이름이다 — 판이 끝나고 나간 사람도 그림 밑에 이름은 남아야 한다.
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    const word = msgsTo('p1').filter((m) => m.t === 'word').at(-1)!.word;
+    s.answer('p2', word);
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    playThrough();
+
+    const first = msgsOfType('final').at(-1)!.rounds[0];
+    expect(first.drawer).toBe('p1');
+    expect(first.correct).toContain('p2');
+  });
+
+  it('아무도 안 그린 라운드는 빠진다', () => {
+    // 빈 원판을 모아 보여줄 이유가 없다.
+    newSession();
+    s.start('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts + 2; i++) clock.fire();
+    s.next('p1');
+    playThrough();
+    const fin = msgsOfType('final').at(-1)!;
+    expect(fin.rounds.length).toBe(s.totalRounds - 1);
+  });
+
+  it('한 판 더를 하면 지난 판 그림은 안 따라온다', () => {
+    newSession();
+    s.start('p1');
+    playThrough();
+    const first = msgsOfType('final').at(-1)!.rounds.length;
+    s.again('p1');
+    s.start('p1');
+    playThrough();
+    expect(msgsOfType('final').at(-1)!.rounds.length).toBe(first);
+  });
+});
+
 describe('그림을 모은다', () => {
   it('라운드가 끝나면 그림 한 장이 기록으로 넘어온다', () => {
     const got: unknown[] = [];

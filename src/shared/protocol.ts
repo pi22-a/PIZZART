@@ -110,6 +110,25 @@ export interface ChatLine {
   word: string;
 }
 
+/**
+ * 한 판이 끝났을 때 되짚어 보는 라운드 하나.
+ *
+ * 그림을 다시 싣는다. 실제 데이터로 재보니 한 장 평균 16KB라 아홉 라운드를 합쳐도
+ * 150KB 남짓이고, 판이 끝날 때 한 번 가는 것이라 감당할 만하다. 클라이언트가 라운드마다
+ * 모아두는 방법도 있지만, 그러면 도중에 들어왔거나 새로고침한 사람만 텅 빈 화면을 본다.
+ */
+export interface RoundRecap {
+  round: number;
+  topic: string;
+  word: string;
+  drawing: Point[][];
+  sliceCount: number;
+  /** 그린 사람의 이름 */
+  drawer: string;
+  /** 맞힌 사람들의 이름. id가 아니라 이름을 담는다 — 판이 끝난 뒤에 나간 사람도 이름은 남아야 한다. */
+  correct: string[];
+}
+
 export interface AnswerRow {
   playerId: string;
   text: string;
@@ -237,7 +256,12 @@ export type ServerMsg =
   | { t: 'chat'; line: ChatLine }
   /** 지금까지의 이야기 전부. 들어오거나 돌아온 사람에게 한 번에 보낸다. */
   | { t: 'chatLog'; lines: ChatLine[] }
-  | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
+  | {
+      t: 'final';
+      ranking: Array<{ playerId: string; name: string; score: number }>;
+      /** 이 판에 그려진 그림 전부. 끝나고 모아 보는 화면의 재료다. */
+      rounds: RoundRecap[];
+    }
   /** 로비에 있는 사람에게. 방이 생기거나 사라지거나 인원이 바뀔 때마다 다시 온다. */
   | { t: 'roomList'; rooms: RoomInfo[] }
   /** 방을 만들었다. 클라이언트는 이 코드로 옮겨간다. */

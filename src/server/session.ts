@@ -4,7 +4,7 @@ import { insideCircle } from '../shared/drawing';
 import { slice, sliceCount, type Slice } from '../shared/slicer';
 import { rotate } from '../shared/geometry';
 import { CENTER } from '../shared/drawing';
-import type { ChatLine, ClientMsg, Phase, PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { ChatLine, ClientMsg, Phase, PlayerInfo, RoundRecap, ServerMsg } from '../shared/protocol';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
@@ -111,6 +111,14 @@ export class Session {
 
   /** 만들어진 시각. 만든 사람이 도착하기 전에 빈 방으로 지워지는 것을 막는다. */
   readonly bornAt = Date.now();
+
+  /**
+   * 이 판에 그려진 그림들. 최종 화면에서 모아 보여준다.
+   *
+   * 판마다 비운다 — usedWords와 달리 이건 "이번 판에 우리가 그린 것"이라서,
+   * 지난 판 그림이 섞이면 뜻이 흐려진다.
+   */
+  private recaps: RoundRecap[] = [];
 
   /**
    * 이 방에서 이미 나온 제시어.
@@ -374,6 +382,7 @@ export class Session {
     for (const p of this.players) p.lateJoin = false;
     // 이미 나온 제시어는 비우지 않는다. 방을 이어 쓰는 동안 계속 기억한다.
     this.chatLog = [];
+    this.recaps = [];
     this.doodleColors.clear();
     for (const p of this.players) p.score = 0;
     this.beginRound();
@@ -829,8 +838,20 @@ export class Session {
     this.lastRoundEnd = msg;
     this.broadcast(msg);
 
-    // 그림을 남긴다. 빈 캔버스는 남길 것이 없다.
+    // 빈 캔버스는 남길 것도, 모아 보여줄 것도 없다.
     if (this.strokes.length > 0) {
+      // 이름을 지금 박아둔다. 판이 끝나고 누가 나가도 그림 밑의 이름은 남아야 한다.
+      const nameOf = (id: string): string => this.players.find((p) => p.id === id)?.name ?? '?';
+      this.recaps.push({
+        round: this.round,
+        topic: this.topic,
+        word: this.word,
+        drawing: this.strokes,
+        sliceCount: this.slices.length,
+        drawer: nameOf(this.drawerId),
+        correct: correct.map(nameOf),
+      });
+
       this.onDrawing?.({
         at: new Date().toISOString(),
         topic: this.topic,
@@ -900,6 +921,7 @@ export class Session {
     this.answers.clear();
     // usedWords는 여기서도 비우지 않는다 — 한 판 더는 '새 방'이 아니라 '이어서 한 판'이다.
     this.chatLog = [];
+    this.recaps = [];
     this.lastFinal = null;
     this.lastRoundEnd = null;
     for (const p of this.players) p.score = 0;
@@ -917,6 +939,7 @@ export class Session {
         .filter((p) => !p.spectator)
         .map((p) => ({ playerId: p.id, name: p.name, score: p.score }))
         .sort((a, b) => b.score - a.score),
+      rounds: this.recaps,
     };
     this.lastFinal = msg;
     this.broadcast(msg);

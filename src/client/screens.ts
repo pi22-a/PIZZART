@@ -1,5 +1,7 @@
 import type { Point } from '../shared/drawing';
-import type { AnswerRow, ChatLine, PlayerInfo, RoomInfo } from '../shared/protocol';
+import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
+import type { AnswerRow, ChatLine, PlayerInfo, RoomInfo, RoundRecap } from '../shared/protocol';
+import { drawStrokes } from './ink';
 import { drawSlice, startSpinHint } from './slice-view';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -402,6 +404,46 @@ export function scrollChatToBottom(boxId: string): void {
  * 게임 중인 방도 보여준다. 관전이 있는 게임이라 들어갈 데가 있고, 감추면 친구가 어느 방에
  * 있는지 알 방법이 없다. 대신 들어가면 관전이 된다는 것을 줄에 적어둔다.
  */
+/**
+ * 판이 끝난 뒤 그림을 모아 보여준다.
+ *
+ * 캔버스 크기를 화면에서 재지 않고 못 박는다. 이 화면은 그려질 때 아직 감춰져 있을 수도
+ * 있는데(show보다 먼저 그리는 경로가 있다), 그때 clientWidth를 재면 0이 나와서 그림이
+ * 통째로 사라진다. CSS가 늘리는 것은 그 뒤의 일이다.
+ */
+export function renderGallery(rounds: RoundRecap[]): void {
+  const box = $('gallery');
+  box.innerHTML = '';
+  $('galleryBar').style.display = rounds.length > 0 ? '' : 'none';
+  if (rounds.length === 0) return;
+
+  const size = 320;
+  for (const r of rounds) {
+    const fig = document.createElement('figure');
+    const cv = document.createElement('canvas');
+    cv.width = size;
+    cv.height = size;
+    const ctx = cv.getContext('2d');
+    if (ctx) {
+      ctx.save();
+      ctx.scale(size / CANVAS, size / CANVAS);
+      ctx.beginPath();
+      ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#f6efe2';
+      ctx.fill();
+      ctx.clip();
+      drawStrokes(ctx, r.drawing, { color: '#2b2118' });
+      ctx.restore();
+    }
+    const cap = document.createElement('figcaption');
+    const got = r.correct.length === 0 ? '아무도 못 맞힘' : `${r.correct.length}명 맞힘`;
+    cap.innerHTML = `<span class="word">${escape(r.word)}</span>
+      <span class="who">${escape(r.drawer)} · ${got}</span>`;
+    fig.append(cv, cap);
+    box.appendChild(fig);
+  }
+}
+
 export function renderRooms(rooms: RoomInfo[], onEnter: (code: string) => void): void {
   const box = $('roomList');
   box.innerHTML = '';

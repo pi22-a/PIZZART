@@ -1,10 +1,10 @@
 import { Net } from './net';
 import { CircleCanvas } from './canvas';
 import type { Point } from '../shared/drawing';
-import type { ChatLine, PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { ChatLine, PlayerInfo, RoundRecap, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers, renderRooms, setKickHandler,
-  renderRanking,
+  renderRanking, renderGallery,
   renderTopics,
   syncClock,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots, renderChat,
@@ -13,7 +13,7 @@ import {
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
-import { canSharePng, drawShareCard, shareCard, type ShareRow } from './share';
+import { canSharePng, drawGalleryCard, shareCard } from './share';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -304,31 +304,34 @@ $('makeRoomBtn').addEventListener('click', () => {
 });
 
 // ── 방 안 ──
-/** 방금 공개된 라운드. 공유 그림을 만들 때 쓴다. */
-let lastReveal: { word: string; drawing: Point[][]; sliceCount: number; rows: ShareRow[] } | null = null;
+/** 방금 끝난 판의 그림들과 순위. 모아 보기 화면과 공유 그림이 같이 쓴다. */
+let lastGame: { rounds: RoundRecap[]; ranking: Array<{ name: string; score: number }> } = {
+  rounds: [],
+  ranking: [],
+};
 
 /*
  * 무엇이 일어날지를 버튼에 그대로 적는다. 폰에서는 공유창이 뜨고 PC에서는 파일이
  * 내려오는데, 한쪽 글자만 적어두면 다른 쪽 사람은 매번 놀란다.
  */
 const 공유가능 = canSharePng();
-($('shareBtn') as HTMLButtonElement).textContent = 공유가능 ? '공유하기' : '그림으로 저장';
-$('shareBtn').title = 공유가능
-  ? '정답과 다들 뭐라고 답했는지를 한 장으로 만들어 공유합니다'
-  : '정답과 다들 뭐라고 답했는지를 한 장의 그림으로 내려받습니다';
+($('galleryShareBtn') as HTMLButtonElement).textContent = 공유가능 ? '공유하기' : '그림으로 저장';
+$('galleryShareBtn').title = 공유가능
+  ? '이 판의 그림을 전부 한 장으로 모아 공유합니다'
+  : '이 판의 그림을 전부 한 장의 그림으로 모아 내려받습니다';
 
-$('shareBtn').addEventListener('click', async () => {
-  if (!lastReveal) return;
-  const btn = $('shareBtn') as HTMLButtonElement;
+$('galleryShareBtn').addEventListener('click', async () => {
+  if (lastGame.rounds.length === 0) return;
+  const btn = $('galleryShareBtn') as HTMLButtonElement;
   btn.disabled = true;
-  setTag('shareNote', '만드는 중…');
+  setTag('galleryNote', '만드는 중…');
   try {
     const canvas = $('shareCanvas') as HTMLCanvasElement;
-    drawShareCard(canvas, lastReveal.word, lastReveal.drawing, lastReveal.sliceCount, lastReveal.rows);
-    setTag('shareNote', await shareCard(canvas, lastReveal.word));
+    drawGalleryCard(canvas, lastGame.rounds, lastGame.ranking);
+    setTag('galleryNote', await shareCard(canvas, `PIZZA — 오늘의 그림 ${lastGame.rounds.length}장`));
   } catch {
     // 어디서 막혔든 판은 계속 돈다. 공유는 게임의 조건이 아니다.
-    setTag('shareNote', '이 브라우저에서는 저장이 막혀 있습니다');
+    setTag('galleryNote', '이 브라우저에서는 저장이 막혀 있습니다');
   } finally {
     btn.disabled = false;
   }
@@ -724,7 +727,6 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'roundEnd') {
     sliceCount = m.sliceCount;
     setTag('revealWord', `정답: ${m.word}`);
-    setTag('shareNote', '');
     // 결과 화면의 핵심은 점수가 아니라 다들 뭐라고 답했는가다(Finding 3).
     // 출제자는 답을 낸 적이 없으니 (무응답)이 아니라 점수 변화만 보여준다.
     //
@@ -743,25 +745,18 @@ function onMsg(m: ServerMsg): void {
     }), names);
     revealRound($('revealCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.owners, youId);
 
-    // 공유 그림의 재료. 화면에 그린 것과 같은 값이라 따로 서버에 물을 것이 없다.
-    lastReveal = {
-      word: m.word,
-      drawing: m.drawing,
-      sliceCount: m.sliceCount,
-      rows: m.scores.map((s) => {
-        const row = rows.get(s.playerId);
-        const delta = s.delta > 0 ? `+${s.delta}점` : `${s.delta}점`;
-        return {
-          name: names.get(s.playerId) ?? '?',
-          text: s.playerId === drawerId ? `출제 ${delta}` : `${row?.text || '(무응답)'}  ${delta}`,
-          correct: m.correct.includes(s.playerId),
-        };
-      }),
-    };
     return;
   }
 
-  if (m.t === 'final') { renderRanking(m.ranking); return; }
+  if (m.t === 'final') {
+    renderRanking(m.ranking);
+    // 그림은 서버가 실어 보낸 것만 쓴다. 라운드마다 모아두면 도중에 들어왔거나
+    // 새로고침한 사람만 텅 빈 화면을 보게 된다.
+    lastGame = { rounds: m.rounds, ranking: m.ranking };
+    renderGallery(m.rounds);
+    setTag('galleryNote', '');
+    return;
+  }
   if (m.t === 'error') { alert(m.msg); return; }
 }
 
