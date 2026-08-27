@@ -208,6 +208,8 @@
 <body>
 <!-- 방장이 넘어왔을 때만 뜬다. 소리는 안 낸다 — 남의 방에서 갑자기 소리가 나면 곤란하다. -->
 <div id="toast" role="status" aria-live="polite"></div>
+<!-- 공유 그림을 그리는 자리. 화면에는 안 나온다. -->
+<canvas id="shareCanvas" style="display:none"></canvas>
 <div id="app">
   <!--
     상단바에는 "문제가 생겨야 보는 것"만 남긴다.
@@ -465,8 +467,14 @@
             <button id="roundChatSend" class="ghost">보내기</button>
           </div>
         </div>
-        <!-- 다음 버튼은 이야기 아래다. 위에 두면 읽기도 전에 눌러버린다. -->
-        <button id="nextBtn">다음</button>
+        <div class="bar">
+          <!-- 다음 버튼은 이야기 아래다. 위에 두면 읽기도 전에 눌러버린다. -->
+          <button id="nextBtn">다음</button>
+          <!-- 이 판이 밖으로 나가는 유일한 통로다. 최종 순위는 숫자뿐이라 남에게
+               보여줄 것이 못 되고, 남는 것은 정답이 뜨는 이 순간이다. -->
+          <button id="shareBtn" class="ghost">그림으로 저장</button>
+          <span class="muted" id="shareNote"></span>
+        </div>
       </div>
     </div>
   </section>

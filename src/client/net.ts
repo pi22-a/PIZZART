@@ -16,24 +16,80 @@ export function socketUrl(room: string): string {
 }
 
 export class Net {
-  private socket: WebSocket;
+  private socket!: WebSocket;
   private buffer: Point[] = [];
   private timer: number | null = null;
   private pending: ClientMsg[] = [];
 
   private statusFn: ((ok: boolean) => void) | null = null;
 
-  constructor(room: string, private onMsg: (m: ServerMsg) => void) {
-    this.socket = new WebSocket(socketUrl(room));
+  /** 다시 붙을 때 서버에 나를 알리는 방법. 없으면 붙기만 하고 자리를 못 찾는다. */
+  private hello: (() => ClientMsg) | null = null;
+  /** 몇 번째 재시도인가. 붙는 순간 0으로 돌아간다. */
+  private tries = 0;
+  private retryTimer: number | null = null;
+  /** 더 붙지 않는다. 강퇴당했거나 방을 떠난 경우다. */
+  private done = false;
+
+  constructor(private room: string, private onMsg: (m: ServerMsg) => void) {
+    this.connect();
+  }
+
+  /**
+   * 다시 붙었을 때 보낼 인사를 등록한다.
+   *
+   * 서버는 같은 cid로 join을 받으면 원래 자리에 앉히고 그 라운드에 준 것을 전부
+   * 다시 보내준다(session.restore). 그래서 재연결은 사실상 join 한 번이면 끝난다 —
+   * 막혀 있던 것은 그 join을 다시 보낼 사람이 없다는 것뿐이었다.
+   */
+  onReconnect(hello: () => ClientMsg): void {
+    this.hello = hello;
+  }
+
+  /** 더 이상 붙지 않는다. 강퇴처럼 돌아가면 안 되는 자리에서 부른다. */
+  stop(): void {
+    this.done = true;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  private connect(): void {
+    this.socket = new WebSocket(socketUrl(this.room));
     this.socket.onmessage = (e) => this.onMsg(JSON.parse(e.data) as ServerMsg);
     this.socket.addEventListener('open', () => {
+      const again = this.tries > 0;
+      this.tries = 0;
+      // 다시 붙은 것이면 나를 먼저 알린다. 그래야 서버가 자리를 찾아주고,
+      // 그 뒤에야 밀려 있던 것을 보낼 자격이 생긴다.
+      if (again && this.hello) this.socket.send(JSON.stringify(this.hello()));
       this.drainPending();
       this.statusFn?.(true);
     });
-    // 재연결은 다음 단계 작업이다. 지금은 끊겼다는 사실만 알린다 —
-    // 조용히 죽은 페이지를 계속 만지는 것이 제일 나쁘다.
-    this.socket.addEventListener('close', () => this.statusFn?.(false));
-    this.socket.addEventListener('error', () => this.statusFn?.(false));
+    this.socket.addEventListener('close', () => this.retry());
+    this.socket.addEventListener('error', () => this.retry());
+  }
+
+  /**
+   * 0.5초부터 두 배씩 늘려 10초까지. 끝없이 시도한다 —
+   * 잠깐 끊긴 사람에게 "새로고침하세요"라고 하는 것이 제일 나쁘다.
+   */
+  private retry(): void {
+    if (this.done || this.retryTimer !== null) return;
+    this.statusFn?.(false);
+    /*
+     * 밀려 있던 것을 버린다.
+     *
+     * 끊긴 사이에 친 답이 나중에 되살아나면 이미 지난 회차의 답으로 채점된다.
+     * 획도 마찬가지다 — 그 사이 라운드가 넘어갔으면 남의 그림에 선이 그어진다.
+     */
+    this.pending = [];
+    this.buffer = [];
+    const wait = Math.min(10_000, 500 * 2 ** this.tries);
+    this.tries++;
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null;
+      if (!this.done) this.connect();
+    }, wait);
   }
 
   /** 지금 서버에 붙어 있는가. 끊긴 채로 뭘 보내봐야 조용히 사라진다. */
@@ -58,7 +114,7 @@ export class Net {
       this.pending.push(m);
       return;
     }
-    // CLOSING / CLOSED — 보낼 방법이 없다
+    // CLOSING / CLOSED — 다시 붙는 중이다. 그때 밀린 것은 버린다(retry 참조).
   }
 
   private drainPending(): void {

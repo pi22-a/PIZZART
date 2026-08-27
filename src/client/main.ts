@@ -13,6 +13,7 @@ import {
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
+import { drawShareCard, shareCard, type ShareRow } from './share';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -144,7 +145,15 @@ function routeEntry(): void {
 }
 // 붙어 있을 때는 아무 말도 안 한다. 늘 떠 있는 상태 표시는 신호가 될 수 없다 —
 // "연결됨"이 항상 그 자리에 있으면 "끊김"으로 바뀌어도 눈에 안 들어온다.
-net.onStatus((ok) => setTag('netTag', ok ? '' : '끊김'));
+net.onStatus((ok) => setTag('netTag', ok ? '' : '끊김 — 다시 붙는 중'));
+
+/**
+ * 다시 붙으면 서버에 나를 알린다. 같은 cid면 원래 자리에 앉고, 그 라운드에 받았던
+ * 제시어·조각·현황판·이야기가 전부 다시 온다(session.restore).
+ *
+ * 로비에 서 있는 동안에는 join 할 방이 없다. 그때는 방 목록만 다시 달라고 한다.
+ */
+net.onReconnect(() => (inLobby ? { t: 'rooms' } : { t: 'join', name: myName, cid: cid! }));
 
 const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { interactive: true });
 /**
@@ -295,6 +304,26 @@ $('makeRoomBtn').addEventListener('click', () => {
 });
 
 // ── 방 안 ──
+/** 방금 공개된 라운드. 공유 그림을 만들 때 쓴다. */
+let lastReveal: { word: string; drawing: Point[][]; sliceCount: number; rows: ShareRow[] } | null = null;
+
+$('shareBtn').addEventListener('click', async () => {
+  if (!lastReveal) return;
+  const btn = $('shareBtn') as HTMLButtonElement;
+  btn.disabled = true;
+  setTag('shareNote', '만드는 중…');
+  try {
+    const canvas = $('shareCanvas') as HTMLCanvasElement;
+    drawShareCard(canvas, lastReveal.word, lastReveal.drawing, lastReveal.sliceCount, lastReveal.rows);
+    setTag('shareNote', await shareCard(canvas, lastReveal.word));
+  } catch {
+    // 어디서 막혔든 판은 계속 돈다. 공유는 게임의 조건이 아니다.
+    setTag('shareNote', '이 브라우저에서는 저장이 막혀 있습니다');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 $('leaveBtn').addEventListener('click', goLobby);
 $('copyLinkBtn').addEventListener('click', () => {
   const url = `${location.origin}${location.pathname}?room=${room}`;
@@ -440,6 +469,8 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'roomCreated') { goRoom(m.room); return; }
   if (m.t === 'kicked') {
     // 방을 잃었다는 뜻이다. 빈 화면에 남겨두지 않고 로비로 돌려보낸다.
+    // 다시 붙지 않는다 — 안 그러면 내보내진 사람이 자동으로 계속 문을 두드린다.
+    net.stop();
     alert(m.msg);
     goLobby();
     return;
@@ -671,6 +702,7 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'roundEnd') {
     sliceCount = m.sliceCount;
     setTag('revealWord', `정답: ${m.word}`);
+    setTag('shareNote', '');
     // 결과 화면의 핵심은 점수가 아니라 다들 뭐라고 답했는가다(Finding 3).
     // 출제자는 답을 낸 적이 없으니 (무응답)이 아니라 점수 변화만 보여준다.
     //
@@ -688,6 +720,22 @@ function onMsg(m: ServerMsg): void {
       return { playerId: s.playerId, text, correct: m.correct.includes(s.playerId) };
     }), names);
     revealRound($('revealCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.owners, youId);
+
+    // 공유 그림의 재료. 화면에 그린 것과 같은 값이라 따로 서버에 물을 것이 없다.
+    lastReveal = {
+      word: m.word,
+      drawing: m.drawing,
+      sliceCount: m.sliceCount,
+      rows: m.scores.map((s) => {
+        const row = rows.get(s.playerId);
+        const delta = s.delta > 0 ? `+${s.delta}점` : `${s.delta}점`;
+        return {
+          name: names.get(s.playerId) ?? '?',
+          text: s.playerId === drawerId ? `출제 ${delta}` : `${row?.text || '(무응답)'}  ${delta}`,
+          correct: m.correct.includes(s.playerId),
+        };
+      }),
+    };
     return;
   }
 

@@ -23,12 +23,20 @@ class FakeSocket {
   readyState = 1;
   onmessage: ((e: { data: string }) => void) | null = null;
   out: ClientMsg[] = [];
-  constructor(public url: string) { live = this; }
+  /** 등록된 이벤트 처리기. 재연결을 흉내 내려면 실제로 불러줄 수 있어야 한다. */
+  private handlers: Record<string, Array<() => void>> = {};
+  constructor(public url: string) { live = this; sockets.push(this); }
   send(raw: string): void { this.out.push(JSON.parse(raw) as ClientMsg); }
-  addEventListener(): void {}
-  close(): void {}
+  addEventListener(type: string, fn: () => void): void {
+    (this.handlers[type] ??= []).push(fn);
+  }
+  fire(type: string): void { for (const f of this.handlers[type] ?? []) f(); }
+  /** 서버가 끊긴 상황. Net이 다시 붙기 시작해야 한다. */
+  drop(): void { this.readyState = FakeSocket.CLOSED; this.fire('close'); }
+  close(): void { this.readyState = FakeSocket.CLOSED; }
 }
 let live: FakeSocket;
+let sockets: FakeSocket[] = [];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -93,6 +101,7 @@ beforeEach(() => {
   // 이름과 자리 식별자가 localStorage에 남는다. 안 비우면 앞 테스트가 정한 이름을 들고
   // 다음 테스트가 시작해서, 이름 화면을 건너뛰어 버린다.
   try { localStorage.clear(); } catch { /* 무시 */ }
+  sockets = [];
   vi.useFakeTimers();
   // jsdom에는 캔버스 구현이 없다. 그리기 호출을 전부 삼키는 가짜 컨텍스트를 끼운다.
   const ctx = new Proxy({}, { get: () => () => {}, set: () => true });
@@ -1258,5 +1267,139 @@ describe('관전자는 명단 맨 뒤로', () => {
     deliver({ t: 'joined', youId: 'me' });
     deliver(room({ phase: 'lobby', players: [P('다'), P('가'), P('나')] }));
     expect(names()).toEqual(['다', '가', '나']);
+  });
+});
+
+describe('끊기면 스스로 다시 붙는다', () => {
+  it('끊기면 잠시 뒤 새 소켓을 만든다', async () => {
+    await guessing();
+    const before = sockets.length;
+    live.drop();
+    expect(sockets.length).toBe(before);   // 곧바로가 아니라 잠시 뒤에
+    vi.advanceTimersByTime(600);
+    expect(sockets.length).toBe(before + 1);
+  });
+
+  it('방에 있었으면 같은 자리로 돌아가려고 join을 보낸다', async () => {
+    // 서버는 같은 cid면 원래 자리에 앉히고 그 라운드에 준 것을 다시 보내준다.
+    // 그래서 재연결은 사실상 join 한 번이면 끝난다.
+    const real = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...real, search: '?room=TEST', pathname: '/', hostname: 'localhost',
+               protocol: 'http:', host: 'localhost', origin: 'http://localhost' },
+    });
+    try {
+      await boot();
+      deliver({ t: 'joined', youId: 'me' });
+      live.drop();
+      vi.advanceTimersByTime(600);
+      live.out = [];
+      live.fire('open');
+      const hello = live.out.find((m) => m.t === 'join') as { cid: string } | undefined;
+      expect(hello).toBeDefined();
+      expect(hello?.cid.length).toBeGreaterThan(0);
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: real });
+    }
+  });
+
+  it('로비에 서 있었으면 방 목록을 다시 달라고 한다', async () => {
+    // 로비에는 돌아갈 자리가 없다. 대신 목록이 멎어 있으므로 그것부터 되살린다.
+    await boot();
+    live.drop();
+    vi.advanceTimersByTime(600);
+    live.out = [];
+    live.fire('open');
+    expect(live.out.filter((m) => m.t === 'rooms').length).toBe(1);
+  });
+
+  it('끊긴 사이에 친 답은 되살아나지 않는다', async () => {
+    // 되살아나면 이미 지난 회차의 답으로 채점된다.
+    await guessing();
+    live.drop();
+    const input = $<HTMLInputElement>('answerInput');
+    input.value = '고양이';
+    input.dispatchEvent(new Event('input'));
+    $('answerSubmitBtn').click();
+
+    vi.advanceTimersByTime(600);
+    live.out = [];
+    live.fire('open');
+    expect(live.out.filter((m) => m.t === 'answer').length).toBe(0);
+  });
+
+  it('기다리는 시간이 점점 길어진다', async () => {
+    await guessing();
+    const n = sockets.length;
+    live.drop();
+    vi.advanceTimersByTime(600);          // 0.5초
+    expect(sockets.length).toBe(n + 1);
+    live.drop();
+    vi.advanceTimersByTime(600);          // 이번엔 1초라 아직이다
+    expect(sockets.length).toBe(n + 1);
+    vi.advanceTimersByTime(600);
+    expect(sockets.length).toBe(n + 2);
+  });
+
+  it('끊기면 화면에 알린다', async () => {
+    await guessing();
+    live.drop();
+    expect($('netTag').textContent).toContain('다시 붙는 중');
+  });
+
+  it('강퇴당하면 다시 두드리지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const n = sockets.length;
+    deliver({ t: 'kicked', msg: '방장이 내보냈습니다' });
+    live.drop();
+    vi.advanceTimersByTime(20_000);
+    expect(sockets.length).toBe(n);
+  });
+});
+
+describe('결과를 그림으로 내보낸다', () => {
+  const ended = () => ({
+    t: 'roundEnd' as const,
+    word: '낙타',
+    drawing: [[[300, 200], [400, 300]]] as [number, number][][],
+    sliceCount: 8,
+    owners: [{ sliceIndex: 0, playerId: 'me' }],
+    scores: [
+      { playerId: 'me', delta: -1, total: 4 },
+      { playerId: 'x', delta: 8, total: 8 },
+      { playerId: 'd', delta: 5, total: 5 },
+    ],
+    correct: ['x'],
+    answers: [
+      { playerId: 'me', text: '알파카', correct: false },
+      { playerId: 'x', text: '낙타', correct: true },
+    ],
+  });
+
+  it('결과가 오기 전에는 눌러도 아무 일이 없다', async () => {
+    await guessing();
+    $('shareBtn').click();
+    expect($('shareNote').textContent).toBe('');
+  });
+
+  it('결과가 오면 눌러서 그림을 만든다', async () => {
+    await guessing();
+    deliver(ended());
+    const canvas = $<HTMLCanvasElement>('shareCanvas');
+    canvas.width = 0;
+    $('shareBtn').click();
+    // 캔버스에 크기가 잡혔다는 것은 그리기가 실제로 돌았다는 뜻이다.
+    expect(canvas.width).toBeGreaterThan(0);
+    expect(canvas.height).toBeGreaterThan(0);
+  });
+
+  it('라운드가 새로 시작되면 지난 안내는 지운다', async () => {
+    await guessing();
+    deliver(ended());
+    $('shareNote').textContent = '그림으로 저장했습니다';
+    deliver(ended());
+    expect($('shareNote').textContent).toBe('');
   });
 });
