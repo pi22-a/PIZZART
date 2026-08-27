@@ -1433,3 +1433,37 @@ describe('공유 버튼은 무슨 일이 일어날지 그대로 적는다', () =
     expect($('shareBtn').title).toContain('내려받습니다');
   });
 });
+
+describe('맞힌 뒤에는 답을 더 못 낸다', () => {
+  const solvedRoom = (attempt: number) => room({
+    attempt,
+    players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, solved: true } : p)),
+  });
+
+  it('맞히면 입력칸과 두 버튼이 잠긴다', async () => {
+    await guessing();
+    deliver(solvedRoom(2));
+    expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(true);
+    expect($<HTMLButtonElement>('skipBtn').disabled).toBe(true);
+  });
+
+  it('회차가 넘어가 조각을 더 받아도 잠금이 풀리지 않는다', async () => {
+    // 맞힌 사람도 seen에 남아 있어서 회차마다 조각을 계속 받는다(session.endAttempt).
+    // 그 조각을 받는 자리에서 잠금을 통째로 풀어버리면, 맞혀놓고도 답을 또 낼 수 있다.
+    await guessing();
+    deliver(solvedRoom(2));
+    deliver(slices());
+    expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
+    expect($<HTMLButtonElement>('answerSubmitBtn').disabled).toBe(true);
+  });
+
+  it('스킵을 누른 뒤에도 조각이 오면 잠금이 유지된다', async () => {
+    await guessing();
+    deliver(room({
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, skipped: true } : p)),
+    }));
+    deliver(slices());
+    expect($<HTMLInputElement>('answerInput').disabled).toBe(true);
+  });
+});

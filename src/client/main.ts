@@ -467,11 +467,32 @@ function markAnswerPending(pending: boolean): void {
  * 라운드 도중 합류자와, 조각을 나눌 때 끊겨 있던 사람이 여기 해당한다.
  * 그대로 두면 열심히 답을 쳐 넣지만 서버는 조용히 버린다.
  */
-function setSpectating(on: boolean): void {
-  answerInput.disabled = on;
-  ($('answerSubmitBtn') as HTMLButtonElement).disabled = on;
-  ($('skipBtn') as HTMLButtonElement).disabled = on;
-  $('spectateNote').textContent = on ? '이번 라운드는 관전입니다 — 다음 라운드부터 참여합니다' : '';
+/**
+ * 답을 낼 수 없는 이유들. 잠금을 정하는 데 필요한 것을 여기 모아둔다.
+ *
+ * 예전에는 방 상태가 올 때 잠그고 조각이 올 때 푸는 식으로 두 군데서 각자 정했다.
+ * 그런데 맞힌 사람도 회차마다 조각을 계속 받으므로(session.endAttempt), 조각이 오는
+ * 순간 잠금이 통째로 풀렸다 — 맞혀놓고도 답을 또 낼 수 있었다.
+ */
+let iSkipped = false;
+let iAnsweredNow = false;
+let isFinalAttempt = false;
+
+/**
+ * 입력칸과 두 버튼의 잠금을 정한다. 이 함수 하나만 이 셋을 건드린다.
+ * 두 군데서 각자 정하면 나중에 오는 쪽이 앞의 결정을 조용히 덮는다.
+ */
+function paintAnswerLock(): void {
+  const spectating = !hasSlices;
+  const mute = iSolved || iSkipped || spectating;
+  answerInput.disabled = mute;
+  ($('answerSubmitBtn') as HTMLButtonElement).disabled = mute;
+  // 답을 냈으면 스킵을 잠근다. 서버의 skip()은 적어둔 답을 지우므로, 답을 내고 나서
+  // 누르면 낸 답이 조용히 사라진다 — 맞는 답이었어도.
+  ($('skipBtn') as HTMLButtonElement).disabled = mute || isFinalAttempt || iAnsweredNow;
+  $('spectateNote').textContent = spectating
+    ? '이번 라운드는 관전입니다 — 다음 라운드부터 참여합니다'
+    : '';
 }
 
 function onMsg(m: ServerMsg): void {
@@ -611,23 +632,13 @@ function onMsg(m: ServerMsg): void {
         ? '맞혔습니다 — 점수 확정'
         : `지금 맞히면 ${me?.pendingScore ?? 0}점`;
       $('solvedWrap').style.display = iSolved ? '' : 'none';
-      // 관전 처리가 입력창 잠금을 통째로 다시 쓴다. 먼저 부르지 않으면 아래에서 건
-      // 잠금이 그 자리에서 풀린다 — 스킵을 누르고도 답이 나가는 길이 열린다.
-      setSpectating(!hasSlices);
-      // 스킵을 눌렀으면 이번 회차는 접은 것이다. 입력까지 잠가야 실수로 답을 내고
-      // 점수를 잃는 길이 아예 막힌다 — 버튼만 잠그면 엔터로 그대로 나간다.
-      const mute = iSolved || skipped || !hasSlices;
-      ($('answerSubmitBtn') as HTMLButtonElement).disabled = mute;
-      answerInput.disabled = mute;
 
-      // 답을 냈으면 스킵을 잠근다.
-      //
-      // 서버의 skip()은 적어둔 답을 지운다 — 스킵은 이번 회차를 접겠다는 뜻이니 맞는
-      // 동작인데, 답을 내고 나서 누르면 낸 답이 조용히 사라진다. 맞는 답이었어도 사라진다.
-      // 잠가도 잃는 것은 없다: 서버는 답을 냈거나 스킵을 누른 사람을 똑같이 "마쳤다"로
-      // 세므로, 제출한 사람은 이미 정족수에 들어가 있다.
-      const answered = me?.answered === true;
-      ($('skipBtn') as HTMLButtonElement).disabled = mute || last || answered;
+      iSkipped = skipped;
+      iAnsweredNow = me?.answered === true;
+      isFinalAttempt = last;
+      paintAnswerLock();
+
+      const answered = iAnsweredNow;
       $('skipNote').style.display = iSolved || last || answered ? 'none' : '';
       // 잠긴 버튼만 덩그러니 두면 "왜 안 눌리지"가 된다. 끈 자리에 이유를 적는다.
       $('skipLocked').textContent = answered && !iSolved && !last
@@ -670,8 +681,9 @@ function onMsg(m: ServerMsg): void {
     $('sliceBox').style.display = '';
     $('assembledWrap').style.display = 'none';
     renderSlices(m.slices, sliceCount);
-    // 조각이 도착해야 입력칸이 열린다. 회차 전환 때 미뤄둔 커서를 지금 준다.
-    setSpectating(false);
+    // 조각이 도착해야 입력칸이 열린다. 다만 통째로 열지는 않는다 — 맞힌 사람도
+    // 회차마다 조각을 계속 받으므로, 여기서 풀어버리면 맞혀놓고 또 답을 내게 된다.
+    paintAnswerLock();
     restoreFocus();
     return;
   }
