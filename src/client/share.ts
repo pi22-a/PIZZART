@@ -171,26 +171,40 @@ export function canSharePng(): boolean {
   }
 }
 
+/** 공유창이 떠 있는 동안에는 두 번째를 안 띄운다. 버튼 잠금과 별개로 한 겹 더 둔다. */
+let sharing = false;
+
 /**
  * 만든 그림을 내보낸다. 폰에서는 공유창을, 아니면 내려받기를 쓴다.
  *
  * 두 갈래를 두는 것은 브라우저마다 되는 것이 다르기 때문이다. 폰에서 바로 카톡으로
  * 보내는 것이 이 기능의 전부인데, 그게 안 되는 자리에서 아무 일도 안 일어나면
  * 사람들은 버튼이 고장 난 줄 안다.
+ *
+ * **글자는 같이 안 보낸다.** 예전에는 `{ files, text }`로 보냈는데, 두 가지가 어긋나 있었다.
+ * 보낼 수 있는지는 `{ files }`만으로 물어보고 정작 보낼 때는 글자를 얹어서, **확인한 것과
+ * 보내는 것이 서로 달랐다.** 받는 앱은 그림과 글자를 각각 한 덩이로 세는 수가 있어서
+ * 카카오톡 전송창에 같은 그림이 두 장으로 떴다. 그림만 보내면 셀 것이 하나뿐이다.
  */
-export async function shareCard(canvas: HTMLCanvasElement, caption: string): Promise<string> {
+export async function shareCard(canvas: HTMLCanvasElement, _caption?: string): Promise<string> {
   const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
   if (!blob) return '그림을 만들지 못했습니다';
 
   const file = new File([blob], 'pizza.png', { type: 'image/png' });
   const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
-  if (typeof nav.share === 'function' && nav.canShare?.({ files: [file] }) === true) {
+  // 물어보는 것과 보내는 것이 **정확히 같은 꾸러미**여야 한다.
+  const payload = { files: [file] };
+  if (typeof nav.share === 'function' && nav.canShare?.(payload) === true) {
+    if (sharing) return '';
+    sharing = true;
     try {
-      await nav.share({ files: [file], text: caption });
+      await nav.share(payload);
       return '';
     } catch {
       // 사용자가 공유창을 닫은 것이다. 실패가 아니므로 조용히 넘어간다.
       return '';
+    } finally {
+      sharing = false;
     }
   }
 

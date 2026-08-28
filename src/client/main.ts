@@ -388,7 +388,7 @@ $('galleryShareBtn').addEventListener('click', async () => {
   try {
     const canvas = $('shareCanvas') as HTMLCanvasElement;
     drawGalleryCard(canvas, lastGame.rounds, lastGame.ranking);
-    setTag('galleryNote', await shareCard(canvas, `PIZZA — 오늘의 그림 ${lastGame.rounds.length}장`));
+    setTag('galleryNote', await shareCard(canvas));
   } catch {
     // 어디서 막혔든 판은 계속 돈다. 공유는 게임의 조건이 아니다.
     setTag('galleryNote', '이 브라우저에서는 저장이 막혀 있습니다');

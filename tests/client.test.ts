@@ -1438,6 +1438,74 @@ describe('판이 끝나면 그림을 모아 보여준다', () => {
   });
 });
 
+describe('공유는 한 번에 한 장만 나간다', () => {
+  const recap = (word: string) => ({
+    round: 0, topic: '동물', word,
+    drawing: [{ points: [[300, 200], [400, 300]] as [number, number][], color: '#e03131' }],
+    sliceCount: 8, drawer: '출제자', correct: ['친구'],
+  });
+  const finished = () => ({
+    t: 'final' as const,
+    ranking: [{ playerId: 'me', name: '나', score: 4 }],
+    rounds: [recap('낙타'), recap('고래')],
+  });
+
+  /** navigator.share를 가로채 몇 번, 몇 장이 나갔는지 센다. */
+  function spyShare() {
+    const calls: Array<{ files: number; keys: string[] }> = [];
+    // jsdom에는 toBlob이 없다. 없으면 그림을 못 만들어 공유까지 가지도 못한다.
+    HTMLCanvasElement.prototype.toBlob = function (cb: BlobCallback) {
+      cb(new Blob([new Uint8Array(8)], { type: 'image/png' }));
+    } as HTMLCanvasElement['toBlob'];
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: {
+        ...navigator,
+        canShare: () => true,
+        share: (d: { files?: unknown[] }) => {
+          calls.push({ files: d.files?.length ?? 0, keys: Object.keys(d) });
+          return Promise.resolve();
+        },
+      },
+    });
+    return { calls, restore: () => { if (real) Object.defineProperty(window, 'navigator', real); } };
+  }
+
+  it('한 번 누르면 공유도 한 번, 파일도 한 장이다', async () => {
+    // 카카오톡 전송창에 pizza.png가 두 장 떴다는 제보. 눌린 횟수와 실린 장수를 센다.
+    const spy = spyShare();
+    try {
+      await boot();
+      deliver(finished());
+      $('galleryShareBtn').click();
+      await vi.waitFor(() => expect(spy.calls.length).toBeGreaterThan(0));
+      expect(spy.calls.length).toBe(1);
+      expect(spy.calls[0].files).toBe(1);
+      // 글자를 같이 실으면 받는 앱이 그림과 글자를 각각 한 덩이로 세어
+      // 카카오톡 전송창에 같은 그림이 두 장으로 뜬다. 그림만 보낸다.
+      expect(spy.calls[0].keys).toEqual(['files']);
+    } finally {
+      spy.restore();
+    }
+  });
+
+  it('연달아 눌러도 겹쳐서 나가지 않는다', async () => {
+    const spy = spyShare();
+    try {
+      await boot();
+      deliver(finished());
+      $('galleryShareBtn').click();
+      $('galleryShareBtn').click();
+      $('galleryShareBtn').click();
+      await vi.waitFor(() => expect(spy.calls.length).toBeGreaterThan(0));
+      expect(spy.calls.length).toBe(1);
+    } finally {
+      spy.restore();
+    }
+  });
+});
+
 describe('공유 버튼은 무슨 일이 일어날지 그대로 적는다', () => {
   /** navigator를 잠깐 갈아 끼운다. 되돌리는 것을 잊으면 뒤 테스트가 휘말린다. */
   async function bootWith(share: boolean) {
