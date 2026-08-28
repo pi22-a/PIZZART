@@ -44,6 +44,14 @@
 관전자는 정답을 아는 사람이라 참가자 목록에 👁로 표시된다 — 통화 중에 흘릴 수 있는 사람이
 누구인지 나머지가 알아야 하기 때문이다.
 
+## 문서
+
+- [`docs/UNITY-PORT.md`](docs/UNITY-PORT.md) — **유니티 이식 인수인계.** 확정된 규칙 수치,
+  부채꼴 클리핑 알고리즘, 50판에서 배운 설계 판단. 유니티판은 여기서 시작한다.
+- [`CHANGELOG.md`](CHANGELOG.md) — 버전마다 무엇을 **왜** 바꿨는지.
+- [`content/pizza-content.json`](content/pizza-content.json) — 규칙과 제시어 450개를 한 파일로
+  합친 것. 유니티 쪽에 그대로 복사해 쓴다. `npm run content` 로 다시 만든다.
+
 ## 실행
 
 ```bash

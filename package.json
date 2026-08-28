@@ -15,7 +15,8 @@
     "tunnel": "cloudflared tunnel --url http://localhost:5173",
     "tunnel:play": "cloudflared tunnel --url http://localhost:5174",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "content": "node scripts/bundle-content.mjs"
   },
   "dependencies": {
     "ws": "^8.21.2"
