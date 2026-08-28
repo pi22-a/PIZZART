@@ -197,13 +197,23 @@
   .watch-item.ok { background:#2f4a2a; color:#f6efe2; }
   .watch-item.none { opacity:.45; }
   .watch-none { opacity:.4; font-size:12px; }
-  /* 낙서 색 고르기 */
+  /* 색 고르기. 그리는 캔버스와 낙서판이 같은 모양을 쓴다. */
   .doodle-colors { display:inline-flex; gap:6px; }
   .doodle-colors button { width:24px; height:24px; padding:0; border-radius:50%;
                           border:2px solid transparent; cursor:pointer; }
   .doodle-colors button.on { border-color:var(--fg); }
-  /* 임자가 있는 색. 고를 수 없다는 걸 눌러보기 전에 알아야 한다. */
   .doodle-colors button:disabled { opacity:.28; cursor:not-allowed; }
+  /* 18색은 한 줄로 늘어놓으면 폰에서 넘친다. 3줄 × 6칸으로 접는다 —
+     첫 줄 무채·자연, 둘째 줄 따뜻한 쪽, 셋째 줄 찬 쪽이라 손이 자리를 기억한다. */
+  .palette { display:grid; grid-template-columns:repeat(6,auto); gap:5px; }
+  /* 어두운 배경에서 검정 스와치가 묻혀 빈 동그라미처럼 보였다. 안쪽에 옅은 테두리를
+     둘러 어느 쪽 테마에서도 색칠된 알약으로 읽히게 한다. */
+  .palette button { width:26px; height:26px; padding:0; border-radius:50%;
+                    border:2px solid transparent; cursor:pointer;
+                    box-shadow:inset 0 0 0 1px rgba(255,255,255,.28); }
+  .palette button.on { border-color:var(--fg); transform:scale(1.12); }
+  /* 지우개가 켜져 있는지가 한눈에 보여야 한다 — 모르고 그으면 그림이 지워진다. */
+  .tool.on { background:var(--sauce); color:#1c1712; }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
   /* 조각마다 캔버스+라벨을 묶는 칸. 내 조각과 공개된 조각을 한눈에 구별해야 한다 —
      안 그러면 다들 같은 그림을 받았다고 착각한다(설명하고 맞히는 게 게임의 전부인데). */
@@ -379,9 +389,15 @@
       <span class="pill big word" id="wordTag"></span>
       <button id="doneBtn">다 그렸다</button>
       <button id="undoBtn">되돌리기</button>
+      <!-- 획 지우개다. 그림이 폴리라인이라 픽셀 단위로는 못 지운다 — 조각내기가
+           폴리라인 위에 서 있어서, 픽셀로 바꾸면 게임의 핵심 장치가 무너진다. -->
+      <button id="eraserBtn" class="ghost tool">지우개</button>
       <!-- 뭘 그릴지 막막해서 판이 멈추는 것을 막는다. 시간은 다시 안 준다. -->
       <button id="rerollBtn" class="ghost">제시어 바꾸기</button>
       <span class="muted" id="drawWatchNote"></span>
+    </div>
+    <div class="bar">
+      <span class="palette" id="drawColors"></span>
     </div>
     <div style="max-width:520px"><canvas id="drawCanvas"></canvas></div>
   </section>
@@ -395,8 +411,9 @@
     <div class="doodle" id="doodleWrap" style="display:none">
       <div class="bar">
         <b>같이 낙서하기</b>
-        <span class="muted">기다리는 사람끼리 그립니다 · 색은 한 사람당 하나입니다</span>
-        <span class="doodle-colors" id="doodleColors"></span>
+        <span class="muted">기다리는 사람끼리 그립니다</span>
+        <span class="palette" id="doodleColors"></span>
+        <button id="doodleEraserBtn" class="ghost tool">지우개</button>
         <button id="doodleClearBtn" class="ghost">내 낙서 지우기</button>
       </div>
       <canvas id="doodleCanvas"></canvas>

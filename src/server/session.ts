@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Point } from '../shared/drawing';
+import type { Point, Stroke } from '../shared/drawing';
 import { insideCircle } from '../shared/drawing';
 import { slice, sliceCount, type Slice } from '../shared/slicer';
 import { rotate } from '../shared/geometry';
 import { CENTER } from '../shared/drawing';
 import type { ChatLine, ClientMsg, Phase, PlayerInfo, RoundRecap, ServerMsg } from '../shared/protocol';
+import { PALETTE, safeColor } from '../shared/palette';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
@@ -37,7 +38,7 @@ export interface DrawingRecord {
   topic: string;
   word: string;
   sliceCount: number;
-  strokes: Point[][];
+  strokes: Stroke[];
   /** 맞힌 사람 수 / 맞히려 한 사람 수. 그 그림이 얼마나 어려웠는지가 여기 남는다. */
   solved: number;
   guessers: number;
@@ -79,7 +80,7 @@ export class Session {
 
   private topic = '';
   private word = '';
-  private strokes: Point[][] = [];
+  private strokes: Stroke[] = [];
 
   private slices: Slice[] = [];
   /** 섹터 번호 → 처음 받은 사람 */
@@ -467,12 +468,30 @@ export class Session {
     }
   }
 
-  addStroke(playerId: string, points: Point[]): void {
+  addStroke(playerId: string, points: Point[], color?: string): void {
     if (this.phase !== 'drawing') return;
     if (playerId !== this.drawerId) return;
     const clean = points.filter(insideCircle);
     if (clean.length < 2) return;
-    this.strokes.push(clean);
+    // 색은 팔레트에 있는 것만 받는다. 아무 값이나 믿으면 배경과 같은 색으로 그어
+    // "안 보이는 그림"을 만들 수 있고, 그러면 아무도 못 맞힌다.
+    this.strokes.push({ points: clean, color: safeColor(color) });
+    this.pushCanvasToSpectators();
+  }
+
+  /**
+   * 획 하나를 지운다.
+   *
+   * 픽셀 지우개가 아니라 획 지우개인 이유: 그림이 폴리라인이라서다. 조각내기가
+   * 폴리라인 클리핑 위에 서 있으므로 그림을 픽셀로 바꾸는 순간 이 게임의 핵심 장치가
+   * 통째로 무너진다. 획 단위로 지우면 자료 구조가 그대로다.
+   */
+  eraseStroke(playerId: string, index: number): void {
+    if (this.phase !== 'drawing') return;
+    if (playerId !== this.drawerId) return;
+    if (!Number.isInteger(index) || index < 0 || index >= this.strokes.length) return;
+    this.strokes.splice(index, 1);
+    this.send(playerId, { t: 'canvas', strokes: this.strokes });
     this.pushCanvasToSpectators();
   }
 
@@ -560,11 +579,14 @@ export class Session {
   /** 사람 → 그 사람이 쓰는 낙서 색. 겹쳐도 된다 — 지우기는 색이 아니라 사람으로 가른다. */
   protected doodleColors = new Map<string, string>();
 
-  /** 고를 수 있는 낙서 색. 클라이언트의 팔레트와 같은 목록이어야 한다. */
-  static readonly DOODLE_PALETTE = [
-    '#e0803a', '#6fb6e8', '#83cf7d', '#e6cf63', '#d98fbf',
-    '#7fd6cc', '#f0937a', '#a99ae8', '#c3d17e',
-  ];
+  /**
+   * 고를 수 있는 낙서 색. 그리는 팔레트와 같은 목록을 쓴다.
+   *
+   * 다만 **낙서판의 색은 "누가 그렸나"를 나른다.** 그림 팔레트와 달리 여기서는 색이
+   * 뜻을 나르므로, 처음 배정만은 앞에서부터 서로 다르게 준다(ensureDoodleColor).
+   * 고르는 것은 18색 전부 열려 있다.
+   */
+  static readonly DOODLE_PALETTE: readonly string[] = PALETTE;
 
   /**
    * 아직 색이 없는 사람에게 남는 색을 하나 준다.
@@ -617,6 +639,24 @@ export class Session {
     for (const p of this.players) {
       if (p.id === this.drawerId) continue;
       this.send(p.id, { t: 'doodleStroke', by: playerId, points, color: safe });
+    }
+  }
+
+  /**
+   * 낙서 획 하나를 지운다. 내가 그은 것만 — 남의 낙서는 못 건드린다.
+   *
+   * 판을 통째로 다시 보내는 것은 낭비 같지만, 획 번호는 사람마다 다르게 셀 수 없다.
+   * 상한이 600획이라 그대로 보내도 부담이 없다.
+   */
+  eraseDoodle(playerId: string, index: number): void {
+    if (this.phase !== 'drawing') return;
+    if (this.knowsAnswer(playerId)) return;
+    if (!Number.isInteger(index) || index < 0 || index >= this.doodle.length) return;
+    if (this.doodle[index].by !== playerId) return;
+    this.doodle.splice(index, 1);
+    for (const p of this.players) {
+      if (p.id === this.drawerId) continue;
+      this.send(p.id, { t: 'doodleBoard', strokes: this.doodle });
     }
   }
 
@@ -990,13 +1030,15 @@ export class Session {
       case 'setTopics': return this.setTopics(playerId, msg.topics);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'setLock': return this.setLock(playerId, msg.on);
-      case 'stroke': return this.addStroke(playerId, msg.points);
+      case 'stroke': return this.addStroke(playerId, msg.points, msg.color);
       case 'undo': return this.undo(playerId);
+      case 'erase': return this.eraseStroke(playerId, msg.index);
       case 'drawDone': return this.drawDone(playerId);
       case 'answer': return this.answer(playerId, msg.text);
       case 'skip': return this.skip(playerId);
       case 'doodle': return this.addDoodle(playerId, msg.points, msg.color);
       case 'doodleClear': return this.clearDoodle(playerId);
+      case 'doodleErase': return this.eraseDoodle(playerId, msg.index);
       case 'doodleColor': return this.setDoodleColor(playerId, msg.color);
       case 'chat': return this.chat(playerId, msg.text);
       case 'reroll': return this.rerollWord(playerId);
@@ -1135,7 +1177,14 @@ export class Session {
     const step = (Math.PI * 2) / count;
     const pieces = [...mine].sort((a, b) => a - b).map((index) => {
       const spin = -Math.PI / 2 - (index + 0.5) * step;
-      return { index, strokes: this.slices[index].strokes.map((st) => rotate(st, CENTER, -spin)) };
+      // 회전을 되돌려 제자리에 끼운다. 색은 그대로 따라간다.
+      return {
+        index,
+        strokes: this.slices[index].strokes.map((st) => ({
+          points: rotate(st.points, CENTER, -spin),
+          color: st.color,
+        })),
+      };
     });
     this.send(playerId, { t: 'assembled', sliceCount: count, pieces });
   }

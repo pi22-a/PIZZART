@@ -299,7 +299,8 @@ wss.on('connection', (socket, req) => {
         .filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
         .map(([x, y]) => [clamp(Math.round(x), 0, 1000), clamp(Math.round(y), 0, 1000)] as Point);
       if (clean.length === 0) return;
-      session.addStroke(id, clean);
+      // 색은 세션이 팔레트와 대조한다. 여기서는 문자열인지만 본다.
+      session.addStroke(id, clean, typeof msg.color === 'string' ? msg.color : '');
       return;
     }
 

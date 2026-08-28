@@ -11,6 +11,7 @@ import {
   flashHost, toast, scrollChatToBottom,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
+import { PALETTE, PALETTE_NAMES, DEFAULT_COLOR } from '../shared/palette';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 import { canSharePng, drawGalleryCard, shareCard } from './share';
@@ -167,7 +168,7 @@ const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { inte
  * 점 하나짜리 메시지가 나가는데, 서버는 점이 둘 미만인 획을 버린다. 즉 또박또박 그린
  * 그림일수록 통째로 사라졌다.
  */
-drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
+drawCanvas.onStroke((points: Point[], color: string) => net.send({ t: 'stroke', points, color }));
 
 /**
  * 대기 화면 낙서판. 출제자가 그리는 동안 기다리는 사람들이 같이 갈긴다.
@@ -177,11 +178,62 @@ const doodle = new DoodleBoard($('doodleCanvas') as HTMLCanvasElement, () => you
 doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points, color: doodle.getColor() }));
 
 /**
+ * 그리는 캔버스의 색과 도구.
+ *
+ * 색을 고르는 순간 화면이 그 색으로 바뀌어야 한다 — 서버에 물어볼 것이 없다.
+ * 색은 획에 실어 보내고, 서버는 팔레트에 있는 색인지만 확인한다.
+ */
+function paintDrawTool(): void {
+  const erasing = drawCanvas.getTool() === 'eraser';
+  $('eraserBtn').classList.toggle('on', erasing);
+  $('eraserBtn').textContent = erasing ? '지우개 끄기' : '지우개';
+  // 지우개를 쓰는 동안 색을 고르면 자연스럽게 펜으로 돌아온다.
+  ($('drawCanvas') as HTMLCanvasElement).style.cursor = erasing ? 'cell' : 'crosshair';
+}
+
+(function buildDrawPalette(): void {
+  const box = $('drawColors');
+  PALETTE.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.style.background = c;
+    b.dataset.color = c;
+    b.title = PALETTE_NAMES[i];
+    b.setAttribute('aria-label', PALETTE_NAMES[i]);
+    b.classList.toggle('on', c === DEFAULT_COLOR);
+    b.addEventListener('click', () => {
+      drawCanvas.setColor(c);
+      drawCanvas.setTool('pen');
+      paintDrawTool();
+      for (const el of box.querySelectorAll('button')) el.classList.toggle('on', el === b);
+    });
+    box.appendChild(b);
+  });
+})();
+
+$('eraserBtn').addEventListener('click', () => {
+  drawCanvas.setTool(drawCanvas.getTool() === 'eraser' ? 'pen' : 'eraser');
+  paintDrawTool();
+});
+drawCanvas.onErase((index: number) => net.send({ t: 'erase', index }));
+
+function paintDoodleTool(): void {
+  const erasing = doodle.getTool() === 'eraser';
+  $('doodleEraserBtn').classList.toggle('on', erasing);
+  $('doodleEraserBtn').textContent = erasing ? '지우개 끄기' : '지우개';
+}
+
+$('doodleEraserBtn').addEventListener('click', () => {
+  doodle.setTool(doodle.getTool() === 'eraser' ? 'pen' : 'eraser');
+  paintDoodleTool();
+});
+doodle.onErase((index: number) => net.send({ t: 'doodleErase', index }));
+
+/**
  * 낙서 색 고르기.
  *
- * 색은 한 사람당 하나다. 두 사람이 같은 색을 쓰면 누가 그린 선인지 구분이 안 되고,
- * 그 상태에서 한쪽이 자기 낙서를 지우면 다른 쪽은 자기 그림이 지워졌다고 오해한다.
- * 그래서 임자가 있는 색은 아예 못 고르게 막는다. 색은 서버가 정한다.
+ * 18색 전부 고를 수 있다. 남이 쓰는 색이어도 된다 — 지우기는 색이 아니라 사람으로
+ * 가르기 때문이다. 다만 **여기서 색은 "누가 그렸나"를 나르므로** 처음 배정만은
+ * 서버가 서로 다르게 준다. 누가 무슨 색을 쓰는지는 툴팁으로 알려준다.
  */
 function renderDoodleColors(players: PlayerInfo[]): void {
   const box = $('doodleColors');
@@ -190,7 +242,15 @@ function renderDoodleColors(players: PlayerInfo[]): void {
       const b = document.createElement('button');
       b.style.background = c;
       b.dataset.color = c;
-      b.addEventListener('click', () => net.send({ t: 'doodleColor', color: c }));
+      b.setAttribute('aria-label', PALETTE_NAMES[DOODLE_COLORS.indexOf(c)] ?? c);
+      b.addEventListener('click', () => {
+        net.send({ t: 'doodleColor', color: c });
+        // 서버 응답을 기다리지 않는다. 고른 순간부터 그 색으로 그어져야 한다.
+        doodle.setColor(c);
+        doodle.setTool('pen');
+        paintDoodleTool();
+        for (const el of box.querySelectorAll('button')) el.classList.toggle('on', el === b);
+      });
       box.appendChild(b);
     }
   }

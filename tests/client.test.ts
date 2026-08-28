@@ -73,7 +73,7 @@ function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg 
 }
 
 function slices(): ServerMsg {
-  return { t: 'slices', count: 8, slices: [{ id: 'a', strokes: [[[500, 500], [600, 500]]], shared: false }] };
+  return { t: 'slices', count: 8, slices: [{ id: 'a', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: false }] };
 }
 
 function slicesWithShared(): ServerMsg {
@@ -81,9 +81,9 @@ function slicesWithShared(): ServerMsg {
     t: 'slices',
     count: 8,
     slices: [
-      { id: 'a', strokes: [[[500, 500], [600, 500]]], shared: false },
-      { id: 'b', strokes: [[[500, 500], [600, 500]]], shared: true },
-      { id: 'c', strokes: [[[500, 500], [600, 500]]], shared: true },
+      { id: 'a', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: false },
+      { id: 'b', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: true },
+      { id: 'c', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: true },
     ],
   };
 }
@@ -638,7 +638,7 @@ const TEST_RULES_CLIENT = {
 describe('새 라운드가 지난 라운드 조립판을 덮어쓴다 (버그: 직전 출제자만 새 그림이 보인다)', () => {
   const assembled = (): ServerMsg => ({
     t: 'assembled', sliceCount: 8,
-    pieces: [{ index: 0, strokes: [[[500, 500], [600, 500]]] }],
+    pieces: [{ index: 0, strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }] }],
   });
 
   it('조립판을 본 뒤 새 라운드 조각을 받으면 조각칸이 돌아온다', async () => {
@@ -1364,7 +1364,7 @@ describe('판이 끝나면 그림을 모아 보여준다', () => {
     round: 0,
     topic: '동물',
     word,
-    drawing: [[[300, 200], [400, 300]]] as [number, number][][],
+    drawing: [{ points: [[300, 200], [400, 300]] as [number, number][], color: '#e03131' }],
     sliceCount: 8,
     drawer: '출제자',
     correct,

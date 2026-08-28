@@ -1,6 +1,20 @@
 import type { Point } from '../shared/drawing';
 import { DOODLE_W, DOODLE_H } from '../shared/drawing';
+import { PALETTE } from '../shared/palette';
 import { drawStrokes, fitRect } from './ink';
+
+/** 낙서 지우개가 획을 무는 거리. 선이 굵어서(10) 게임 캔버스보다 넉넉하게 잡는다. */
+const ERASE_HIT = 26;
+
+function distToSegment(p: Point, a: Point, b: Point): number {
+  const vx = b[0] - a[0];
+  const vy = b[1] - a[1];
+  const len2 = vx * vx + vy * vy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / len2));
+  const dx = p[0] - (a[0] + vx * t);
+  const dy = p[1] - (a[1] + vy * t);
+  return Math.hypot(dx, dy);
+}
 
 /**
  * 대기 화면 낙서판.
@@ -12,10 +26,13 @@ import { drawStrokes, fitRect } from './ink';
  * 색은 각자 고른다. 아무것도 안 고르면 id에서 뽑은 색이 기본값이라,
  * 여럿이 겹쳐 그려도 처음부터 구분이 된다.
  */
-export const COLORS = [
-  '#e0803a', '#6fb6e8', '#83cf7d', '#e6cf63', '#d98fbf',
-  '#7fd6cc', '#f0937a', '#a99ae8', '#c3d17e',
-];
+/**
+ * 낙서판 팔레트. 그리는 캔버스와 같은 18색을 쓴다.
+ *
+ * 다만 여기서 색은 **누가 그렸나**를 나른다. 그래서 처음 배정만은 서버가 앞에서부터
+ * 서로 다르게 준다(Session.ensureDoodleColor). 고르는 것은 전부 열려 있다.
+ */
+export const COLORS: readonly string[] = PALETTE;
 
 /** 같은 사람은 언제나 같은 색이다. 자리 순서에 기대면 누가 나갈 때마다 색이 바뀐다. */
 export function doodleColor(id: string): string {
@@ -36,6 +53,8 @@ export class DoodleBoard {
   private strokes: DoodleStroke[] = [];
   private current: Point[] | null = null;
   private strokeFn: ((points: Point[]) => void) | null = null;
+  private eraseFn: ((index: number) => void) | null = null;
+  private tool: 'pen' | 'eraser' = 'pen';
 
   constructor(private el: HTMLCanvasElement, private meId: () => string) {
     this.ctx = el.getContext('2d')!;
@@ -44,11 +63,15 @@ export class DoodleBoard {
 
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId);
-      this.current = [this.toCanvas(e)];
+      const p = this.toCanvas(e);
+      if (this.tool === 'eraser') { this.eraseAt(p); return; }
+      this.current = [p];
     });
     el.addEventListener('pointermove', (e) => {
+      const p = this.toCanvas(e);
+      if (this.tool === 'eraser') { if (e.buttons > 0) this.eraseAt(p); return; }
       if (!this.current) return;
-      this.current.push(this.toCanvas(e));
+      this.current.push(p);
       this.draw();
     });
     const end = () => {
@@ -68,6 +91,31 @@ export class DoodleBoard {
   }
 
   onStroke(fn: (points: Point[]) => void): void { this.strokeFn = fn; }
+  onErase(fn: (index: number) => void): void { this.eraseFn = fn; }
+
+  setTool(t: 'pen' | 'eraser'): void { this.tool = t; }
+  getTool(): 'pen' | 'eraser' { return this.tool; }
+
+  /**
+   * 지우개가 문 획을 지운다. 내가 그은 것만 — 남의 낙서는 안 물린다.
+   *
+   * 서버도 같은 확인을 한다. 여기서 거르는 것은 남의 선 위에서 지우개를 문질렀을 때
+   * 화면에서만 사라졌다가 되살아나는 꼴을 안 보려는 것이다.
+   */
+  private eraseAt(p: Point): void {
+    for (let i = this.strokes.length - 1; i >= 0; i--) {
+      const s = this.strokes[i];
+      if (s.by !== this.meId()) continue;
+      for (let j = 1; j < s.points.length; j++) {
+        if (distToSegment(p, s.points[j - 1], s.points[j]) <= ERASE_HIT) {
+          this.strokes.splice(i, 1);
+          this.draw();
+          this.eraseFn?.(i);
+          return;
+        }
+      }
+    }
+  }
 
   /** 지금 고른 색. 처음에는 내 id에서 뽑은 색으로 시작한다. */
   private color = '';
@@ -122,11 +170,17 @@ export class DoodleBoard {
     ctx.fillStyle = '#f6efe2';
     ctx.fillRect(0, 0, DOODLE_W, DOODLE_H);
 
+    // 그리는 중인 획에도 지금 고른 색을 붙인다.
+    //
+    // 예전에는 색 없이 넣었다. 그러면 아래 `s.color ?? doodleColor(s.by)`가 **id에서 뽑은
+    // 기본색**으로 떨어져서, 긋는 동안은 기본색으로 보이다가 손을 떼는 순간(그때야
+    // color가 붙는다) 고른 색으로 바뀌었다. 쓰는 사람 눈에는 "선이 먼저 나오고 색이
+    // 나중에 입혀지는" 것으로 보인다. 서버 왕복과는 아무 상관이 없었다.
     const all = this.current
-      ? [...this.strokes, { by: this.meId(), points: this.current }]
+      ? [...this.strokes, { by: this.meId(), points: this.current, color: this.getColor() }]
       : this.strokes;
     for (const s of all) {
-      drawStrokes(ctx, [s.points], { color: s.color ?? doodleColor(s.by), width: 10 });
+      drawStrokes(ctx, [{ points: s.points, color: s.color ?? doodleColor(s.by) }], { width: 10 });
     }
     ctx.restore();
   }

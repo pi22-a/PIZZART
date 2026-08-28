@@ -1,4 +1,4 @@
-import type { Point } from './drawing';
+import type { Point, Stroke } from './drawing';
 
 export type Phase = 'lobby' | 'drawing' | 'guessing' | 'roundEnd' | 'final';
 
@@ -64,7 +64,14 @@ export type ClientMsg =
    * 도중에 들어온 사람은 판이 끝나 로비로 돌아오기 전에는 참여로 못 바꾼다.
    */
   | { t: 'setSpectator'; on: boolean }
-  | { t: 'stroke'; points: Point[] }
+  | { t: 'stroke'; points: Point[]; color: string }
+  /**
+   * 획 하나를 지운다. 그리는 중에, 출제자만.
+   *
+   * 좌표가 아니라 몇 번째 획인지로 보낸다 — 캔버스에 손대는 사람은 출제자 하나뿐이라
+   * 번호가 어긋날 일이 없고, 서버가 다시 판정할 것도 없어진다.
+   */
+  | { t: 'erase'; index: number }
   | { t: 'undo' }
   | { t: 'drawDone' }
   | { t: 'answer'; text: string }
@@ -74,6 +81,8 @@ export type ClientMsg =
   | { t: 'doodle'; points: Point[]; color: string }
   /** 내가 그린 낙서만 지운다. 남의 낙서는 건드리지 않는다. */
   | { t: 'doodleClear' }
+  /** 낙서 획 하나를 지운다. 내가 그은 것만 — 서버가 확인한다. */
+  | { t: 'doodleErase'; index: number }
   /** 낙서 색을 고른다. 남이 쓰는 색은 서버가 거절한다. */
   | { t: 'doodleColor'; color: string }
   /** 결과·최종 화면에서만. 다른 단계에서는 서버가 버린다. */
@@ -121,7 +130,7 @@ export interface RoundRecap {
   round: number;
   topic: string;
   word: string;
-  drawing: Point[][];
+  drawing: Stroke[];
   sliceCount: number;
   /** 그린 사람의 이름 */
   drawer: string;
@@ -182,7 +191,7 @@ export type ServerMsg =
    */
   | { t: 'word'; word: string; rerollsLeft: number }
   /** 출제자가 새로고침했을 때 자기 그림을 되찾는다. 출제자에게만 간다. */
-  | { t: 'canvas'; strokes: Point[][] }
+  | { t: 'canvas'; strokes: Stroke[] }
   /**
    * 내가 볼 수 있는 조각 전부 — 처음 받은 것 + 힌트로 받은 것. 전부 나만의 것이다.
    * 이미 회전되어 있고, id는 섹터 번호와 무관한 불투명 값이다.
@@ -191,13 +200,13 @@ export type ServerMsg =
    * count는 전체 조각 수다. 부채꼴을 몇 도로 그릴지에 필요하고,
    * 몇 조각으로 잘렸는지는 알아도 내 것이 어디였는지는 알 수 없으므로 새어도 무해하다.
    */
-  | { t: 'slices'; count: number; slices: Array<{ id: string; strokes: Point[][]; shared: boolean }> }
+  | { t: 'slices'; count: number; slices: Array<{ id: string; strokes: Stroke[]; shared: boolean }> }
   /**
    * 마지막 회차의 조립판. 지금까지 본 조각을 회전을 풀어 제자리에 끼워 보여준다.
    * 이 게임의 핵심 장치인 회전을 마지막에 풀어주는 자비이자 마지막 기회다.
    * 여기서 맞히면 점수는 1점 고정이라, 방향을 알려줘도 판이 무너지지 않는다.
    */
-  | { t: 'assembled'; sliceCount: number; pieces: Array<{ index: number; strokes: Point[][] }> }
+  | { t: 'assembled'; sliceCount: number; pieces: Array<{ index: number; strokes: Stroke[] }> }
   /**
    * 이미 답을 아는 사람에게만 — 출제자와, 먼저 맞혀서 점수가 확정된 사람.
    * 지금 남들에게 어떤 조각이 나가 있는지 보여준다. 정답을 아는 사람들이라 원본을 실어도
@@ -206,7 +215,7 @@ export type ServerMsg =
   | {
       t: 'board';
       sliceCount: number;
-      drawing: Point[][];
+      drawing: Stroke[];
       /**
        * 맞히는 사람마다 지금 무엇을 보고 있는가. 조각은 그 사람이 보는 그대로,
        * 이미 위를 향하게 돌아간 상태다 — 합쳐서 한 판으로 보여주면 "그림의 절반이
@@ -214,7 +223,7 @@ export type ServerMsg =
        */
       watching: Array<{
         playerId: string;
-        slices: Point[][][];
+        slices: Stroke[][];
         solved: boolean;
         /**
          * 회차마다 뭐라고 냈는가. 회차가 끝날 때만 쌓인다 — 치는 즉시 보여주면
@@ -229,7 +238,7 @@ export type ServerMsg =
   | {
       t: 'roundEnd';
       word: string;
-      drawing: Point[][];
+      drawing: Stroke[];
       sliceCount: number;
       /** 섹터 번호 → 그 조각을 처음 받았던 사람. 아무도 못 받았으면 null */
       owners: Array<{ sliceIndex: number; playerId: string | null }>;

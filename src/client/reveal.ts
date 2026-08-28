@@ -1,4 +1,4 @@
-import type { Point } from '../shared/drawing';
+import type { Point, Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import { slice } from '../shared/slicer';
 import { drawStrokes, fitCanvas, isLight } from './ink';
@@ -18,7 +18,7 @@ const DUR = 1400;
  */
 export function revealRound(
   el: HTMLCanvasElement,
-  drawing: Point[][],
+  drawing: Stroke[],
   sliceCount: number,
   owners: Array<{ sliceIndex: number; playerId: string | null }>,
   youId: string,
@@ -83,7 +83,7 @@ export function revealRound(
  */
 export function drawBoard(
   el: HTMLCanvasElement,
-  drawing: Point[][],
+  drawing: Stroke[],
   sliceCount: number,
   visible: number[],
 ): void {
@@ -123,7 +123,7 @@ export function drawBoard(
  */
 export function drawAssembled(
   el: HTMLCanvasElement,
-  pieces: Array<{ index: number; strokes: Point[][] }>,
+  pieces: Array<{ index: number; strokes: Stroke[] }>,
   sliceCount: number,
 ): void {
   const ctx = el.getContext('2d')!;

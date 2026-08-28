@@ -1,4 +1,4 @@
-import type { Point } from '../shared/drawing';
+import type { Point, Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import type { AnswerRow, ChatLine, PlayerInfo, RoomInfo, RoundRecap } from '../shared/protocol';
 import { drawStrokes } from './ink';
@@ -146,7 +146,7 @@ export function renderRoundDots(round: number, total: number): void {
 let stopSpin: (() => void) | null = null;
 
 export function renderSlices(
-  slices: Array<{ id: string; strokes: Point[][]; shared: boolean }>,
+  slices: Array<{ id: string; strokes: Stroke[]; shared: boolean }>,
   sliceCount: number,
 ): void {
   const box = $('sliceBox');
@@ -293,7 +293,7 @@ export function renderWatch(
   el: HTMLElement,
   watching: Array<{
     playerId: string;
-    slices: Point[][][];
+    slices: Stroke[][];
     solved: boolean;
     history: Array<{ attempt: number; text: string; skipped: boolean; correct: boolean }>;
   }>,
@@ -432,7 +432,7 @@ export function renderGallery(rounds: RoundRecap[]): void {
       ctx.fillStyle = '#f6efe2';
       ctx.fill();
       ctx.clip();
-      drawStrokes(ctx, r.drawing, { color: '#2b2118' });
+      drawStrokes(ctx, r.drawing);
       ctx.restore();
     }
     const cap = document.createElement('figcaption');

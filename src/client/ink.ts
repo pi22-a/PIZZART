@@ -10,27 +10,29 @@ export function isLight(): boolean {
   return document.documentElement.dataset.theme === 'light';
 }
 import { CANVAS } from '../shared/drawing';
+import type { Stroke } from '../shared/drawing';
 
 /**
- * 잉크는 어디서 그리든 같은 굵기·같은 색이다.
+ * 획을 그린다. 색은 획마다 자기 것을 쓴다.
  *
- * 예외는 대기 화면 낙서판 하나다 — 여럿이 같은 판에 갈기므로 사람마다 색이 달라야 한다.
- * 그래서 색과 굵기만 열어두고, 나머지 그리는 방식은 한 곳에 둔다.
+ * 굵기와 색을 밖에서 덮어쓸 수 있게 열어둔 것은 낙서판(굵은 선)과, 색을 통일해서
+ * 보여줘야 하는 자리 때문이다. 그리는 방식 자체는 여기 한 곳에만 둔다.
  */
 export function drawStrokes(
   ctx: CanvasRenderingContext2D,
-  strokes: Point[][],
+  strokes: Stroke[],
   opts: { color?: string; width?: number } = {},
 ): void {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = opts.width ?? 8;
-  ctx.strokeStyle = opts.color ?? '#2b2118';
   for (const s of strokes) {
-    if (s.length < 2) continue;
+    const pts = s.points;
+    if (pts.length < 2) continue;
+    ctx.strokeStyle = opts.color ?? s.color ?? '#2b2118';
     ctx.beginPath();
-    ctx.moveTo(s[0][0], s[0][1]);
-    for (let i = 1; i < s.length; i++) ctx.lineTo(s[i][0], s[i][1]);
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.stroke();
   }
 }

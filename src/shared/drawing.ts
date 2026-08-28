@@ -5,8 +5,19 @@ export const CANVAS = 1000;
 export const CENTER: Point = [500, 500];
 export const RADIUS = 500;
 
-/** 그림은 폴리라인의 모음이다. 마우스에서 나오므로 곡선 타입은 필요 없다. */
-export type Drawing = Point[][];
+/**
+ * 획 하나 — 폴리라인과 색.
+ *
+ * 색이 획에 붙어 있어야 하는 이유: 그림은 부채꼴로 잘리는데, 클리핑은 획 하나를 여러
+ * 토막으로 쪼갠다. 색을 그림 단위로 들고 있으면 그 토막들이 무슨 색이었는지 잃는다.
+ */
+export interface Stroke {
+  points: Point[];
+  color: string;
+}
+
+/** 그림은 획의 모음이다. 마우스에서 나오므로 곡선 타입은 필요 없다. */
+export type Drawing = Stroke[];
 
 /**
  * 대기 화면 낙서판의 좌표계. 출제자가 그리는 원형 캔버스와 완전히 별개다.

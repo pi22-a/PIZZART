@@ -1770,6 +1770,89 @@ describe('관전자는 점수판 어디에도 안 나온다', () => {
   });
 });
 
+describe('색과 지우개', () => {
+  /** 그리는 중의 캔버스는 관전자에게만 간다(출제자는 자기 화면에 이미 있다). */
+  function watchingSession(): void {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.start('p1');
+  }
+
+  it('출제자가 고른 색이 획에 붙는다', () => {
+    watchingSession();
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.at(-1)!.color).toBe('#e03131');
+  });
+
+  it('팔레트에 없는 색은 검정으로 바뀐다', () => {
+    // 아무 값이나 믿으면 배경과 같은 색으로 그어 "안 보이는 그림"을 만들 수 있고,
+    // 그러면 아무도 못 맞힌다.
+    watchingSession();
+    s.addStroke('p1', [[300, 200], [400, 300]], '#f6efe2');
+    s.addStroke('p1', [[310, 210], [410, 310]], 'javascript:alert(1)');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#1f1b17', '#1f1b17']);
+  });
+
+  it('색은 조각으로 잘려도 따라간다', () => {
+    newSession();
+    s.start('p1');
+    // 중심을 가로지르는 선이라 여러 조각으로 쪼개진다
+    s.addStroke('p1', [[200, 500], [800, 500]], '#1971c2');
+    s.drawDone('p1');
+    const slices = msgsTo('p2').filter((m) => m.t === 'slices').at(-1)!;
+    const colors = slices.slices.flatMap((sl) => sl.strokes.map((st) => st.color));
+    expect(colors.length).toBeGreaterThan(0);
+    expect(colors.every((c) => c === '#1971c2')).toBe(true);
+  });
+
+  it('지우개는 그 획만 지운다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.addStroke('p1', [[310, 210], [410, 310]], '#1971c2');
+    s.addStroke('p1', [[320, 220], [420, 320]], '#2f9e44');
+    s.eraseStroke('p1', 1);
+    const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#e03131', '#2f9e44']);
+  });
+
+  it('출제자가 아니면 못 지운다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.eraseStroke('p2', 0);
+    expect(s.strokeCount).toBe(1);
+  });
+
+  it('없는 번호를 지우라고 해도 판은 안 흔들린다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.eraseStroke('p1', 9);
+    s.eraseStroke('p1', -1);
+    expect(s.strokeCount).toBe(1);
+    // 아무 일도 없었으므로 화면을 다시 그리라고 보낼 것도 없다
+    expect(msgsTo('p1').filter((m) => m.t === 'canvas').length).toBe(0);
+  });
+
+  it('낙서 지우개는 내 획만 지운다', () => {
+    newSession();
+    s.start('p1');
+    s.addDoodle('p2', [[100, 100], [200, 200]], '#e03131');
+    s.addDoodle('p3', [[300, 300], [400, 400]], '#1971c2');
+    // p2가 p3의 획(1번)을 지우려 해도 안 된다
+    s.eraseDoodle('p2', 1);
+    const after = msgsTo('p2').filter((m) => m.t === 'doodleBoard');
+    expect(after.length).toBe(0);
+    // 자기 것은 지워진다
+    s.eraseDoodle('p2', 0);
+    const board = msgsTo('p2').filter((m) => m.t === 'doodleBoard').at(-1)!;
+    expect(board.strokes.map((x) => x.by)).toEqual(['p3']);
+  });
+});
+
 describe('판이 끝나면 그림을 전부 실어 보낸다', () => {
   /** 한 판을 끝까지 돌린다. 라운드마다 획을 남겨야 그림이 기록으로 남는다. */
   function playThrough(): void {

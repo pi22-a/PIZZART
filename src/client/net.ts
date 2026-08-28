@@ -1,4 +1,5 @@
 import type { ClientMsg, ServerMsg } from '../shared/protocol';
+import { DEFAULT_COLOR } from '../shared/palette';
 import type { Point } from '../shared/drawing';
 
 const FLUSH_MS = 50;
@@ -141,7 +142,7 @@ export class Net {
       this.timer = null;
     }
     if (this.buffer.length === 0) return;
-    this.send({ t: 'stroke', points: this.buffer });
+    this.send({ t: 'stroke', points: this.buffer, color: DEFAULT_COLOR });
     this.buffer = [];
   }
 }

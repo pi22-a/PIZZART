@@ -1,4 +1,4 @@
-import type { Point } from '../shared/drawing';
+import type { Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import type { RoundRecap } from '../shared/protocol';
 import { drawStrokes } from './ink';
@@ -36,7 +36,7 @@ const FONT = 'system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif';
  */
 function drawPie(
   ctx: CanvasRenderingContext2D,
-  drawing: Point[][],
+  drawing: Stroke[],
   sliceCount: number,
   x: number,
   y: number,
@@ -51,7 +51,8 @@ function drawPie(
   ctx.fill();
   ctx.save();
   ctx.clip();
-  drawStrokes(ctx, drawing, { color: INK });
+  // 색은 그린 사람이 고른 그대로 나간다. 통일해 버리면 그림이 달라진다.
+  drawStrokes(ctx, drawing);
   ctx.restore();
   if (sliceCount > 0) {
     const step = (Math.PI * 2) / sliceCount;

@@ -1,4 +1,4 @@
-import type { Point } from '../shared/drawing';
+import type { Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import { drawStrokes, fitCanvas, isLight } from './ink';
 
@@ -32,7 +32,7 @@ export function computeSliceZoom(
  * 조각 하나를 그린다. 좌표는 서버가 이미 위를 향하게 돌려서 보낸 것이다.
  * 꼭짓점이 중심에, 부채꼴이 위로 뻗는다.
  */
-export function drawSlice(el: HTMLCanvasElement, strokes: Point[][], sliceCount: number): void {
+export function drawSlice(el: HTMLCanvasElement, strokes: Stroke[], sliceCount: number): void {
   const ctx = el.getContext('2d')!;
   const scale = fitCanvas(el);
   ctx.save();
