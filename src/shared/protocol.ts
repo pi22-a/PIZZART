@@ -66,12 +66,16 @@ export type ClientMsg =
   | { t: 'setSpectator'; on: boolean }
   | { t: 'stroke'; points: Point[]; color: string }
   /**
-   * 획 하나를 지운다. 그리는 중에, 출제자만.
+   * 지우개가 지나간 자리. 그리는 중에, 출제자만.
    *
-   * 좌표가 아니라 몇 번째 획인지로 보낸다 — 캔버스에 손대는 사람은 출제자 하나뿐이라
-   * 번호가 어긋날 일이 없고, 서버가 다시 판정할 것도 없어진다.
+   * 획 번호가 아니라 **경로**로 보낸다. 부분 지우개라 획 하나가 여러 토막으로 쪼개지므로
+   * "몇 번 획을 지워라"로는 표현이 안 된다. 그렇다고 지운 결과를 통째로 보내면 클라이언트가
+   * 그림을 마음대로 갈아치울 수 있으니, **지나간 자리만 보내고 자르는 것은 서버가 한다.**
+   *
+   * 점 하나짜리 경로는 그 자리를 콕 찍어 지운다(캡슐의 양 끝이 같은 점).
+   * 획과 같이 50ms마다 묶어 보내며, 묶음과 묶음 사이가 끊기지 않게 마지막 점을 겹쳐 보낸다.
    */
-  | { t: 'erase'; index: number }
+  | { t: 'erase'; path: Point[] }
   | { t: 'undo' }
   | { t: 'drawDone' }
   | { t: 'answer'; text: string }
@@ -81,8 +85,8 @@ export type ClientMsg =
   | { t: 'doodle'; points: Point[]; color: string }
   /** 내가 그린 낙서만 지운다. 남의 낙서는 건드리지 않는다. */
   | { t: 'doodleClear' }
-  /** 낙서 획 하나를 지운다. 내가 그은 것만 — 서버가 확인한다. */
-  | { t: 'doodleErase'; index: number }
+  /** 낙서 지우개가 지나간 자리. 내가 그은 획만 지워진다 — 서버가 확인한다. */
+  | { t: 'doodleErase'; path: Point[] }
   /** 낙서 색을 고른다. 남이 쓰는 색은 서버가 거절한다. */
   | { t: 'doodleColor'; color: string }
   /** 결과·최종 화면에서만. 다른 단계에서는 서버가 버린다. */

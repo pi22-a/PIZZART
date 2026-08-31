@@ -16,10 +16,46 @@ export function socketUrl(room: string): string {
   return `${scheme}//${location.host}/ws?room=${encodeURIComponent(room)}`;
 }
 
+/**
+ * 지우개 경로를 모았다가 한 번에 보낸다.
+ *
+ * 획을 보내는 것과 같은 모양이지만 한 가지가 다르다 — 묶음을 끊을 때 마지막 점을
+ * 다음 묶음의 첫 점으로 남긴다. 지우개는 점이 아니라 **점과 점 사이**를 지우므로,
+ * 그냥 끊으면 묶음 경계의 한 구간이 아무에게도 안 지워진 채로 남는다.
+ */
+class ErasePath {
+  private buf: Point[] = [];
+  private timer: number | null = null;
+
+  constructor(private sendPath: (path: Point[]) => void) {}
+
+  push(p: Point): void {
+    this.buf.push(p);
+    if (this.timer === null) this.timer = window.setTimeout(() => this.flush(false), FLUSH_MS);
+  }
+
+  /** 지우개를 뗐다. 남은 것을 보내고 경로를 끊는다. */
+  end(): void {
+    this.flush(true);
+  }
+
+  private flush(end: boolean): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.buf.length === 0) return;
+    this.sendPath(this.buf);
+    this.buf = end ? [] : [this.buf[this.buf.length - 1]];
+  }
+}
+
 export class Net {
   private socket!: WebSocket;
   private buffer: Point[] = [];
   private timer: number | null = null;
+  private erase = new ErasePath((path) => this.send({ t: 'erase', path }));
+  private doodleErase = new ErasePath((path) => this.send({ t: 'doodleErase', path }));
   private pending: ClientMsg[] = [];
 
   private statusFn: ((ok: boolean) => void) | null = null;
@@ -122,6 +158,31 @@ export class Net {
     const queued = this.pending;
     this.pending = [];
     for (const m of queued) this.socket.send(JSON.stringify(m));
+  }
+
+  /**
+   * 지우개가 지나간 자리를 모았다가 50ms마다 한 번에 보낸다.
+   *
+   * 포인터가 움직일 때마다 보내면 초당 예산(STROKES_PER_SECOND=40)에 걸려 메시지가
+   * 조용히 버려지고, 서버가 못 받은 자리의 잉크가 되살아난다. 획과 같은 간격으로 묶는다.
+   *
+   * 묶음을 끊을 때 **마지막 점은 다음 묶음의 첫 점으로 남긴다.** 안 그러면 묶음과 묶음
+   * 사이의 한 구간이 아무에게도 안 지워져 얼룩으로 남는다.
+   */
+  pushErase(p: Point): void {
+    this.erase.push(p);
+  }
+
+  endErase(): void {
+    this.erase.end();
+  }
+
+  pushDoodleErase(p: Point): void {
+    this.doodleErase.push(p);
+  }
+
+  endDoodleErase(): void {
+    this.doodleErase.end();
   }
 
   /** 점을 모았다가 50ms마다 한 번에 보낸다. */

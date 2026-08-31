@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Point, Stroke } from '../shared/drawing';
 import { insideCircle } from '../shared/drawing';
+import { eraseStrokes, ERASE_RADIUS, DOODLE_ERASE_RADIUS, MAX_ERASE_STEP } from '../shared/eraser';
 import { slice, sliceCount, type Slice } from '../shared/slicer';
 import { rotate } from '../shared/geometry';
 import { CENTER } from '../shared/drawing';
@@ -480,17 +481,41 @@ export class Session {
   }
 
   /**
-   * 획 하나를 지운다.
+   * 지우개가 지나간 자리의 잉크를 지운다.
    *
-   * 픽셀 지우개가 아니라 획 지우개인 이유: 그림이 폴리라인이라서다. 조각내기가
-   * 폴리라인 클리핑 위에 서 있으므로 그림을 픽셀로 바꾸는 순간 이 게임의 핵심 장치가
-   * 통째로 무너진다. 획 단위로 지우면 자료 구조가 그대로다.
+   * **픽셀 지우개가 아니다.** 예전에는 획 지우개였고 그 이유를 "그림이 폴리라인이라서"라고
+   * 적어뒀었는데, 그 걱정이 막으려던 것은 픽셀 지우개였다. 지금 쓰는 부분 지우개는
+   * 폴리라인을 폴리라인으로 자를 뿐이라 자료 구조가 그대로다 — 조각내기가 서 있는
+   * 폴리라인 클리핑도 그대로 돈다. 픽셀로 바꾸는 것은 여전히 하면 안 된다.
+   *
+   * 경로를 통째로 받아 선분마다 캡슐로 지운다. 묶음(50ms)으로 오므로 점이 여럿이다.
    */
-  eraseStroke(playerId: string, index: number): void {
+  eraseInk(playerId: string, path: Point[]): void {
     if (this.phase !== 'drawing') return;
     if (playerId !== this.drawerId) return;
-    if (!Number.isInteger(index) || index < 0 || index >= this.strokes.length) return;
-    this.strokes.splice(index, 1);
+    if (path.length === 0) return;
+
+    let strokes = this.strokes;
+    let changed = false;
+
+    for (let i = 0; i < Math.max(1, path.length - 1); i++) {
+      const to = path[i + 1] ?? path[i];
+
+      // 껑충 뛴 구간은 잇지 않고 도착한 자리만 콕 찍어 지운다. 포인터가 창 밖에
+      // 나갔다 온 경우인데, 이어 지우면 지나지도 않은 자리가 쓸려나간다.
+      // **클라이언트도 똑같이 한다**(canvas.ts eraseAt) — 여기만 다르면 두 화면이 어긋난다.
+      const raw = path[i];
+      const from = Math.hypot(to[0] - raw[0], to[1] - raw[1]) > MAX_ERASE_STEP ? to : raw;
+
+      const after = eraseStrokes(strokes, from, to, ERASE_RADIUS);
+      if (!after) continue;
+      strokes = after;
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    this.strokes = strokes;
     this.send(playerId, { t: 'canvas', strokes: this.strokes });
     this.pushCanvasToSpectators();
   }
@@ -643,17 +668,37 @@ export class Session {
   }
 
   /**
-   * 낙서 획 하나를 지운다. 내가 그은 것만 — 남의 낙서는 못 건드린다.
+   * 낙서 지우개가 지나간 자리를 지운다. 내가 그은 획만 — 남의 낙서는 못 건드린다.
    *
    * 판을 통째로 다시 보내는 것은 낭비 같지만, 획 번호는 사람마다 다르게 셀 수 없다.
    * 상한이 600획이라 그대로 보내도 부담이 없다.
    */
-  eraseDoodle(playerId: string, index: number): void {
+  eraseDoodleInk(playerId: string, path: Point[]): void {
     if (this.phase !== 'drawing') return;
     if (this.knowsAnswer(playerId)) return;
-    if (!Number.isInteger(index) || index < 0 || index >= this.doodle.length) return;
-    if (this.doodle[index].by !== playerId) return;
-    this.doodle.splice(index, 1);
+    if (path.length === 0) return;
+
+    let strokes = this.doodle;
+    let changed = false;
+
+    for (let i = 0; i < Math.max(1, path.length - 1); i++) {
+      const to = path[i + 1] ?? path[i];
+      const raw = path[i];
+      const from = Math.hypot(to[0] - raw[0], to[1] - raw[1]) > MAX_ERASE_STEP ? to : raw;
+
+      const after = eraseStrokes(strokes, from, to, DOODLE_ERASE_RADIUS, (s) => s.by === playerId);
+      if (!after) continue;
+      strokes = after;
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    // 지우개는 획을 쪼개므로 개수가 늘 수 있다. 상한을 넘으면 그릴 때와 같이
+    // 오래된 것부터 버린다 — 판이 멈추는 것보다 낫다.
+    while (strokes.length > Session.DOODLE_MAX) strokes.shift();
+
+    this.doodle = strokes;
     for (const p of this.players) {
       if (p.id === this.drawerId) continue;
       this.send(p.id, { t: 'doodleBoard', strokes: this.doodle });
@@ -1032,13 +1077,13 @@ export class Session {
       case 'setLock': return this.setLock(playerId, msg.on);
       case 'stroke': return this.addStroke(playerId, msg.points, msg.color);
       case 'undo': return this.undo(playerId);
-      case 'erase': return this.eraseStroke(playerId, msg.index);
+      case 'erase': return this.eraseInk(playerId, msg.path);
       case 'drawDone': return this.drawDone(playerId);
       case 'answer': return this.answer(playerId, msg.text);
       case 'skip': return this.skip(playerId);
       case 'doodle': return this.addDoodle(playerId, msg.points, msg.color);
       case 'doodleClear': return this.clearDoodle(playerId);
-      case 'doodleErase': return this.eraseDoodle(playerId, msg.index);
+      case 'doodleErase': return this.eraseDoodleInk(playerId, msg.path);
       case 'doodleColor': return this.setDoodleColor(playerId, msg.color);
       case 'chat': return this.chat(playerId, msg.text);
       case 'reroll': return this.rerollWord(playerId);

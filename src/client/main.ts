@@ -214,7 +214,8 @@ $('eraserBtn').addEventListener('click', () => {
   drawCanvas.setTool(drawCanvas.getTool() === 'eraser' ? 'pen' : 'eraser');
   paintDrawTool();
 });
-drawCanvas.onErase((index: number) => net.send({ t: 'erase', index }));
+drawCanvas.onErasePoint((p) => net.pushErase(p));
+drawCanvas.onEraseEnd(() => net.endErase());
 
 function paintDoodleTool(): void {
   const erasing = doodle.getTool() === 'eraser';
@@ -226,7 +227,8 @@ $('doodleEraserBtn').addEventListener('click', () => {
   doodle.setTool(doodle.getTool() === 'eraser' ? 'pen' : 'eraser');
   paintDoodleTool();
 });
-doodle.onErase((index: number) => net.send({ t: 'doodleErase', index }));
+doodle.onErasePoint((p) => net.pushDoodleErase(p));
+doodle.onEraseEnd(() => net.endDoodleErase());
 
 /**
  * 낙서 색 고르기.

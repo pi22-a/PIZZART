@@ -304,6 +304,24 @@ wss.on('connection', (socket, req) => {
       return;
     }
 
+    // 지우개 경로도 획과 같은 예산을 쓴다. 그리기와 지우기를 동시에 할 수는 없고,
+    // 예산을 따로 주면 지우개로 대역폭을 밀어 넣는 길이 하나 더 생긴다.
+    //
+    // 좌표를 여기서 거르는 것이 중요하다 — 예전 지우개는 획 번호 하나였고 세션이
+    // 정수인지만 보면 됐지만, 이제는 점 배열이 들어온다.
+    if (msg.t === 'erase' || msg.t === 'doodleErase') {
+      if (conn.strokeBudget-- <= 0) return;
+      if (!Array.isArray(msg.path)) return;
+      const [w, h] = msg.t === 'erase' ? [1000, 1000] : [DOODLE_W, DOODLE_H];
+      const clean = msg.path
+        .filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))
+        .map(([x, y]) => [clamp(Math.round(x), 0, w), clamp(Math.round(y), 0, h)] as Point);
+      if (clean.length === 0) return;
+      if (msg.t === 'erase') session.eraseInk(id, clean);
+      else session.eraseDoodleInk(id, clean);
+      return;
+    }
+
     // 낙서도 그리기와 같은 예산을 쓴다. 한 사람이 동시에 둘을 그릴 일은 없고,
     // 예산을 따로 주면 낙서로 대역폭을 밀어 넣는 길이 하나 더 생긴다.
     if (msg.t === 'doodle') {

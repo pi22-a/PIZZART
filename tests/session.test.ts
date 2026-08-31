@@ -1807,31 +1807,63 @@ describe('색과 지우개', () => {
     expect(colors.every((c) => c === '#1971c2')).toBe(true);
   });
 
-  it('지우개는 그 획만 지운다', () => {
+  it('지우개는 지나간 자리만 지우고 획은 남은 토막으로 쪼개진다', () => {
     newSession();
     s.start('p1');
-    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
-    s.addStroke('p1', [[310, 210], [410, 310]], '#1971c2');
-    s.addStroke('p1', [[320, 220], [420, 320]], '#2f9e44');
-    s.eraseStroke('p1', 1);
+    // 가운데를 가로지르는 긴 선 하나와, 지우개가 안 닿는 짧은 선 하나
+    s.addStroke('p1', [[100, 500], [900, 500]], '#e03131');
+    s.addStroke('p1', [[300, 300], [400, 300]], '#1971c2');
+
+    s.eraseInk('p1', [[500, 500]]);
+
     const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
-    expect(canvas.strokes.map((x) => x.color)).toEqual(['#e03131', '#2f9e44']);
+    // 빨간 획이 둘로 쪼개지고 파란 획은 그대로다 — 통째로 사라지지 않는다
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#e03131', '#e03131', '#1971c2']);
+  });
+
+  it('지우개 경로를 따라 이어서 지운다 — 묶음으로 와도 사이가 안 남는다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[100, 500], [900, 500]], '#1f1b17');
+
+    // 점 사이를 이어 지우므로, 200에서 800까지 한 번에 그은 것과 같아야 한다
+    s.eraseInk('p1', [[200, 500], [350, 500], [500, 500], [650, 500], [800, 500]]);
+
+    const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.length).toBe(2);
+    expect(canvas.strokes[0].points.at(-1)![0]).toBeCloseTo(182);
+    expect(canvas.strokes[1].points[0][0]).toBeCloseTo(818);
+  });
+
+  it('껑충 뛴 구간은 건너뛴다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[100, 500], [900, 500]], '#1f1b17');
+
+    // 두 점이 800이나 떨어져 있다. 포인터가 창 밖에 나갔다 온 경우인데, 이어 지우면
+    // 지나지도 않은 자리가 통째로 쓸려나간다. 클라이언트도 같은 규칙으로 건너뛴다.
+    s.eraseInk('p1', [[100, 500], [900, 500]]);
+
+    const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
+    // 도착한 자리만 콕 찍혀 끝이 깎이고, 지나온 척한 가운데는 멀쩡하다
+    expect(canvas.strokes.length).toBe(1);
+    expect(canvas.strokes[0].points[0][0]).toBeCloseTo(100);
+    expect(canvas.strokes[0].points.at(-1)![0]).toBeCloseTo(882);
   });
 
   it('출제자가 아니면 못 지운다', () => {
     newSession();
     s.start('p1');
     s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
-    s.eraseStroke('p2', 0);
+    s.eraseInk('p2', [[350, 250]]);
     expect(s.strokeCount).toBe(1);
   });
 
-  it('없는 번호를 지우라고 해도 판은 안 흔들린다', () => {
+  it('잉크가 없는 자리를 문질러도 판은 안 흔들린다', () => {
     newSession();
     s.start('p1');
     s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
-    s.eraseStroke('p1', 9);
-    s.eraseStroke('p1', -1);
+    s.eraseInk('p1', [[900, 900], [910, 900]]);
     expect(s.strokeCount).toBe(1);
     // 아무 일도 없었으므로 화면을 다시 그리라고 보낼 것도 없다
     expect(msgsTo('p1').filter((m) => m.t === 'canvas').length).toBe(0);
@@ -1840,16 +1872,17 @@ describe('색과 지우개', () => {
   it('낙서 지우개는 내 획만 지운다', () => {
     newSession();
     s.start('p1');
-    s.addDoodle('p2', [[100, 100], [200, 200]], '#e03131');
-    s.addDoodle('p3', [[300, 300], [400, 400]], '#1971c2');
-    // p2가 p3의 획(1번)을 지우려 해도 안 된다
-    s.eraseDoodle('p2', 1);
-    const after = msgsTo('p2').filter((m) => m.t === 'doodleBoard');
-    expect(after.length).toBe(0);
-    // 자기 것은 지워진다
-    s.eraseDoodle('p2', 0);
+    s.addDoodle('p2', [[100, 100], [400, 100]], '#e03131');
+    s.addDoodle('p3', [[100, 300], [400, 300]], '#1971c2');
+
+    // p2가 p3의 선 위를 문질러도 p3의 낙서는 안 지워진다
+    s.eraseDoodleInk('p2', [[250, 300]]);
+    expect(msgsTo('p2').filter((m) => m.t === 'doodleBoard').length).toBe(0);
+
+    // 자기 것은 지워진다 — 가운데가 끊겨 둘로 쪼개진다
+    s.eraseDoodleInk('p2', [[250, 100]]);
     const board = msgsTo('p2').filter((m) => m.t === 'doodleBoard').at(-1)!;
-    expect(board.strokes.map((x) => x.by)).toEqual(['p3']);
+    expect(board.strokes.map((x) => x.by)).toEqual(['p2', 'p2', 'p3']);
   });
 });
 
