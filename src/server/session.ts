@@ -6,7 +6,7 @@ import { slice, sliceCount, type Slice } from '../shared/slicer';
 import { rotate } from '../shared/geometry';
 import { CENTER } from '../shared/drawing';
 import type { ChatLine, ClientMsg, Phase, PlayerInfo, RoundRecap, ServerMsg } from '../shared/protocol';
-import { PALETTE, safeColor } from '../shared/palette';
+import { DEFAULT_COLOR, PALETTE, safeColor } from '../shared/palette';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
@@ -121,6 +121,14 @@ export class Session {
    * 지난 판 그림이 섞이면 뜻이 흐려진다.
    */
   private recaps: RoundRecap[] = [];
+
+  /**
+   * 흑백판인가 컬러판인가. 방마다 정하고, 방을 만들면 흑백으로 시작한다.
+   *
+   * 흑백이 기본인 것은 지금까지 쌓인 점수 설계가 흑백 기준으로 맞춰진 값이기 때문이다.
+   * 컬러는 골라서 켜는 쪽이 맞다.
+   */
+  protected colorMode: 'mono' | 'color' = 'mono';
 
   /**
    * 이 방에서 이미 나온 제시어.
@@ -280,6 +288,24 @@ export class Session {
     // 목록에 없는 이름은 버린다. 남는 것이 없으면 전체가 된다.
     const known = new Set(this.topics.map((t) => t.topic));
     this.selectedTopics = [...new Set(topics)].filter((t) => known.has(t));
+    this.broadcastRoom();
+  }
+
+  /**
+   * 흑백판/컬러판을 고른다. 로비에서, 방장만.
+   *
+   * 컬러로 그리면 조각 하나만 봐도 "빨갛고 둥근 것"으로 좁혀져 너무 쉬워진다는 의견이
+   * 있었다. 어느 한쪽이 옳다고 정하는 대신 방마다 고르게 했다.
+   *
+   * 판이 도는 중에는 못 바꾼다. 중간에 바뀌면 앞 라운드는 컬러로, 뒤 라운드는 흑백으로
+   * 그려져 점수를 견줄 수 없게 된다.
+   */
+  setColorMode(playerId: string, mode: 'mono' | 'color'): void {
+    if (playerId !== this.hostId) return;
+    if (this.phase !== 'lobby') return;
+    if (mode !== 'mono' && mode !== 'color') return;
+    if (this.colorMode === mode) return;
+    this.colorMode = mode;
     this.broadcastRoom();
   }
 
@@ -476,7 +502,11 @@ export class Session {
     if (clean.length < 2) return;
     // 색은 팔레트에 있는 것만 받는다. 아무 값이나 믿으면 배경과 같은 색으로 그어
     // "안 보이는 그림"을 만들 수 있고, 그러면 아무도 못 맞힌다.
-    this.strokes.push({ points: clean, color: safeColor(color) });
+    //
+    // 흑백판이면 여기서 검정으로 눌러버린다. 화면에서 팔레트를 감추는 것만으로는
+    // 안 된다 — 그건 안 보이게 한 것이지 못 하게 한 것이 아니다.
+    const ink = this.colorMode === 'mono' ? DEFAULT_COLOR : safeColor(color);
+    this.strokes.push({ points: clean, color: ink });
     this.pushCanvasToSpectators();
   }
 
@@ -1075,6 +1105,7 @@ export class Session {
       case 'setTopics': return this.setTopics(playerId, msg.topics);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'setLock': return this.setLock(playerId, msg.on);
+      case 'setColorMode': return this.setColorMode(playerId, msg.mode);
       case 'stroke': return this.addStroke(playerId, msg.points, msg.color);
       case 'undo': return this.undo(playerId);
       case 'erase': return this.eraseInk(playerId, msg.path);
@@ -1308,6 +1339,7 @@ export class Session {
       roomName: this.name,
       roomCode: this.code,
       locked: this.locked,
+      colorMode: this.colorMode,
     });
   }
 }

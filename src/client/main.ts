@@ -410,6 +410,36 @@ $('copyLinkBtn').addEventListener('click', () => {
 });
 $('lockBtn').addEventListener('click', () => net.send({ t: 'setLock', on: !roomLocked }));
 
+/**
+ * 흑백판 / 컬러판.
+ *
+ * 서버가 진짜 규칙을 쥔다(addStroke에서 검정으로 눌러버린다). 여기서 하는 일은
+ * **못 하게 막는 것이 아니라 헷갈리지 않게 하는 것**이다 — 흑백판인데 팔레트가 열려
+ * 있으면 빨강을 골라 그어놓고 검게 나오는 것을 보게 된다.
+ */
+let colorMode: 'mono' | 'color' = 'mono';
+
+$('colorModeBtn').addEventListener('click', () => {
+  net.send({ t: 'setColorMode', mode: colorMode === 'mono' ? 'color' : 'mono' });
+});
+
+function paintColorMode(): void {
+  const 컬러 = colorMode === 'color';
+  const btn = $('colorModeBtn') as HTMLButtonElement;
+  const label = $('colorModeLabel');
+  label.textContent = 컬러 ? '컬러' : '흑백';
+  label.classList.toggle('rainbow', 컬러);
+  btn.disabled = youId !== hostId;
+  btn.title = youId === hostId ? '눌러서 바꿉니다' : '방장만 바꿀 수 있습니다';
+  $('colorModeNote').textContent = 컬러
+    ? '18색으로 그립니다 — 조각만 봐도 좁혀져서 흑백보다 쉽습니다'
+    : '검은색으로만 그립니다';
+
+  // 흑백판에서는 팔레트를 아예 감춘다. 고를 수 없는 것을 보여줄 이유가 없다.
+  $('drawColors').style.display = 컬러 ? '' : 'none';
+  if (!컬러) drawCanvas.setColor(DEFAULT_COLOR);
+}
+
 let roomLocked = false;
 let roomLabel = '';
 function paintRoomBar(): void {
@@ -643,6 +673,9 @@ function onMsg(m: ServerMsg): void {
       // 지금 focus()를 부르면 그 뒤 disabled 처리에 묻힌다. 표시만 해두고 끝에서 준다.
       refocusAfterRender = true;
     }
+
+    colorMode = m.colorMode;
+    paintColorMode();
 
     if (m.phase === 'lobby') {
       renderTopics(m.topics, m.selectedTopics, youId === hostId,

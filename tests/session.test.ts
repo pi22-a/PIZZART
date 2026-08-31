@@ -1775,6 +1775,14 @@ describe('색과 지우개', () => {
   function watchingSession(): void {
     newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
     s.setSpectator('p5', true);
+    s.setColorMode('p1', 'color');
+    s.start('p1');
+  }
+
+  /** 색을 다루는 테스트는 컬러판이어야 한다. 방의 기본값은 흑백이다. */
+  function colorSession(): void {
+    newSession();
+    s.setColorMode('p1', 'color');
     s.start('p1');
   }
 
@@ -1796,8 +1804,7 @@ describe('색과 지우개', () => {
   });
 
   it('색은 조각으로 잘려도 따라간다', () => {
-    newSession();
-    s.start('p1');
+    colorSession();
     // 중심을 가로지르는 선이라 여러 조각으로 쪼개진다
     s.addStroke('p1', [[200, 500], [800, 500]], '#1971c2');
     s.drawDone('p1');
@@ -1808,8 +1815,7 @@ describe('색과 지우개', () => {
   });
 
   it('지우개는 지나간 자리만 지우고 획은 남은 토막으로 쪼개진다', () => {
-    newSession();
-    s.start('p1');
+    colorSession();
     // 가운데를 가로지르는 긴 선 하나와, 지우개가 안 닿는 짧은 선 하나
     s.addStroke('p1', [[100, 500], [900, 500]], '#e03131');
     s.addStroke('p1', [[300, 300], [400, 300]], '#1971c2');
@@ -1883,6 +1889,71 @@ describe('색과 지우개', () => {
     s.eraseDoodleInk('p2', [[250, 100]]);
     const board = msgsTo('p2').filter((m) => m.t === 'doodleBoard').at(-1)!;
     expect(board.strokes.map((x) => x.by)).toEqual(['p2', 'p2', 'p3']);
+  });
+});
+
+describe('흑백판과 컬러판', () => {
+  it('방을 만들면 흑백으로 시작한다', () => {
+    // 지금까지 쌓인 점수 설계가 흑백 기준이라, 컬러는 골라서 켜는 쪽이 맞다.
+    newSession();
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+
+  it('흑백판에서는 무슨 색을 보내도 검정으로 그려진다', () => {
+    // 화면에서 팔레트를 감추는 것만으로는 안 된다 — 그건 안 보이게 한 것이지
+    // 못 하게 한 것이 아니다. 규칙이 실제로 지켜지는 자리는 여기뿐이다.
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.addStroke('p1', [[310, 210], [410, 310]], '#1971c2');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#1f1b17', '#1f1b17']);
+  });
+
+  it('컬러판으로 바꾸면 고른 색이 그대로 남는다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.setColorMode('p1', 'color');
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.at(-1)!.color).toBe('#e03131');
+  });
+
+  it('방장만 바꾼다', () => {
+    newSession();
+    s.setColorMode('p2', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+
+  it('판이 도는 중에는 못 바꾼다', () => {
+    // 중간에 바뀌면 앞 라운드는 컬러로, 뒤 라운드는 흑백으로 그려져 점수를 견줄 수 없다.
+    newSession();
+    s.start('p1');
+    s.setColorMode('p1', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+
+  it('한 판이 끝나 로비로 돌아오면 다시 바꿀 수 있다', () => {
+    newSession();
+    s.start('p1');
+    s.setColorMode('p1', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (s.phase === 'drawing') s.drawDone(s.drawerId);
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+    s.again('p1');
+    s.setColorMode('p1', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('color');
+  });
+
+  it('엉뚱한 값은 무시한다', () => {
+    newSession();
+    s.setColorMode('p1', 'sepia' as 'mono');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
   });
 });
 

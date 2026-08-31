@@ -101,6 +101,8 @@ export type ClientMsg =
   | { t: 'kick'; playerId: string }
   /** 방장이 새 사람의 입장을 막거나 푼다. 이미 자리가 있는 사람의 재접속은 통과한다. */
   | { t: 'setLock'; on: boolean }
+  /** 로비에서 방장이 흑백판/컬러판을 고른다. */
+  | { t: 'setColorMode'; mode: 'mono' | 'color' }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };
@@ -173,6 +175,13 @@ export type ServerMsg =
       now: number;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
+      /**
+       * 흑백판인가 컬러판인가.
+       *
+       * 컬러로 그리면 조각 하나만 봐도 "빨갛고 둥근 것"으로 좁혀져서 너무 쉬워진다는
+       * 의견이 있었다. 규칙을 한쪽으로 정하는 대신 방마다 고르게 했다.
+       */
+      colorMode: 'mono' | 'color';
       /** 방 이름과 코드. 방 안에서 링크를 만들어 줄 때 쓴다. */
       roomName: string;
       roomCode: string;

@@ -214,6 +214,15 @@
   .palette button.on { border-color:var(--fg); transform:scale(1.12); }
   /* 지우개가 켜져 있는지가 한눈에 보여야 한다 — 모르고 그으면 그림이 지워진다. */
   .tool.on { background:var(--sauce); color:#1c1712; }
+  /* 컬러판일 때 버튼 글자를 무지개로 칠한다. 무슨 판인지 글자만 봐도 알아야 한다.
+     배경으로 그라디언트를 깔고 글자 모양으로 오려내는 방식이라 글꼴은 그대로다. */
+  /* 글자 폭에만 칠해야 빨강부터 보라까지 다 보인다. 그래서 버튼이 아니라 안쪽 span이다. */
+  #colorModeLabel.rainbow {
+    background-image:linear-gradient(90deg,#e03131,#f76707,#eab308,#2f9e44,#1971c2,#3b3f9e,#7048e8);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent; color:transparent;
+    font-weight:800; letter-spacing:.04em;
+  }
   .slices { display:flex; gap:10px; flex-wrap:wrap; }
   /* 조각마다 캔버스+라벨을 묶는 칸. 내 조각과 공개된 조각을 한눈에 구별해야 한다 —
      안 그러면 다들 같은 그림을 받았다고 착각한다(설명하고 맞히는 게 게임의 전부인데). */
@@ -320,6 +329,18 @@
       <label>주제</label>
       <div class="bar" id="topicBtns"></div>
       <p class="muted" id="topicNote"></p>
+    </div>
+
+    <!-- 흑백판 / 컬러판. 컬러로 그리면 조각 하나만 봐도 좁혀져서 너무 쉬워진다는
+         의견이 있어 방마다 고르게 했다. 판이 도는 중에는 못 바꾼다. -->
+    <div class="lobby-topic" id="colorPick">
+      <label>그리기</label>
+      <div class="bar">
+        <!-- 글자를 span으로 감싼 것은 무지개 때문이다. 버튼에 직접 칠하면 그라디언트가
+             안쪽 여백까지 덮어서, 가운데 두 글자는 무지개의 가운데 토막만 가져간다. -->
+        <button id="colorModeBtn" class="ghost"><span id="colorModeLabel">흑백</span></button>
+      </div>
+      <p class="muted" id="colorModeNote"></p>
     </div>
 
     <!-- 관전은 여기서만 고른다. 시작 뒤에는 못 바꾸고, 도중에 들어온 사람은
