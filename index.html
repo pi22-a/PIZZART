@@ -2,8 +2,18 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>PIZZA</title>
+
+<!-- 홈 화면에 깔거나 Play에 TWA로 올리려면 이 둘이 필요하다.
+     주소는 전부 상대 경로다 — 도메인이 정해지기 전에도, 터널 주소에서도 그대로 동작한다. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#181818" />
+<meta name="description" content="한 명이 그린 그림을 피자처럼 잘라 나눠 갖고, 내 조각 하나로 정답을 맞히는 파티 게임" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style>
   /*
    * 색은 전부 여기서 나온다. 밝은 모드는 --bg와 글자색만 뒤집는다 —
@@ -552,5 +562,19 @@
   </section>
 </div>
 <script type="module" src="/src/client/main.ts"></script>
+<script>
+  /*
+   * 서비스 워커 등록. 없으면 홈 화면 설치도 TWA도 안 된다.
+   *
+   * 실패해도 게임은 그대로 돈다 — 설치는 게임의 조건이 아니다. 그래서 조용히 넘어간다.
+   * 브라우저가 보안 맥락(https 또는 localhost)이 아니면 아예 등록을 안 받는데,
+   * 그것도 실패의 한 갈래로 같이 삼킨다.
+   */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
 </body>
 </html>
