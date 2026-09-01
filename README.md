@@ -46,6 +46,8 @@
 
 ## 문서
 
+- [`docs/RELEASE.md`](docs/RELEASE.md) — **배포와 릴리스.** 브랜치 규율, 프로덕션 빌드,
+  서버 구성, 배포 전 점검, 구글 플레이 출시(TWA) 절차.
 - [`docs/UNITY-PORT.md`](docs/UNITY-PORT.md) — **유니티 이식 인수인계.** 확정된 규칙 수치,
   부채꼴 클리핑 알고리즘, 50판에서 배운 설계 판단. 유니티판은 여기서 시작한다.
 - [`CHANGELOG.md`](CHANGELOG.md) — 버전마다 무엇을 **왜** 바꿨는지.
