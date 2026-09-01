@@ -15,6 +15,7 @@ import { PALETTE, PALETTE_NAMES, DEFAULT_COLOR } from '../shared/palette';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 import { canSharePng, drawGalleryCard, shareCard } from './share';
+import { keepAwake } from './wake';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -722,6 +723,10 @@ function onMsg(m: ServerMsg): void {
     }
     lastPhase = m.phase;
     lastWatch = iWatch;
+
+    // 판이 도는 동안에는 화면을 붙잡아 둔다. 기다리는 사람은 손을 안 대므로
+    // 폰이 화면을 꺼버리고, 다시 켜면 회차가 넘어가 있다.
+    keepAwake(m.phase !== 'lobby');
 
     if (m.phase === 'guessing') {
       const last = m.attempt >= m.maxAttempts;

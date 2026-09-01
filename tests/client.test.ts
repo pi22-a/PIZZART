@@ -1438,6 +1438,65 @@ describe('판이 끝나면 그림을 모아 보여준다', () => {
   });
 });
 
+describe('판이 도는 동안 화면을 붙잡아 둔다', () => {
+  /** navigator.wakeLock을 가짜로 끼우고 요청·해제를 센다. */
+  function spyWakeLock() {
+    const log: string[] = [];
+    let released = false;
+    const sentinel = {
+      released: false,
+      release: () => { released = true; log.push('release'); return Promise.resolve(); },
+    };
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: {
+        ...navigator,
+        wakeLock: { request: (t: string) => { log.push('request:' + t); return Promise.resolve(sentinel); } },
+      },
+    });
+    return { log, wasReleased: () => released, restore: () => { if (real) Object.defineProperty(window, 'navigator', real); } };
+  }
+
+  it('게임이 시작되면 화면을 잡고, 로비로 돌아오면 놓는다', async () => {
+    const spy = spyWakeLock();
+    try {
+      await boot();
+      deliver({ t: 'joined', youId: 'me' });
+
+      // 로비에서는 잡지 않는다 — 기다리는 동안 화면을 붙잡아 둘 이유가 없다
+      deliver(room({ phase: 'lobby' }));
+      expect(spy.log).toEqual([]);
+
+      deliver(room({ phase: 'drawing' }));
+      await vi.waitFor(() => expect(spy.log).toContain('request:screen'));
+
+      deliver(room({ phase: 'lobby' }));
+      await vi.waitFor(() => expect(spy.wasReleased()).toBe(true));
+    } finally {
+      spy.restore();
+    }
+  });
+
+  it('wakeLock이 없는 기기에서도 판은 그대로 돈다', async () => {
+    // 화면이 안 꺼지는 것은 편의지 게임의 조건이 아니다.
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: { ...navigator, wakeLock: undefined },
+    });
+    try {
+      await boot();
+      deliver({ t: 'joined', youId: 'me' });
+      deliver(room({ phase: 'drawing' }));
+      // 예외 없이 화면이 정상으로 넘어가면 된다
+      expect(document.querySelectorAll('.screen.on').length).toBe(1);
+    } finally {
+      if (real) Object.defineProperty(window, 'navigator', real);
+    }
+  });
+});
+
 describe('공유는 한 번에 한 장만 나간다', () => {
   const recap = (word: string) => ({
     round: 0, topic: '동물', word,
