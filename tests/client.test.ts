@@ -253,7 +253,28 @@ describe('긴 방 이름·코드가 상단 줄을 부풀리지 않는다', () =>
   });
 });
 
-describe('방 정원 스테퍼', () => {
+describe('흑백/컬러 버튼', () => {
+  it('컬러판이면 버튼이 켜진 색이 된다 — 다른 켜진 버튼과 같은 규칙이다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'lobby', hostId: 'me', colorMode: 'color' }));
+    const btn = $('colorModeBtn');
+    expect($('colorModeLabel').textContent).toBe('컬러');
+    expect(btn.classList.contains('on')).toBe(true);
+    expect(getComputedStyle(btn).backgroundColor).toBe(getComputedStyle($('startBtn')).backgroundColor);
+  });
+
+  it('흑백판이면 꺼진 색으로 돌아온다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'lobby', hostId: 'me', colorMode: 'color' }));
+    deliver(room({ phase: 'lobby', hostId: 'me', colorMode: 'mono' }));
+    expect($('colorModeLabel').textContent).toBe('흑백');
+    expect($('colorModeBtn').classList.contains('on')).toBe(false);
+  });
+});
+
+describe('인원 스테퍼', () => {
   // 사람은 셋(PLAYERS)이고 최소 인원은 3, 상한은 9다.
   const lobby = (over = {}) => room({ phase: 'lobby', hostId: 'me', ...over });
 
@@ -283,6 +304,13 @@ describe('방 정원 스테퍼', () => {
     deliver({ t: 'joined', youId: 'me' });
     deliver(lobby({ maxPlayers: 9 }));
     expect($<HTMLButtonElement>('capPlusBtn').disabled).toBe(true);
+  });
+
+  it('안내는 최소·최대를 그대로 적는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ maxPlayers: 6 }));
+    expect($('capacityNote').textContent).toContain('최소 3명 / 최대 9명');
   });
 
   it('지금 있는 사람 수까지 내려오면 멈추고 이유를 알려준다', async () => {

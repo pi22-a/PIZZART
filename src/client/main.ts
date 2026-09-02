@@ -462,7 +462,8 @@ function paintColorMode(): void {
   const btn = $('colorModeBtn') as HTMLButtonElement;
   const label = $('colorModeLabel');
   label.textContent = 컬러 ? '컬러' : '흑백';
-  label.classList.toggle('rainbow', 컬러);
+  // 켜진 것은 주황이다 — 주제 버튼도 지우개도 그렇다.
+  btn.classList.toggle('on', 컬러);
   btn.disabled = youId !== hostId;
   btn.title = youId === hostId ? '눌러서 바꿉니다' : '방장만 바꿀 수 있습니다';
   $('colorModeNote').textContent = 컬러

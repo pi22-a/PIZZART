@@ -123,7 +123,7 @@ export function renderCapacity(
     // 왜 더 안 줄어드는지 말해주지 않으면 버튼이 고장 난 것처럼 보인다.
     setTag('capacityNote', `지금 ${here}명이 있어 더 줄일 수 없습니다`);
   } else {
-    setTag('capacityNote', `${minPlayers}~${capacityMax}명. 줄이면 그 위로는 새로 못 들어옵니다`);
+    setTag('capacityNote', `최소 ${minPlayers}명 / 최대 ${capacityMax}명 · 줄이면 그 위로는 새로 못 들어옵니다`);
   }
 }
 
