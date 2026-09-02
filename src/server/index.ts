@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
+import { normalizeRoomCode } from '../shared/room';
 import { serveStatic } from './static';
 import { Session } from './session';
 import { saveDrawing } from './gallery';
@@ -218,7 +219,9 @@ wss.on('connection', (socket, req) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
   // 주소에 ?room= 이 없으면 로비다. 예전에는 이 자리를 'LOBBY'라는 방 하나로 때웠는데,
   // 그러면 로비가 말만 로비지 다른 방과 구별이 안 됐다.
-  const room = (url.searchParams.get('room') ?? '').trim().toUpperCase();
+  // 들어오는 문에서 한 번 손질한다. 이 값이 방 열쇠이자 자리 지도의 열쇠라,
+  // 여기서 정리해두면 뒤쪽 전부가 짧고 얌전한 코드만 보게 된다.
+  const room = normalizeRoomCode(url.searchParams.get('room') ?? '');
   const conn: Conn = {
     socket, room, actorId: randomUUID(),
     strokeBudget: STROKES_PER_SECOND, chatBudget: CHATS_PER_SECOND, alive: true,

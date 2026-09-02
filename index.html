@@ -120,6 +120,10 @@
      알약을 파고들어, 입력칸 테두리와 알약 테두리가 겹쳐 보인다. */
   .players { margin-bottom:12px; }
   .roombar .spacer { margin-left:auto; }
+  /* 방 이름 + 코드가 길어도 줄 하나를 넘지 않게 한다. 서버가 코드 길이를 자르지만
+     방 이름까지 합치면 여전히 길어질 수 있고, 그때 이 줄이 세 줄로 부풀면 화면이
+     통째로 밀린다. 넘치는 만큼은 …으로 접는다. */
+  #roomNameTag { max-width:min(52vw, 320px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .roombar button.on { background:#7a2f24; color:#f6efe2; border-color:#a03c2d; }
 
   /* 방 목록 */

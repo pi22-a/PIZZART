@@ -14,6 +14,7 @@ import {
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
 import { PALETTE, PALETTE_NAMES, DEFAULT_COLOR } from '../shared/palette';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
+import { normalizeRoomCode } from '../shared/room';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
 import { canSharePng, drawGalleryCard, shareCard } from './share';
 import { keepAwake } from './wake';
@@ -79,7 +80,7 @@ const params = new URLSearchParams(location.search);
  * 예전에는 비어 있으면 'LOBBY'라는 방으로 보냈다. 그래서 로비가 말만 로비지
  * 다른 방과 구별이 안 됐고, 링크를 줄 때마다 방 코드를 정해서 알려줘야 했다.
  */
-const room = (params.get('room') ?? '').trim().toUpperCase();
+const room = normalizeRoomCode(params.get('room') ?? '');
 const inLobby = room === '';
 
 /**

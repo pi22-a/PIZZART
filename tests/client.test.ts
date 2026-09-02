@@ -237,6 +237,22 @@ describe('결과 화면이 새로고침 뒤에도 답을 보여준다 (수정 4)
   });
 });
 
+describe('긴 방 이름·코드가 상단 줄을 부풀리지 않는다', () => {
+  it('방 이름 알약은 한 줄로 접힌다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ roomName: '아주아주아주 긴 방 이름입니다', roomCode: 'ABCDEFGHIJKL' }));
+
+    const tag = $('roomNameTag');
+    const st = getComputedStyle(tag);
+    // 서버가 코드 길이를 자르지만 방 이름까지 합치면 여전히 길어질 수 있다.
+    // 그때 이 줄이 여러 줄로 부풀면 화면이 통째로 밀린다(실제로 겪은 자리다).
+    expect(st.whiteSpace).toBe('nowrap');
+    expect(st.overflow).toBe('hidden');
+    expect(st.textOverflow).toBe('ellipsis');
+  });
+});
+
 describe('방 정원 스테퍼', () => {
   // 사람은 셋(PLAYERS)이고 최소 인원은 3, 상한은 9다.
   const lobby = (over = {}) => room({ phase: 'lobby', hostId: 'me', ...over });
