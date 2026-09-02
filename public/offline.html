@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PIZZA — 연결이 필요합니다</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#181818; color:#f6efe2; text-align:center; padding:24px;
+         font-family: system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; }
+  .box { max-width:360px; }
+  h1 { font-size:20px; letter-spacing:.2em; margin:0 0 20px; opacity:.6; }
+  p { line-height:1.7; margin:0 0 8px; }
+  .muted { opacity:.55; font-size:14px; }
+  button { font:inherit; margin-top:24px; padding:12px 24px; border:0; border-radius:10px;
+           background:#e0803a; color:#181818; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>P I Z Z A</h1>
+    <p><strong>인터넷 연결이 필요합니다.</strong></p>
+    <p class="muted">
+      여럿이 같이 하는 게임이라 혼자서는 진행할 수 없습니다.
+      연결을 확인하고 다시 시도해 주세요.
+    </p>
+    <button onclick="location.reload()">다시 시도</button>
+  </div>
+</body>
+</html>

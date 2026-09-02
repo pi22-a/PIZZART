@@ -1,4 +1,4 @@
-import type { Point } from './drawing';
+import type { Point, Stroke } from './drawing';
 
 export type Phase = 'lobby' | 'drawing' | 'guessing' | 'roundEnd' | 'final';
 
@@ -64,7 +64,18 @@ export type ClientMsg =
    * 도중에 들어온 사람은 판이 끝나 로비로 돌아오기 전에는 참여로 못 바꾼다.
    */
   | { t: 'setSpectator'; on: boolean }
-  | { t: 'stroke'; points: Point[] }
+  | { t: 'stroke'; points: Point[]; color: string }
+  /**
+   * 지우개가 지나간 자리. 그리는 중에, 출제자만.
+   *
+   * 획 번호가 아니라 **경로**로 보낸다. 부분 지우개라 획 하나가 여러 토막으로 쪼개지므로
+   * "몇 번 획을 지워라"로는 표현이 안 된다. 그렇다고 지운 결과를 통째로 보내면 클라이언트가
+   * 그림을 마음대로 갈아치울 수 있으니, **지나간 자리만 보내고 자르는 것은 서버가 한다.**
+   *
+   * 점 하나짜리 경로는 그 자리를 콕 찍어 지운다(캡슐의 양 끝이 같은 점).
+   * 획과 같이 50ms마다 묶어 보내며, 묶음과 묶음 사이가 끊기지 않게 마지막 점을 겹쳐 보낸다.
+   */
+  | { t: 'erase'; path: Point[] }
   | { t: 'undo' }
   | { t: 'drawDone' }
   | { t: 'answer'; text: string }
@@ -74,6 +85,8 @@ export type ClientMsg =
   | { t: 'doodle'; points: Point[]; color: string }
   /** 내가 그린 낙서만 지운다. 남의 낙서는 건드리지 않는다. */
   | { t: 'doodleClear' }
+  /** 낙서 지우개가 지나간 자리. 내가 그은 획만 지워진다 — 서버가 확인한다. */
+  | { t: 'doodleErase'; path: Point[] }
   /** 낙서 색을 고른다. 남이 쓰는 색은 서버가 거절한다. */
   | { t: 'doodleColor'; color: string }
   /** 결과·최종 화면에서만. 다른 단계에서는 서버가 버린다. */
@@ -88,6 +101,8 @@ export type ClientMsg =
   | { t: 'kick'; playerId: string }
   /** 방장이 새 사람의 입장을 막거나 푼다. 이미 자리가 있는 사람의 재접속은 통과한다. */
   | { t: 'setLock'; on: boolean }
+  /** 로비에서 방장이 흑백판/컬러판을 고른다. */
+  | { t: 'setColorMode'; mode: 'mono' | 'color' }
   | { t: 'next' }
   /** 최종 화면에서 한 판 더. 방장만이 아니라 누구나 누를 수 있다 — 한 사람 뒤에 방이 갇히면 안 된다. */
   | { t: 'again' };
@@ -108,6 +123,25 @@ export interface ChatLine {
   round: number;
   /** 그 라운드의 제시어. 구분선에 쓴다 */
   word: string;
+}
+
+/**
+ * 한 판이 끝났을 때 되짚어 보는 라운드 하나.
+ *
+ * 그림을 다시 싣는다. 실제 데이터로 재보니 한 장 평균 16KB라 아홉 라운드를 합쳐도
+ * 150KB 남짓이고, 판이 끝날 때 한 번 가는 것이라 감당할 만하다. 클라이언트가 라운드마다
+ * 모아두는 방법도 있지만, 그러면 도중에 들어왔거나 새로고침한 사람만 텅 빈 화면을 본다.
+ */
+export interface RoundRecap {
+  round: number;
+  topic: string;
+  word: string;
+  drawing: Stroke[];
+  sliceCount: number;
+  /** 그린 사람의 이름 */
+  drawer: string;
+  /** 맞힌 사람들의 이름. id가 아니라 이름을 담는다 — 판이 끝난 뒤에 나간 사람도 이름은 남아야 한다. */
+  correct: string[];
 }
 
 export interface AnswerRow {
@@ -141,6 +175,13 @@ export type ServerMsg =
       now: number;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
+      /**
+       * 흑백판인가 컬러판인가.
+       *
+       * 컬러로 그리면 조각 하나만 봐도 "빨갛고 둥근 것"으로 좁혀져서 너무 쉬워진다는
+       * 의견이 있었다. 규칙을 한쪽으로 정하는 대신 방마다 고르게 했다.
+       */
+      colorMode: 'mono' | 'color';
       /** 방 이름과 코드. 방 안에서 링크를 만들어 줄 때 쓴다. */
       roomName: string;
       roomCode: string;
@@ -163,7 +204,7 @@ export type ServerMsg =
    */
   | { t: 'word'; word: string; rerollsLeft: number }
   /** 출제자가 새로고침했을 때 자기 그림을 되찾는다. 출제자에게만 간다. */
-  | { t: 'canvas'; strokes: Point[][] }
+  | { t: 'canvas'; strokes: Stroke[] }
   /**
    * 내가 볼 수 있는 조각 전부 — 처음 받은 것 + 힌트로 받은 것. 전부 나만의 것이다.
    * 이미 회전되어 있고, id는 섹터 번호와 무관한 불투명 값이다.
@@ -172,13 +213,13 @@ export type ServerMsg =
    * count는 전체 조각 수다. 부채꼴을 몇 도로 그릴지에 필요하고,
    * 몇 조각으로 잘렸는지는 알아도 내 것이 어디였는지는 알 수 없으므로 새어도 무해하다.
    */
-  | { t: 'slices'; count: number; slices: Array<{ id: string; strokes: Point[][]; shared: boolean }> }
+  | { t: 'slices'; count: number; slices: Array<{ id: string; strokes: Stroke[]; shared: boolean }> }
   /**
    * 마지막 회차의 조립판. 지금까지 본 조각을 회전을 풀어 제자리에 끼워 보여준다.
    * 이 게임의 핵심 장치인 회전을 마지막에 풀어주는 자비이자 마지막 기회다.
    * 여기서 맞히면 점수는 1점 고정이라, 방향을 알려줘도 판이 무너지지 않는다.
    */
-  | { t: 'assembled'; sliceCount: number; pieces: Array<{ index: number; strokes: Point[][] }> }
+  | { t: 'assembled'; sliceCount: number; pieces: Array<{ index: number; strokes: Stroke[] }> }
   /**
    * 이미 답을 아는 사람에게만 — 출제자와, 먼저 맞혀서 점수가 확정된 사람.
    * 지금 남들에게 어떤 조각이 나가 있는지 보여준다. 정답을 아는 사람들이라 원본을 실어도
@@ -187,7 +228,7 @@ export type ServerMsg =
   | {
       t: 'board';
       sliceCount: number;
-      drawing: Point[][];
+      drawing: Stroke[];
       /**
        * 맞히는 사람마다 지금 무엇을 보고 있는가. 조각은 그 사람이 보는 그대로,
        * 이미 위를 향하게 돌아간 상태다 — 합쳐서 한 판으로 보여주면 "그림의 절반이
@@ -195,7 +236,7 @@ export type ServerMsg =
        */
       watching: Array<{
         playerId: string;
-        slices: Point[][][];
+        slices: Stroke[][];
         solved: boolean;
         /**
          * 회차마다 뭐라고 냈는가. 회차가 끝날 때만 쌓인다 — 치는 즉시 보여주면
@@ -210,7 +251,7 @@ export type ServerMsg =
   | {
       t: 'roundEnd';
       word: string;
-      drawing: Point[][];
+      drawing: Stroke[];
       sliceCount: number;
       /** 섹터 번호 → 그 조각을 처음 받았던 사람. 아무도 못 받았으면 null */
       owners: Array<{ sliceIndex: number; playerId: string | null }>;
@@ -237,7 +278,12 @@ export type ServerMsg =
   | { t: 'chat'; line: ChatLine }
   /** 지금까지의 이야기 전부. 들어오거나 돌아온 사람에게 한 번에 보낸다. */
   | { t: 'chatLog'; lines: ChatLine[] }
-  | { t: 'final'; ranking: Array<{ playerId: string; name: string; score: number }> }
+  | {
+      t: 'final';
+      ranking: Array<{ playerId: string; name: string; score: number }>;
+      /** 이 판에 그려진 그림 전부. 끝나고 모아 보는 화면의 재료다. */
+      rounds: RoundRecap[];
+    }
   /** 로비에 있는 사람에게. 방이 생기거나 사라지거나 인원이 바뀔 때마다 다시 온다. */
   | { t: 'roomList'; rooms: RoomInfo[] }
   /** 방을 만들었다. 클라이언트는 이 코드로 옮겨간다. */

@@ -1,4 +1,4 @@
-import type { Drawing, Point } from './drawing';
+import type { Drawing, Point, Stroke } from './drawing';
 import { CENTER } from './drawing';
 import { clipHalfPlane, rotate } from './geometry';
 
@@ -8,7 +8,7 @@ export interface Slice {
    * 이미 회전되어 있다. 꼭짓점은 CENTER에 있고 부채꼴은 위로 뻗는다.
    * 어느 섹터에서 나왔는지는 좌표만 봐서는 알 수 없다 — 그게 이 게임의 핵심이다.
    */
-  strokes: Point[][];
+  strokes: Stroke[];
 }
 
 /**
@@ -49,11 +49,12 @@ export function slice(drawing: Drawing, count: number): Slice[] {
     // 이등분선이 화면 위쪽(-90°)을 향하도록 돌린다
     const spin = -Math.PI / 2 - (a0 + a1) / 2;
 
-    const strokes: Point[][] = [];
+    // 색은 토막마다 따라간다. 획 하나가 여러 토막으로 쪼개져도 원래 색을 잃지 않는다.
+    const strokes: Stroke[] = [];
     for (const stroke of drawing) {
-      for (const afterStart of clipHalfPlane(stroke, CENTER, d0)) {
+      for (const afterStart of clipHalfPlane(stroke.points, CENTER, d0)) {
         for (const inSector of clipHalfPlane(afterStart, CENTER, d1)) {
-          strokes.push(rotate(inSector, CENTER, spin));
+          strokes.push({ points: rotate(inSector, CENTER, spin), color: stroke.color });
         }
       }
     }

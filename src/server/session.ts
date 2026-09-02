@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { Point } from '../shared/drawing';
+import type { Point, Stroke } from '../shared/drawing';
 import { insideCircle } from '../shared/drawing';
+import { eraseStrokes, ERASE_RADIUS, DOODLE_ERASE_RADIUS, MAX_ERASE_STEP } from '../shared/eraser';
 import { slice, sliceCount, type Slice } from '../shared/slicer';
 import { rotate } from '../shared/geometry';
 import { CENTER } from '../shared/drawing';
-import type { ChatLine, ClientMsg, Phase, PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { ChatLine, ClientMsg, Phase, PlayerInfo, RoundRecap, ServerMsg } from '../shared/protocol';
+import { DEFAULT_COLOR, PALETTE, safeColor } from '../shared/palette';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
@@ -37,7 +39,7 @@ export interface DrawingRecord {
   topic: string;
   word: string;
   sliceCount: number;
-  strokes: Point[][];
+  strokes: Stroke[];
   /** 맞힌 사람 수 / 맞히려 한 사람 수. 그 그림이 얼마나 어려웠는지가 여기 남는다. */
   solved: number;
   guessers: number;
@@ -79,7 +81,7 @@ export class Session {
 
   private topic = '';
   private word = '';
-  private strokes: Point[][] = [];
+  private strokes: Stroke[] = [];
 
   private slices: Slice[] = [];
   /** 섹터 번호 → 처음 받은 사람 */
@@ -111,6 +113,22 @@ export class Session {
 
   /** 만들어진 시각. 만든 사람이 도착하기 전에 빈 방으로 지워지는 것을 막는다. */
   readonly bornAt = Date.now();
+
+  /**
+   * 이 판에 그려진 그림들. 최종 화면에서 모아 보여준다.
+   *
+   * 판마다 비운다 — usedWords와 달리 이건 "이번 판에 우리가 그린 것"이라서,
+   * 지난 판 그림이 섞이면 뜻이 흐려진다.
+   */
+  private recaps: RoundRecap[] = [];
+
+  /**
+   * 흑백판인가 컬러판인가. 방마다 정하고, 방을 만들면 흑백으로 시작한다.
+   *
+   * 흑백이 기본인 것은 지금까지 쌓인 점수 설계가 흑백 기준으로 맞춰진 값이기 때문이다.
+   * 컬러는 골라서 켜는 쪽이 맞다.
+   */
+  protected colorMode: 'mono' | 'color' = 'mono';
 
   /**
    * 이 방에서 이미 나온 제시어.
@@ -273,6 +291,24 @@ export class Session {
     this.broadcastRoom();
   }
 
+  /**
+   * 흑백판/컬러판을 고른다. 로비에서, 방장만.
+   *
+   * 컬러로 그리면 조각 하나만 봐도 "빨갛고 둥근 것"으로 좁혀져 너무 쉬워진다는 의견이
+   * 있었다. 어느 한쪽이 옳다고 정하는 대신 방마다 고르게 했다.
+   *
+   * 판이 도는 중에는 못 바꾼다. 중간에 바뀌면 앞 라운드는 컬러로, 뒤 라운드는 흑백으로
+   * 그려져 점수를 견줄 수 없게 된다.
+   */
+  setColorMode(playerId: string, mode: 'mono' | 'color'): void {
+    if (playerId !== this.hostId) return;
+    if (this.phase !== 'lobby') return;
+    if (mode !== 'mono' && mode !== 'color') return;
+    if (this.colorMode === mode) return;
+    this.colorMode = mode;
+    this.broadcastRoom();
+  }
+
   /** 방장이 새 사람의 입장을 막거나 푼다. */
   setLock(playerId: string, on: boolean): void {
     if (playerId !== this.hostId) return;
@@ -374,6 +410,7 @@ export class Session {
     for (const p of this.players) p.lateJoin = false;
     // 이미 나온 제시어는 비우지 않는다. 방을 이어 쓰는 동안 계속 기억한다.
     this.chatLog = [];
+    this.recaps = [];
     this.doodleColors.clear();
     for (const p of this.players) p.score = 0;
     this.beginRound();
@@ -458,12 +495,58 @@ export class Session {
     }
   }
 
-  addStroke(playerId: string, points: Point[]): void {
+  addStroke(playerId: string, points: Point[], color?: string): void {
     if (this.phase !== 'drawing') return;
     if (playerId !== this.drawerId) return;
     const clean = points.filter(insideCircle);
     if (clean.length < 2) return;
-    this.strokes.push(clean);
+    // 색은 팔레트에 있는 것만 받는다. 아무 값이나 믿으면 배경과 같은 색으로 그어
+    // "안 보이는 그림"을 만들 수 있고, 그러면 아무도 못 맞힌다.
+    //
+    // 흑백판이면 여기서 검정으로 눌러버린다. 화면에서 팔레트를 감추는 것만으로는
+    // 안 된다 — 그건 안 보이게 한 것이지 못 하게 한 것이 아니다.
+    const ink = this.colorMode === 'mono' ? DEFAULT_COLOR : safeColor(color);
+    this.strokes.push({ points: clean, color: ink });
+    this.pushCanvasToSpectators();
+  }
+
+  /**
+   * 지우개가 지나간 자리의 잉크를 지운다.
+   *
+   * **픽셀 지우개가 아니다.** 예전에는 획 지우개였고 그 이유를 "그림이 폴리라인이라서"라고
+   * 적어뒀었는데, 그 걱정이 막으려던 것은 픽셀 지우개였다. 지금 쓰는 부분 지우개는
+   * 폴리라인을 폴리라인으로 자를 뿐이라 자료 구조가 그대로다 — 조각내기가 서 있는
+   * 폴리라인 클리핑도 그대로 돈다. 픽셀로 바꾸는 것은 여전히 하면 안 된다.
+   *
+   * 경로를 통째로 받아 선분마다 캡슐로 지운다. 묶음(50ms)으로 오므로 점이 여럿이다.
+   */
+  eraseInk(playerId: string, path: Point[]): void {
+    if (this.phase !== 'drawing') return;
+    if (playerId !== this.drawerId) return;
+    if (path.length === 0) return;
+
+    let strokes = this.strokes;
+    let changed = false;
+
+    for (let i = 0; i < Math.max(1, path.length - 1); i++) {
+      const to = path[i + 1] ?? path[i];
+
+      // 껑충 뛴 구간은 잇지 않고 도착한 자리만 콕 찍어 지운다. 포인터가 창 밖에
+      // 나갔다 온 경우인데, 이어 지우면 지나지도 않은 자리가 쓸려나간다.
+      // **클라이언트도 똑같이 한다**(canvas.ts eraseAt) — 여기만 다르면 두 화면이 어긋난다.
+      const raw = path[i];
+      const from = Math.hypot(to[0] - raw[0], to[1] - raw[1]) > MAX_ERASE_STEP ? to : raw;
+
+      const after = eraseStrokes(strokes, from, to, ERASE_RADIUS);
+      if (!after) continue;
+      strokes = after;
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    this.strokes = strokes;
+    this.send(playerId, { t: 'canvas', strokes: this.strokes });
     this.pushCanvasToSpectators();
   }
 
@@ -551,11 +634,14 @@ export class Session {
   /** 사람 → 그 사람이 쓰는 낙서 색. 겹쳐도 된다 — 지우기는 색이 아니라 사람으로 가른다. */
   protected doodleColors = new Map<string, string>();
 
-  /** 고를 수 있는 낙서 색. 클라이언트의 팔레트와 같은 목록이어야 한다. */
-  static readonly DOODLE_PALETTE = [
-    '#e0803a', '#6fb6e8', '#83cf7d', '#e6cf63', '#d98fbf',
-    '#7fd6cc', '#f0937a', '#a99ae8', '#c3d17e',
-  ];
+  /**
+   * 고를 수 있는 낙서 색. 그리는 팔레트와 같은 목록을 쓴다.
+   *
+   * 다만 **낙서판의 색은 "누가 그렸나"를 나른다.** 그림 팔레트와 달리 여기서는 색이
+   * 뜻을 나르므로, 처음 배정만은 앞에서부터 서로 다르게 준다(ensureDoodleColor).
+   * 고르는 것은 18색 전부 열려 있다.
+   */
+  static readonly DOODLE_PALETTE: readonly string[] = PALETTE;
 
   /**
    * 아직 색이 없는 사람에게 남는 색을 하나 준다.
@@ -608,6 +694,44 @@ export class Session {
     for (const p of this.players) {
       if (p.id === this.drawerId) continue;
       this.send(p.id, { t: 'doodleStroke', by: playerId, points, color: safe });
+    }
+  }
+
+  /**
+   * 낙서 지우개가 지나간 자리를 지운다. 내가 그은 획만 — 남의 낙서는 못 건드린다.
+   *
+   * 판을 통째로 다시 보내는 것은 낭비 같지만, 획 번호는 사람마다 다르게 셀 수 없다.
+   * 상한이 600획이라 그대로 보내도 부담이 없다.
+   */
+  eraseDoodleInk(playerId: string, path: Point[]): void {
+    if (this.phase !== 'drawing') return;
+    if (this.knowsAnswer(playerId)) return;
+    if (path.length === 0) return;
+
+    let strokes = this.doodle;
+    let changed = false;
+
+    for (let i = 0; i < Math.max(1, path.length - 1); i++) {
+      const to = path[i + 1] ?? path[i];
+      const raw = path[i];
+      const from = Math.hypot(to[0] - raw[0], to[1] - raw[1]) > MAX_ERASE_STEP ? to : raw;
+
+      const after = eraseStrokes(strokes, from, to, DOODLE_ERASE_RADIUS, (s) => s.by === playerId);
+      if (!after) continue;
+      strokes = after;
+      changed = true;
+    }
+
+    if (!changed) return;
+
+    // 지우개는 획을 쪼개므로 개수가 늘 수 있다. 상한을 넘으면 그릴 때와 같이
+    // 오래된 것부터 버린다 — 판이 멈추는 것보다 낫다.
+    while (strokes.length > Session.DOODLE_MAX) strokes.shift();
+
+    this.doodle = strokes;
+    for (const p of this.players) {
+      if (p.id === this.drawerId) continue;
+      this.send(p.id, { t: 'doodleBoard', strokes: this.doodle });
     }
   }
 
@@ -829,8 +953,20 @@ export class Session {
     this.lastRoundEnd = msg;
     this.broadcast(msg);
 
-    // 그림을 남긴다. 빈 캔버스는 남길 것이 없다.
+    // 빈 캔버스는 남길 것도, 모아 보여줄 것도 없다.
     if (this.strokes.length > 0) {
+      // 이름을 지금 박아둔다. 판이 끝나고 누가 나가도 그림 밑의 이름은 남아야 한다.
+      const nameOf = (id: string): string => this.players.find((p) => p.id === id)?.name ?? '?';
+      this.recaps.push({
+        round: this.round,
+        topic: this.topic,
+        word: this.word,
+        drawing: this.strokes,
+        sliceCount: this.slices.length,
+        drawer: nameOf(this.drawerId),
+        correct: correct.map(nameOf),
+      });
+
       this.onDrawing?.({
         at: new Date().toISOString(),
         topic: this.topic,
@@ -900,6 +1036,7 @@ export class Session {
     this.answers.clear();
     // usedWords는 여기서도 비우지 않는다 — 한 판 더는 '새 방'이 아니라 '이어서 한 판'이다.
     this.chatLog = [];
+    this.recaps = [];
     this.lastFinal = null;
     this.lastRoundEnd = null;
     for (const p of this.players) p.score = 0;
@@ -917,6 +1054,7 @@ export class Session {
         .filter((p) => !p.spectator)
         .map((p) => ({ playerId: p.id, name: p.name, score: p.score }))
         .sort((a, b) => b.score - a.score),
+      rounds: this.recaps,
     };
     this.lastFinal = msg;
     this.broadcast(msg);
@@ -967,13 +1105,16 @@ export class Session {
       case 'setTopics': return this.setTopics(playerId, msg.topics);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'setLock': return this.setLock(playerId, msg.on);
-      case 'stroke': return this.addStroke(playerId, msg.points);
+      case 'setColorMode': return this.setColorMode(playerId, msg.mode);
+      case 'stroke': return this.addStroke(playerId, msg.points, msg.color);
       case 'undo': return this.undo(playerId);
+      case 'erase': return this.eraseInk(playerId, msg.path);
       case 'drawDone': return this.drawDone(playerId);
       case 'answer': return this.answer(playerId, msg.text);
       case 'skip': return this.skip(playerId);
       case 'doodle': return this.addDoodle(playerId, msg.points, msg.color);
       case 'doodleClear': return this.clearDoodle(playerId);
+      case 'doodleErase': return this.eraseDoodleInk(playerId, msg.path);
       case 'doodleColor': return this.setDoodleColor(playerId, msg.color);
       case 'chat': return this.chat(playerId, msg.text);
       case 'reroll': return this.rerollWord(playerId);
@@ -1112,7 +1253,14 @@ export class Session {
     const step = (Math.PI * 2) / count;
     const pieces = [...mine].sort((a, b) => a - b).map((index) => {
       const spin = -Math.PI / 2 - (index + 0.5) * step;
-      return { index, strokes: this.slices[index].strokes.map((st) => rotate(st, CENTER, -spin)) };
+      // 회전을 되돌려 제자리에 끼운다. 색은 그대로 따라간다.
+      return {
+        index,
+        strokes: this.slices[index].strokes.map((st) => ({
+          points: rotate(st.points, CENTER, -spin),
+          color: st.color,
+        })),
+      };
     });
     this.send(playerId, { t: 'assembled', sliceCount: count, pieces });
   }
@@ -1191,6 +1339,7 @@ export class Session {
       roomName: this.name,
       roomCode: this.code,
       locked: this.locked,
+      colorMode: this.colorMode,
     });
   }
 }

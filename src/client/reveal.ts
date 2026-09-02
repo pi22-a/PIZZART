@@ -1,12 +1,17 @@
-import type { Point } from '../shared/drawing';
+import type { Point, Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import { slice } from '../shared/slicer';
 import { drawStrokes, fitCanvas, isLight } from './ink';
 
-/** 아직 아무도 못 본 칸의 색. 밝은 모드에서 새까맣게 두면 배경에서 튄다. */
-const emptyFill = () => (isLight() ? '#cbbba0' : '#241d16');
+/**
+ * 아직 아무도 못 본 칸의 색. 밝은 모드에서 새까맣게 두면 배경에서 튄다.
+ *
+ * 어두운 모드 값은 --field와 같은 회색이다. 이 칸은 배경에 눕혀 두는 것이 목적이라
+ * 페이지 배경이 바뀌면 같이 따라와야 한다 — 안 그러면 혼자 갈색으로 떠 보인다.
+ */
+const emptyFill = () => (isLight() ? '#cbbba0' : '#242424');
 /** 조각 경계선. 배경이 밝으면 선도 진해져야 보인다. */
-const edge = () => (isLight() ? '#a8977c' : '#3d3227');
+const edge = () => (isLight() ? '#a8977c' : '#3d3d3d');
 
 const DUR = 1400;
 
@@ -18,7 +23,7 @@ const DUR = 1400;
  */
 export function revealRound(
   el: HTMLCanvasElement,
-  drawing: Point[][],
+  drawing: Stroke[],
   sliceCount: number,
   owners: Array<{ sliceIndex: number; playerId: string | null }>,
   youId: string,
@@ -83,7 +88,7 @@ export function revealRound(
  */
 export function drawBoard(
   el: HTMLCanvasElement,
-  drawing: Point[][],
+  drawing: Stroke[],
   sliceCount: number,
   visible: number[],
 ): void {
@@ -123,7 +128,7 @@ export function drawBoard(
  */
 export function drawAssembled(
   el: HTMLCanvasElement,
-  pieces: Array<{ index: number; strokes: Point[][] }>,
+  pieces: Array<{ index: number; strokes: Stroke[] }>,
   sliceCount: number,
 ): void {
   const ctx = el.getContext('2d')!;

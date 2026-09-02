@@ -73,7 +73,7 @@ function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg 
 }
 
 function slices(): ServerMsg {
-  return { t: 'slices', count: 8, slices: [{ id: 'a', strokes: [[[500, 500], [600, 500]]], shared: false }] };
+  return { t: 'slices', count: 8, slices: [{ id: 'a', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: false }] };
 }
 
 function slicesWithShared(): ServerMsg {
@@ -81,9 +81,9 @@ function slicesWithShared(): ServerMsg {
     t: 'slices',
     count: 8,
     slices: [
-      { id: 'a', strokes: [[[500, 500], [600, 500]]], shared: false },
-      { id: 'b', strokes: [[[500, 500], [600, 500]]], shared: true },
-      { id: 'c', strokes: [[[500, 500], [600, 500]]], shared: true },
+      { id: 'a', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: false },
+      { id: 'b', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: true },
+      { id: 'c', strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }], shared: true },
     ],
   };
 }
@@ -638,7 +638,7 @@ const TEST_RULES_CLIENT = {
 describe('새 라운드가 지난 라운드 조립판을 덮어쓴다 (버그: 직전 출제자만 새 그림이 보인다)', () => {
   const assembled = (): ServerMsg => ({
     t: 'assembled', sliceCount: 8,
-    pieces: [{ index: 0, strokes: [[[500, 500], [600, 500]]] }],
+    pieces: [{ index: 0, strokes: [{ points: [[500, 500], [600, 500]], color: '#1f1b17' }] }],
   });
 
   it('조립판을 본 뒤 새 라운드 조각을 받으면 조각칸이 돌아온다', async () => {
@@ -1359,48 +1359,209 @@ describe('끊기면 스스로 다시 붙는다', () => {
   });
 });
 
-describe('결과를 그림으로 내보낸다', () => {
-  const ended = () => ({
-    t: 'roundEnd' as const,
-    word: '낙타',
-    drawing: [[[300, 200], [400, 300]]] as [number, number][][],
+describe('판이 끝나면 그림을 모아 보여준다', () => {
+  const recap = (word: string, correct: string[] = ['친구']) => ({
+    round: 0,
+    topic: '동물',
+    word,
+    drawing: [{ points: [[300, 200], [400, 300]] as [number, number][], color: '#e03131' }],
     sliceCount: 8,
-    owners: [{ sliceIndex: 0, playerId: 'me' }],
-    scores: [
-      { playerId: 'me', delta: -1, total: 4 },
-      { playerId: 'x', delta: 8, total: 8 },
-      { playerId: 'd', delta: 5, total: 5 },
-    ],
-    correct: ['x'],
-    answers: [
-      { playerId: 'me', text: '알파카', correct: false },
-      { playerId: 'x', text: '낙타', correct: true },
-    ],
+    drawer: '출제자',
+    correct,
   });
 
-  it('결과가 오기 전에는 눌러도 아무 일이 없다', async () => {
-    await guessing();
-    $('shareBtn').click();
-    expect($('shareNote').textContent).toBe('');
+  const finished = (rounds = [recap('낙타'), recap('고래', [])]) => ({
+    t: 'final' as const,
+    ranking: [
+      { playerId: 'x', name: '친구', score: 12 },
+      { playerId: 'me', name: '나', score: 4 },
+    ],
+    rounds,
   });
 
-  it('결과가 오면 눌러서 그림을 만든다', async () => {
+  it('회차 화면에는 저장 버튼이 없다', async () => {
+    // 판을 끊고 아홉 개의 파일로 흩어지게 하던 자리다. 한자리로 모았다.
     await guessing();
-    deliver(ended());
+    expect(document.getElementById('shareBtn')).toBeNull();
+  });
+
+  it('그림마다 제시어와 그린 사람을 붙여 보여준다', async () => {
+    await guessing();
+    deliver(finished());
+    const figs = $('gallery').querySelectorAll('figure');
+    expect(figs.length).toBe(2);
+    expect(figs[0].textContent).toContain('낙타');
+    expect(figs[0].textContent).toContain('출제자');
+    expect(figs[0].textContent).toContain('1명 맞힘');
+    expect(figs[1].textContent).toContain('아무도 못 맞힘');
+  });
+
+  it('캔버스 크기는 화면에 안 물어본다', async () => {
+    // 이 화면은 그려질 때 아직 감춰져 있을 수 있다. 그때 화면에서 재면 0이 나온다.
+    await guessing();
+    deliver(finished());
+    const cv = $('gallery').querySelector('canvas') as HTMLCanvasElement;
+    expect(cv.width).toBeGreaterThan(0);
+    expect(cv.height).toBeGreaterThan(0);
+  });
+
+  it('그림이 하나도 없으면 저장 버튼도 안 보인다', async () => {
+    await guessing();
+    deliver(finished([]));
+    expect($('gallery').children.length).toBe(0);
+    expect($('galleryBar').style.display).toBe('none');
+  });
+
+  it('눌러서 한 장으로 만든다', async () => {
+    await guessing();
+    deliver(finished());
     const canvas = $<HTMLCanvasElement>('shareCanvas');
     canvas.width = 0;
-    $('shareBtn').click();
+    $('galleryShareBtn').click();
     // 캔버스에 크기가 잡혔다는 것은 그리기가 실제로 돌았다는 뜻이다.
     expect(canvas.width).toBeGreaterThan(0);
     expect(canvas.height).toBeGreaterThan(0);
   });
 
-  it('라운드가 새로 시작되면 지난 안내는 지운다', async () => {
+  it('결과가 오기 전에는 눌러도 아무 일이 없다', async () => {
     await guessing();
-    deliver(ended());
-    $('shareNote').textContent = '그림으로 저장했습니다';
-    deliver(ended());
-    expect($('shareNote').textContent).toBe('');
+    $('galleryShareBtn').click();
+    expect($('galleryNote').textContent).toBe('');
+  });
+
+  it('다음 판이 끝나면 지난 안내는 지운다', async () => {
+    await guessing();
+    deliver(finished());
+    $('galleryNote').textContent = '그림으로 저장했습니다';
+    deliver(finished());
+    expect($('galleryNote').textContent).toBe('');
+  });
+});
+
+describe('판이 도는 동안 화면을 붙잡아 둔다', () => {
+  /** navigator.wakeLock을 가짜로 끼우고 요청·해제를 센다. */
+  function spyWakeLock() {
+    const log: string[] = [];
+    let released = false;
+    const sentinel = {
+      released: false,
+      release: () => { released = true; log.push('release'); return Promise.resolve(); },
+    };
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: {
+        ...navigator,
+        wakeLock: { request: (t: string) => { log.push('request:' + t); return Promise.resolve(sentinel); } },
+      },
+    });
+    return { log, wasReleased: () => released, restore: () => { if (real) Object.defineProperty(window, 'navigator', real); } };
+  }
+
+  it('게임이 시작되면 화면을 잡고, 로비로 돌아오면 놓는다', async () => {
+    const spy = spyWakeLock();
+    try {
+      await boot();
+      deliver({ t: 'joined', youId: 'me' });
+
+      // 로비에서는 잡지 않는다 — 기다리는 동안 화면을 붙잡아 둘 이유가 없다
+      deliver(room({ phase: 'lobby' }));
+      expect(spy.log).toEqual([]);
+
+      deliver(room({ phase: 'drawing' }));
+      await vi.waitFor(() => expect(spy.log).toContain('request:screen'));
+
+      deliver(room({ phase: 'lobby' }));
+      await vi.waitFor(() => expect(spy.wasReleased()).toBe(true));
+    } finally {
+      spy.restore();
+    }
+  });
+
+  it('wakeLock이 없는 기기에서도 판은 그대로 돈다', async () => {
+    // 화면이 안 꺼지는 것은 편의지 게임의 조건이 아니다.
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: { ...navigator, wakeLock: undefined },
+    });
+    try {
+      await boot();
+      deliver({ t: 'joined', youId: 'me' });
+      deliver(room({ phase: 'drawing' }));
+      // 예외 없이 화면이 정상으로 넘어가면 된다
+      expect(document.querySelectorAll('.screen.on').length).toBe(1);
+    } finally {
+      if (real) Object.defineProperty(window, 'navigator', real);
+    }
+  });
+});
+
+describe('공유는 한 번에 한 장만 나간다', () => {
+  const recap = (word: string) => ({
+    round: 0, topic: '동물', word,
+    drawing: [{ points: [[300, 200], [400, 300]] as [number, number][], color: '#e03131' }],
+    sliceCount: 8, drawer: '출제자', correct: ['친구'],
+  });
+  const finished = () => ({
+    t: 'final' as const,
+    ranking: [{ playerId: 'me', name: '나', score: 4 }],
+    rounds: [recap('낙타'), recap('고래')],
+  });
+
+  /** navigator.share를 가로채 몇 번, 몇 장이 나갔는지 센다. */
+  function spyShare() {
+    const calls: Array<{ files: number; keys: string[] }> = [];
+    // jsdom에는 toBlob이 없다. 없으면 그림을 못 만들어 공유까지 가지도 못한다.
+    HTMLCanvasElement.prototype.toBlob = function (cb: BlobCallback) {
+      cb(new Blob([new Uint8Array(8)], { type: 'image/png' }));
+    } as HTMLCanvasElement['toBlob'];
+    const real = Object.getOwnPropertyDescriptor(window, 'navigator');
+    Object.defineProperty(window, 'navigator', {
+      configurable: true,
+      value: {
+        ...navigator,
+        canShare: () => true,
+        share: (d: { files?: unknown[] }) => {
+          calls.push({ files: d.files?.length ?? 0, keys: Object.keys(d) });
+          return Promise.resolve();
+        },
+      },
+    });
+    return { calls, restore: () => { if (real) Object.defineProperty(window, 'navigator', real); } };
+  }
+
+  it('한 번 누르면 공유도 한 번, 파일도 한 장이다', async () => {
+    // 카카오톡 전송창에 pizza.png가 두 장 떴다는 제보. 눌린 횟수와 실린 장수를 센다.
+    const spy = spyShare();
+    try {
+      await boot();
+      deliver(finished());
+      $('galleryShareBtn').click();
+      await vi.waitFor(() => expect(spy.calls.length).toBeGreaterThan(0));
+      expect(spy.calls.length).toBe(1);
+      expect(spy.calls[0].files).toBe(1);
+      // 글자를 같이 실으면 받는 앱이 그림과 글자를 각각 한 덩이로 세어
+      // 카카오톡 전송창에 같은 그림이 두 장으로 뜬다. 그림만 보낸다.
+      expect(spy.calls[0].keys).toEqual(['files']);
+    } finally {
+      spy.restore();
+    }
+  });
+
+  it('연달아 눌러도 겹쳐서 나가지 않는다', async () => {
+    const spy = spyShare();
+    try {
+      await boot();
+      deliver(finished());
+      $('galleryShareBtn').click();
+      $('galleryShareBtn').click();
+      $('galleryShareBtn').click();
+      await vi.waitFor(() => expect(spy.calls.length).toBeGreaterThan(0));
+      expect(spy.calls.length).toBe(1);
+    } finally {
+      spy.restore();
+    }
   });
 });
 
@@ -1421,16 +1582,16 @@ describe('공유 버튼은 무슨 일이 일어날지 그대로 적는다', () =
 
   it('공유창이 되는 기기에서는 공유하기', async () => {
     await bootWith(true);
-    expect($('shareBtn').textContent).toBe('공유하기');
-    expect($('shareBtn').title).toContain('공유합니다');
+    expect($('galleryShareBtn').textContent).toBe('공유하기');
+    expect($('galleryShareBtn').title).toContain('공유합니다');
   });
 
   it('안 되는 기기에서는 그림으로 저장', async () => {
     // 폰에서 '그림으로 저장'이라고 적어두면 공유창이 뜨는 것이 놀랍고,
     // PC에서 '공유하기'라고 적어두면 파일이 내려와서 또 놀란다.
     await bootWith(false);
-    expect($('shareBtn').textContent).toBe('그림으로 저장');
-    expect($('shareBtn').title).toContain('내려받습니다');
+    expect($('galleryShareBtn').textContent).toBe('그림으로 저장');
+    expect($('galleryShareBtn').title).toContain('내려받습니다');
   });
 });
 

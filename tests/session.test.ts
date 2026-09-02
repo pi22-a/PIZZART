@@ -1770,6 +1770,255 @@ describe('관전자는 점수판 어디에도 안 나온다', () => {
   });
 });
 
+describe('색과 지우개', () => {
+  /** 그리는 중의 캔버스는 관전자에게만 간다(출제자는 자기 화면에 이미 있다). */
+  function watchingSession(): void {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.setColorMode('p1', 'color');
+    s.start('p1');
+  }
+
+  /** 색을 다루는 테스트는 컬러판이어야 한다. 방의 기본값은 흑백이다. */
+  function colorSession(): void {
+    newSession();
+    s.setColorMode('p1', 'color');
+    s.start('p1');
+  }
+
+  it('출제자가 고른 색이 획에 붙는다', () => {
+    watchingSession();
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.at(-1)!.color).toBe('#e03131');
+  });
+
+  it('팔레트에 없는 색은 검정으로 바뀐다', () => {
+    // 아무 값이나 믿으면 배경과 같은 색으로 그어 "안 보이는 그림"을 만들 수 있고,
+    // 그러면 아무도 못 맞힌다.
+    watchingSession();
+    s.addStroke('p1', [[300, 200], [400, 300]], '#f6efe2');
+    s.addStroke('p1', [[310, 210], [410, 310]], 'javascript:alert(1)');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#1f1b17', '#1f1b17']);
+  });
+
+  it('색은 조각으로 잘려도 따라간다', () => {
+    colorSession();
+    // 중심을 가로지르는 선이라 여러 조각으로 쪼개진다
+    s.addStroke('p1', [[200, 500], [800, 500]], '#1971c2');
+    s.drawDone('p1');
+    const slices = msgsTo('p2').filter((m) => m.t === 'slices').at(-1)!;
+    const colors = slices.slices.flatMap((sl) => sl.strokes.map((st) => st.color));
+    expect(colors.length).toBeGreaterThan(0);
+    expect(colors.every((c) => c === '#1971c2')).toBe(true);
+  });
+
+  it('지우개는 지나간 자리만 지우고 획은 남은 토막으로 쪼개진다', () => {
+    colorSession();
+    // 가운데를 가로지르는 긴 선 하나와, 지우개가 안 닿는 짧은 선 하나
+    s.addStroke('p1', [[100, 500], [900, 500]], '#e03131');
+    s.addStroke('p1', [[300, 300], [400, 300]], '#1971c2');
+
+    s.eraseInk('p1', [[500, 500]]);
+
+    const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
+    // 빨간 획이 둘로 쪼개지고 파란 획은 그대로다 — 통째로 사라지지 않는다
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#e03131', '#e03131', '#1971c2']);
+  });
+
+  it('지우개 경로를 따라 이어서 지운다 — 묶음으로 와도 사이가 안 남는다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[100, 500], [900, 500]], '#1f1b17');
+
+    // 점 사이를 이어 지우므로, 200에서 800까지 한 번에 그은 것과 같아야 한다
+    s.eraseInk('p1', [[200, 500], [350, 500], [500, 500], [650, 500], [800, 500]]);
+
+    const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.length).toBe(2);
+    expect(canvas.strokes[0].points.at(-1)![0]).toBeCloseTo(182);
+    expect(canvas.strokes[1].points[0][0]).toBeCloseTo(818);
+  });
+
+  it('껑충 뛴 구간은 건너뛴다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[100, 500], [900, 500]], '#1f1b17');
+
+    // 두 점이 800이나 떨어져 있다. 포인터가 창 밖에 나갔다 온 경우인데, 이어 지우면
+    // 지나지도 않은 자리가 통째로 쓸려나간다. 클라이언트도 같은 규칙으로 건너뛴다.
+    s.eraseInk('p1', [[100, 500], [900, 500]]);
+
+    const canvas = msgsTo('p1').filter((m) => m.t === 'canvas').at(-1)!;
+    // 도착한 자리만 콕 찍혀 끝이 깎이고, 지나온 척한 가운데는 멀쩡하다
+    expect(canvas.strokes.length).toBe(1);
+    expect(canvas.strokes[0].points[0][0]).toBeCloseTo(100);
+    expect(canvas.strokes[0].points.at(-1)![0]).toBeCloseTo(882);
+  });
+
+  it('출제자가 아니면 못 지운다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.eraseInk('p2', [[350, 250]]);
+    expect(s.strokeCount).toBe(1);
+  });
+
+  it('잉크가 없는 자리를 문질러도 판은 안 흔들린다', () => {
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.eraseInk('p1', [[900, 900], [910, 900]]);
+    expect(s.strokeCount).toBe(1);
+    // 아무 일도 없었으므로 화면을 다시 그리라고 보낼 것도 없다
+    expect(msgsTo('p1').filter((m) => m.t === 'canvas').length).toBe(0);
+  });
+
+  it('낙서 지우개는 내 획만 지운다', () => {
+    newSession();
+    s.start('p1');
+    s.addDoodle('p2', [[100, 100], [400, 100]], '#e03131');
+    s.addDoodle('p3', [[100, 300], [400, 300]], '#1971c2');
+
+    // p2가 p3의 선 위를 문질러도 p3의 낙서는 안 지워진다
+    s.eraseDoodleInk('p2', [[250, 300]]);
+    expect(msgsTo('p2').filter((m) => m.t === 'doodleBoard').length).toBe(0);
+
+    // 자기 것은 지워진다 — 가운데가 끊겨 둘로 쪼개진다
+    s.eraseDoodleInk('p2', [[250, 100]]);
+    const board = msgsTo('p2').filter((m) => m.t === 'doodleBoard').at(-1)!;
+    expect(board.strokes.map((x) => x.by)).toEqual(['p2', 'p2', 'p3']);
+  });
+});
+
+describe('흑백판과 컬러판', () => {
+  it('방을 만들면 흑백으로 시작한다', () => {
+    // 지금까지 쌓인 점수 설계가 흑백 기준이라, 컬러는 골라서 켜는 쪽이 맞다.
+    newSession();
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+
+  it('흑백판에서는 무슨 색을 보내도 검정으로 그려진다', () => {
+    // 화면에서 팔레트를 감추는 것만으로는 안 된다 — 그건 안 보이게 한 것이지
+    // 못 하게 한 것이 아니다. 규칙이 실제로 지켜지는 자리는 여기뿐이다.
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    s.addStroke('p1', [[310, 210], [410, 310]], '#1971c2');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.map((x) => x.color)).toEqual(['#1f1b17', '#1f1b17']);
+  });
+
+  it('컬러판으로 바꾸면 고른 색이 그대로 남는다', () => {
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    s.setSpectator('p5', true);
+    s.setColorMode('p1', 'color');
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300]], '#e03131');
+    const canvas = msgsTo('p5').filter((m) => m.t === 'canvas').at(-1)!;
+    expect(canvas.strokes.at(-1)!.color).toBe('#e03131');
+  });
+
+  it('방장만 바꾼다', () => {
+    newSession();
+    s.setColorMode('p2', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+
+  it('판이 도는 중에는 못 바꾼다', () => {
+    // 중간에 바뀌면 앞 라운드는 컬러로, 뒤 라운드는 흑백으로 그려져 점수를 견줄 수 없다.
+    newSession();
+    s.start('p1');
+    s.setColorMode('p1', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+
+  it('한 판이 끝나 로비로 돌아오면 다시 바꿀 수 있다', () => {
+    newSession();
+    s.start('p1');
+    s.setColorMode('p1', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (s.phase === 'drawing') s.drawDone(s.drawerId);
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+    s.again('p1');
+    s.setColorMode('p1', 'color');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('color');
+  });
+
+  it('엉뚱한 값은 무시한다', () => {
+    newSession();
+    s.setColorMode('p1', 'sepia' as 'mono');
+    expect(msgsOfType('room').at(-1)!.colorMode).toBe('mono');
+  });
+});
+
+describe('판이 끝나면 그림을 전부 실어 보낸다', () => {
+  /** 한 판을 끝까지 돌린다. 라운드마다 획을 남겨야 그림이 기록으로 남는다. */
+  function playThrough(): void {
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (s.phase === 'drawing') {
+        s.addStroke(s.drawerId, [[300, 200], [400, 300], [200, 400], [300, 200]]);
+        s.drawDone(s.drawerId);
+      }
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+  }
+
+  it('라운드 수만큼 그림이 붙어 온다', () => {
+    newSession();
+    s.start('p1');
+    playThrough();
+    const fin = msgsOfType('final').at(-1)!;
+    expect(fin.rounds.length).toBe(s.totalRounds);
+    expect(fin.rounds[0].drawing.length).toBeGreaterThan(0);
+    expect(fin.rounds[0].word.length).toBeGreaterThan(0);
+  });
+
+  it('그린 사람과 맞힌 사람을 이름으로 담는다', () => {
+    // id가 아니라 이름이다 — 판이 끝나고 나간 사람도 그림 밑에 이름은 남아야 한다.
+    newSession();
+    s.start('p1');
+    s.addStroke('p1', [[300, 200], [400, 300], [200, 400], [300, 200]]);
+    s.drawDone('p1');
+    const word = msgsTo('p1').filter((m) => m.t === 'word').at(-1)!.word;
+    s.answer('p2', word);
+    for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+    playThrough();
+
+    const first = msgsOfType('final').at(-1)!.rounds[0];
+    expect(first.drawer).toBe('p1');
+    expect(first.correct).toContain('p2');
+  });
+
+  it('아무도 안 그린 라운드는 빠진다', () => {
+    // 빈 원판을 모아 보여줄 이유가 없다.
+    newSession();
+    s.start('p1');
+    for (let i = 0; i < TEST_RULES.maxAttempts + 2; i++) clock.fire();
+    s.next('p1');
+    playThrough();
+    const fin = msgsOfType('final').at(-1)!;
+    expect(fin.rounds.length).toBe(s.totalRounds - 1);
+  });
+
+  it('한 판 더를 하면 지난 판 그림은 안 따라온다', () => {
+    newSession();
+    s.start('p1');
+    playThrough();
+    const first = msgsOfType('final').at(-1)!.rounds.length;
+    s.again('p1');
+    s.start('p1');
+    playThrough();
+    expect(msgsOfType('final').at(-1)!.rounds.length).toBe(first);
+  });
+});
+
 describe('그림을 모은다', () => {
   it('라운드가 끝나면 그림 한 장이 기록으로 넘어온다', () => {
     const got: unknown[] = [];

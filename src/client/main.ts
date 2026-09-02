@@ -1,19 +1,21 @@
 import { Net } from './net';
 import { CircleCanvas } from './canvas';
 import type { Point } from '../shared/drawing';
-import type { ChatLine, PlayerInfo, ServerMsg } from '../shared/protocol';
+import type { ChatLine, PlayerInfo, RoundRecap, ServerMsg } from '../shared/protocol';
 import {
   show, setTag, renderPlayers, renderSlices, renderAnswers, renderRooms, setKickHandler,
-  renderRanking,
+  renderRanking, renderGallery,
   renderTopics,
   syncClock,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots, renderChat,
   flashHost, toast, scrollChatToBottom,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
+import { PALETTE, PALETTE_NAMES, DEFAULT_COLOR } from '../shared/palette';
 import { armAudio, isMuted, loadMuted, setMuted, timeTick } from './sound';
 import { revealRound, drawBoard, drawAssembled } from './reveal';
-import { canSharePng, drawShareCard, shareCard, type ShareRow } from './share';
+import { canSharePng, drawGalleryCard, shareCard } from './share';
+import { keepAwake } from './wake';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -167,7 +169,7 @@ const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { inte
  * 점 하나짜리 메시지가 나가는데, 서버는 점이 둘 미만인 획을 버린다. 즉 또박또박 그린
  * 그림일수록 통째로 사라졌다.
  */
-drawCanvas.onStroke((points: Point[]) => net.send({ t: 'stroke', points }));
+drawCanvas.onStroke((points: Point[], color: string) => net.send({ t: 'stroke', points, color }));
 
 /**
  * 대기 화면 낙서판. 출제자가 그리는 동안 기다리는 사람들이 같이 갈긴다.
@@ -177,11 +179,64 @@ const doodle = new DoodleBoard($('doodleCanvas') as HTMLCanvasElement, () => you
 doodle.onStroke((points: Point[]) => net.send({ t: 'doodle', points, color: doodle.getColor() }));
 
 /**
+ * 그리는 캔버스의 색과 도구.
+ *
+ * 색을 고르는 순간 화면이 그 색으로 바뀌어야 한다 — 서버에 물어볼 것이 없다.
+ * 색은 획에 실어 보내고, 서버는 팔레트에 있는 색인지만 확인한다.
+ */
+function paintDrawTool(): void {
+  const erasing = drawCanvas.getTool() === 'eraser';
+  $('eraserBtn').classList.toggle('on', erasing);
+  $('eraserBtn').textContent = erasing ? '지우개 끄기' : '지우개';
+  // 지우개를 쓰는 동안 색을 고르면 자연스럽게 펜으로 돌아온다.
+  ($('drawCanvas') as HTMLCanvasElement).style.cursor = erasing ? 'cell' : 'crosshair';
+}
+
+(function buildDrawPalette(): void {
+  const box = $('drawColors');
+  PALETTE.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.style.background = c;
+    b.dataset.color = c;
+    b.title = PALETTE_NAMES[i];
+    b.setAttribute('aria-label', PALETTE_NAMES[i]);
+    b.classList.toggle('on', c === DEFAULT_COLOR);
+    b.addEventListener('click', () => {
+      drawCanvas.setColor(c);
+      drawCanvas.setTool('pen');
+      paintDrawTool();
+      for (const el of box.querySelectorAll('button')) el.classList.toggle('on', el === b);
+    });
+    box.appendChild(b);
+  });
+})();
+
+$('eraserBtn').addEventListener('click', () => {
+  drawCanvas.setTool(drawCanvas.getTool() === 'eraser' ? 'pen' : 'eraser');
+  paintDrawTool();
+});
+drawCanvas.onErasePoint((p) => net.pushErase(p));
+drawCanvas.onEraseEnd(() => net.endErase());
+
+function paintDoodleTool(): void {
+  const erasing = doodle.getTool() === 'eraser';
+  $('doodleEraserBtn').classList.toggle('on', erasing);
+  $('doodleEraserBtn').textContent = erasing ? '지우개 끄기' : '지우개';
+}
+
+$('doodleEraserBtn').addEventListener('click', () => {
+  doodle.setTool(doodle.getTool() === 'eraser' ? 'pen' : 'eraser');
+  paintDoodleTool();
+});
+doodle.onErasePoint((p) => net.pushDoodleErase(p));
+doodle.onEraseEnd(() => net.endDoodleErase());
+
+/**
  * 낙서 색 고르기.
  *
- * 색은 한 사람당 하나다. 두 사람이 같은 색을 쓰면 누가 그린 선인지 구분이 안 되고,
- * 그 상태에서 한쪽이 자기 낙서를 지우면 다른 쪽은 자기 그림이 지워졌다고 오해한다.
- * 그래서 임자가 있는 색은 아예 못 고르게 막는다. 색은 서버가 정한다.
+ * 18색 전부 고를 수 있다. 남이 쓰는 색이어도 된다 — 지우기는 색이 아니라 사람으로
+ * 가르기 때문이다. 다만 **여기서 색은 "누가 그렸나"를 나르므로** 처음 배정만은
+ * 서버가 서로 다르게 준다. 누가 무슨 색을 쓰는지는 툴팁으로 알려준다.
  */
 function renderDoodleColors(players: PlayerInfo[]): void {
   const box = $('doodleColors');
@@ -190,7 +245,15 @@ function renderDoodleColors(players: PlayerInfo[]): void {
       const b = document.createElement('button');
       b.style.background = c;
       b.dataset.color = c;
-      b.addEventListener('click', () => net.send({ t: 'doodleColor', color: c }));
+      b.setAttribute('aria-label', PALETTE_NAMES[DOODLE_COLORS.indexOf(c)] ?? c);
+      b.addEventListener('click', () => {
+        net.send({ t: 'doodleColor', color: c });
+        // 서버 응답을 기다리지 않는다. 고른 순간부터 그 색으로 그어져야 한다.
+        doodle.setColor(c);
+        doodle.setTool('pen');
+        paintDoodleTool();
+        for (const el of box.querySelectorAll('button')) el.classList.toggle('on', el === b);
+      });
       box.appendChild(b);
     }
   }
@@ -304,31 +367,34 @@ $('makeRoomBtn').addEventListener('click', () => {
 });
 
 // ── 방 안 ──
-/** 방금 공개된 라운드. 공유 그림을 만들 때 쓴다. */
-let lastReveal: { word: string; drawing: Point[][]; sliceCount: number; rows: ShareRow[] } | null = null;
+/** 방금 끝난 판의 그림들과 순위. 모아 보기 화면과 공유 그림이 같이 쓴다. */
+let lastGame: { rounds: RoundRecap[]; ranking: Array<{ name: string; score: number }> } = {
+  rounds: [],
+  ranking: [],
+};
 
 /*
  * 무엇이 일어날지를 버튼에 그대로 적는다. 폰에서는 공유창이 뜨고 PC에서는 파일이
  * 내려오는데, 한쪽 글자만 적어두면 다른 쪽 사람은 매번 놀란다.
  */
 const 공유가능 = canSharePng();
-($('shareBtn') as HTMLButtonElement).textContent = 공유가능 ? '공유하기' : '그림으로 저장';
-$('shareBtn').title = 공유가능
-  ? '정답과 다들 뭐라고 답했는지를 한 장으로 만들어 공유합니다'
-  : '정답과 다들 뭐라고 답했는지를 한 장의 그림으로 내려받습니다';
+($('galleryShareBtn') as HTMLButtonElement).textContent = 공유가능 ? '공유하기' : '그림으로 저장';
+$('galleryShareBtn').title = 공유가능
+  ? '이 판의 그림을 전부 한 장으로 모아 공유합니다'
+  : '이 판의 그림을 전부 한 장의 그림으로 모아 내려받습니다';
 
-$('shareBtn').addEventListener('click', async () => {
-  if (!lastReveal) return;
-  const btn = $('shareBtn') as HTMLButtonElement;
+$('galleryShareBtn').addEventListener('click', async () => {
+  if (lastGame.rounds.length === 0) return;
+  const btn = $('galleryShareBtn') as HTMLButtonElement;
   btn.disabled = true;
-  setTag('shareNote', '만드는 중…');
+  setTag('galleryNote', '만드는 중…');
   try {
     const canvas = $('shareCanvas') as HTMLCanvasElement;
-    drawShareCard(canvas, lastReveal.word, lastReveal.drawing, lastReveal.sliceCount, lastReveal.rows);
-    setTag('shareNote', await shareCard(canvas, lastReveal.word));
+    drawGalleryCard(canvas, lastGame.rounds, lastGame.ranking);
+    setTag('galleryNote', await shareCard(canvas));
   } catch {
     // 어디서 막혔든 판은 계속 돈다. 공유는 게임의 조건이 아니다.
-    setTag('shareNote', '이 브라우저에서는 저장이 막혀 있습니다');
+    setTag('galleryNote', '이 브라우저에서는 저장이 막혀 있습니다');
   } finally {
     btn.disabled = false;
   }
@@ -344,6 +410,36 @@ $('copyLinkBtn').addEventListener('click', () => {
   setTimeout(paintRoomBar, 1500);
 });
 $('lockBtn').addEventListener('click', () => net.send({ t: 'setLock', on: !roomLocked }));
+
+/**
+ * 흑백판 / 컬러판.
+ *
+ * 서버가 진짜 규칙을 쥔다(addStroke에서 검정으로 눌러버린다). 여기서 하는 일은
+ * **못 하게 막는 것이 아니라 헷갈리지 않게 하는 것**이다 — 흑백판인데 팔레트가 열려
+ * 있으면 빨강을 골라 그어놓고 검게 나오는 것을 보게 된다.
+ */
+let colorMode: 'mono' | 'color' = 'mono';
+
+$('colorModeBtn').addEventListener('click', () => {
+  net.send({ t: 'setColorMode', mode: colorMode === 'mono' ? 'color' : 'mono' });
+});
+
+function paintColorMode(): void {
+  const 컬러 = colorMode === 'color';
+  const btn = $('colorModeBtn') as HTMLButtonElement;
+  const label = $('colorModeLabel');
+  label.textContent = 컬러 ? '컬러' : '흑백';
+  label.classList.toggle('rainbow', 컬러);
+  btn.disabled = youId !== hostId;
+  btn.title = youId === hostId ? '눌러서 바꿉니다' : '방장만 바꿀 수 있습니다';
+  $('colorModeNote').textContent = 컬러
+    ? '18색으로 그립니다 — 조각만 봐도 좁혀져서 흑백보다 쉽습니다'
+    : '검은색으로만 그립니다';
+
+  // 흑백판에서는 팔레트를 아예 감춘다. 고를 수 없는 것을 보여줄 이유가 없다.
+  $('drawColors').style.display = 컬러 ? '' : 'none';
+  if (!컬러) drawCanvas.setColor(DEFAULT_COLOR);
+}
 
 let roomLocked = false;
 let roomLabel = '';
@@ -579,6 +675,9 @@ function onMsg(m: ServerMsg): void {
       refocusAfterRender = true;
     }
 
+    colorMode = m.colorMode;
+    paintColorMode();
+
     if (m.phase === 'lobby') {
       renderTopics(m.topics, m.selectedTopics, youId === hostId,
         (topics) => net.send({ t: 'setTopics', topics }));
@@ -624,6 +723,10 @@ function onMsg(m: ServerMsg): void {
     }
     lastPhase = m.phase;
     lastWatch = iWatch;
+
+    // 판이 도는 동안에는 화면을 붙잡아 둔다. 기다리는 사람은 손을 안 대므로
+    // 폰이 화면을 꺼버리고, 다시 켜면 회차가 넘어가 있다.
+    keepAwake(m.phase !== 'lobby');
 
     if (m.phase === 'guessing') {
       const last = m.attempt >= m.maxAttempts;
@@ -724,7 +827,6 @@ function onMsg(m: ServerMsg): void {
   if (m.t === 'roundEnd') {
     sliceCount = m.sliceCount;
     setTag('revealWord', `정답: ${m.word}`);
-    setTag('shareNote', '');
     // 결과 화면의 핵심은 점수가 아니라 다들 뭐라고 답했는가다(Finding 3).
     // 출제자는 답을 낸 적이 없으니 (무응답)이 아니라 점수 변화만 보여준다.
     //
@@ -743,25 +845,18 @@ function onMsg(m: ServerMsg): void {
     }), names);
     revealRound($('revealCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.owners, youId);
 
-    // 공유 그림의 재료. 화면에 그린 것과 같은 값이라 따로 서버에 물을 것이 없다.
-    lastReveal = {
-      word: m.word,
-      drawing: m.drawing,
-      sliceCount: m.sliceCount,
-      rows: m.scores.map((s) => {
-        const row = rows.get(s.playerId);
-        const delta = s.delta > 0 ? `+${s.delta}점` : `${s.delta}점`;
-        return {
-          name: names.get(s.playerId) ?? '?',
-          text: s.playerId === drawerId ? `출제 ${delta}` : `${row?.text || '(무응답)'}  ${delta}`,
-          correct: m.correct.includes(s.playerId),
-        };
-      }),
-    };
     return;
   }
 
-  if (m.t === 'final') { renderRanking(m.ranking); return; }
+  if (m.t === 'final') {
+    renderRanking(m.ranking);
+    // 그림은 서버가 실어 보낸 것만 쓴다. 라운드마다 모아두면 도중에 들어왔거나
+    // 새로고침한 사람만 텅 빈 화면을 보게 된다.
+    lastGame = { rounds: m.rounds, ranking: m.ranking };
+    renderGallery(m.rounds);
+    setTag('galleryNote', '');
+    return;
+  }
   if (m.t === 'error') { alert(m.msg); return; }
 }
 

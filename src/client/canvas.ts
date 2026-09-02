@@ -1,11 +1,15 @@
-import type { Point } from '../shared/drawing';
+import type { Point, Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS, insideCircle } from '../shared/drawing';
+import { DEFAULT_COLOR } from '../shared/palette';
+import { eraseStrokes, ERASE_RADIUS, MAX_ERASE_STEP } from '../shared/eraser';
 import { drawStrokes, fitCanvas } from './ink';
 
 export interface CanvasOpts {
   /** 그릴 수 있는가. 대기·추론 화면에서는 false */
   interactive: boolean;
 }
+
+export type Tool = 'pen' | 'eraser';
 
 /**
  * 원형 캔버스. 원 밖에는 그릴 수 없다.
@@ -14,10 +18,16 @@ export interface CanvasOpts {
  */
 export class CircleCanvas {
   private ctx: CanvasRenderingContext2D;
-  private strokes: Point[][] = [];
+  private strokes: Stroke[] = [];
   private current: Point[] | null = null;
-  private strokeFn: ((points: Point[]) => void) | null = null;
+  private strokeFn: ((points: Point[], color: string) => void) | null = null;
   private pointFn: ((p: Point) => void) | null = null;
+  private erasePointFn: ((p: Point) => void) | null = null;
+  private eraseEndFn: (() => void) | null = null;
+  /** 지우개가 직전에 있던 자리. 여기서 지금 자리까지를 캡슐로 지운다. */
+  private eraseFrom: Point | null = null;
+  private color = DEFAULT_COLOR;
+  private tool: Tool = 'pen';
 
   constructor(private el: HTMLCanvasElement, private opts: CanvasOpts) {
     this.ctx = el.getContext('2d')!;
@@ -29,24 +39,35 @@ export class CircleCanvas {
 
     el.addEventListener('pointerdown', (e) => {
       const p = this.toCanvas(e);
-      if (!insideCircle(p)) return;
+      // 지우개는 원 밖에서도 받는다. 잉크는 원 안에만 있으니 밖을 막을 이유가 없고,
+      // 막으면 테두리에 바짝 붙은 선을 지우기가 유난히 어려워진다.
+      if (this.tool !== 'eraser' && !insideCircle(p)) return;
       el.setPointerCapture(e.pointerId);
+      // 지우개는 누른 자리에서 바로 문다. 끌면 지나온 자리를 계속 지운다.
+      if (this.tool === 'eraser') { this.eraseFrom = null; this.eraseAt(p); return; }
       this.current = [p];
       this.pointFn?.(p);
     });
     el.addEventListener('pointermove', (e) => {
-      if (!this.current) return;
       const p = this.toCanvas(e);
+      if (this.tool === 'eraser') { if (e.buttons > 0) this.eraseAt(p); return; }
       if (!insideCircle(p)) return;
+      if (!this.current) return;
       this.current.push(p);
       this.pointFn?.(p);
       this.draw();
     });
     const end = () => {
+      if (this.tool === 'eraser') {
+        // 경로를 끊는다. 안 끊으면 다음에 누른 자리와 여기가 이어져,
+        // 지나지도 않은 자리가 쓸려나간다.
+        this.eraseFrom = null;
+        this.eraseEndFn?.();
+      }
       if (!this.current) return;
       if (this.current.length >= 2) {
-        this.strokes.push(this.current);
-        this.strokeFn?.(this.current);
+        this.strokes.push({ points: this.current, color: this.color });
+        this.strokeFn?.(this.current, this.color);
       }
       this.current = null;
       this.draw();
@@ -56,11 +77,43 @@ export class CircleCanvas {
     el.addEventListener('pointerleave', end);
   }
 
-  onStroke(fn: (points: Point[]) => void): void { this.strokeFn = fn; }
+  onStroke(fn: (points: Point[], color: string) => void): void { this.strokeFn = fn; }
   onPoint(fn: (p: Point) => void): void { this.pointFn = fn; }
+  onErasePoint(fn: (p: Point) => void): void { this.erasePointFn = fn; }
+  onEraseEnd(fn: () => void): void { this.eraseEndFn = fn; }
 
-  render(strokes: Point[][]): void {
-    this.strokes = strokes.map((s) => s.slice());
+  setColor(c: string): void { this.color = c; }
+  getColor(): string { return this.color; }
+  setTool(t: Tool): void { this.tool = t; }
+  getTool(): Tool { return this.tool; }
+
+  /**
+   * 지우개가 지나온 자리의 잉크를 지운다. 화면에서 먼저 빼고 서버에는 **경로만** 보낸다 —
+   * 자르는 것은 서버가 같은 코드로 다시 한다. 서버가 canvas를 되보내주므로 어긋나도 곧 맞춰진다.
+   *
+   * 지운 것이 없어도 점은 보낸다. 서버가 받는 경로가 내가 지나온 경로와 같아야
+   * 두 쪽이 같은 자리를 지운다.
+   */
+  private eraseAt(p: Point): void {
+    const from = this.eraseFrom ?? p;
+
+    // 포인터가 껑충 뛰었으면(창 밖에 나갔다 왔거나 프레임이 밀렸거나) 이어 지우지 않는다.
+    // 서버도 같은 규칙으로 건너뛴다.
+    const jumped = Math.hypot(p[0] - from[0], p[1] - from[1]) > MAX_ERASE_STEP;
+    const a = jumped ? p : from;
+    this.eraseFrom = p;
+
+    const after = eraseStrokes(this.strokes, a, p, ERASE_RADIUS);
+    if (after) {
+      this.strokes = after;
+      this.draw();
+    }
+
+    this.erasePointFn?.(p);
+  }
+
+  render(strokes: Stroke[]): void {
+    this.strokes = strokes.map((s) => ({ points: s.points.slice(), color: s.color }));
     this.draw();
   }
 
@@ -96,7 +149,12 @@ export class CircleCanvas {
     ctx.strokeStyle = '#d9c9a8';
     ctx.stroke();
 
-    drawStrokes(ctx, this.current ? [...this.strokes, this.current] : this.strokes);
+    // 그리는 중인 획도 고른 색 그대로 나가야 한다. 기본색으로 그렸다가 손을 떼는 순간
+    // 색이 바뀌면, 쓰는 사람은 "선이 먼저 나오고 색이 나중에 입혀진다"고 느낀다.
+    drawStrokes(
+      ctx,
+      this.current ? [...this.strokes, { points: this.current, color: this.color }] : this.strokes,
+    );
     ctx.restore();
   }
 }

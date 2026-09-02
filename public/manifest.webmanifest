@@ -1,0 +1,19 @@
+{
+  "name": "PIZZA — 조각 그림 추리 게임",
+  "short_name": "PIZZA",
+  "description": "한 명이 그린 그림을 피자처럼 잘라 나눠 갖고, 내 조각 하나로 정답을 맞히는 파티 게임",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#181818",
+  "theme_color": "#181818",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
