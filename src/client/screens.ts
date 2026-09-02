@@ -1,7 +1,7 @@
 import type { Point, Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS } from '../shared/drawing';
 import type { AnswerRow, ChatLine, PlayerInfo, RoomInfo, RoundRecap } from '../shared/protocol';
-import { drawStrokes } from './ink';
+import { drawStrokes, isLight } from './ink';
 import { drawSlice, startSpinHint } from './slice-view';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -431,6 +431,10 @@ export function renderGallery(rounds: RoundRecap[]): void {
       ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, 0, Math.PI * 2);
       ctx.fillStyle = '#f6efe2';
       ctx.fill();
+      // 밝은 모드에서는 배경과 반죽이 거의 같은 색이라 테두리가 없으면 원판이 안 보인다
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = isLight() ? '#a8977c' : '#d9c9a8';
+      ctx.stroke();
       ctx.clip();
       drawStrokes(ctx, r.drawing);
       ctx.restore();

@@ -2,7 +2,7 @@ import type { Point, Stroke } from '../shared/drawing';
 import { CANVAS, CENTER, RADIUS, insideCircle } from '../shared/drawing';
 import { DEFAULT_COLOR } from '../shared/palette';
 import { eraseStrokes, ERASE_RADIUS, MAX_ERASE_STEP } from '../shared/eraser';
-import { drawStrokes, fitCanvas } from './ink';
+import { drawStrokes, fitCanvas, isLight } from './ink';
 
 export interface CanvasOpts {
   /** 그릴 수 있는가. 대기·추론 화면에서는 false */
@@ -146,7 +146,17 @@ export class CircleCanvas {
     ctx.fillStyle = '#f6efe2';
     ctx.fill();
     ctx.lineWidth = 4;
-    ctx.strokeStyle = '#d9c9a8';
+    /*
+     * 테두리 색이 테마를 타야 한다.
+     *
+     * 밝은 모드의 배경(#e9e0cf)과 반죽(#f6efe2)은 거의 같은 크림색이라, 원판이
+     * 배경에서 떠오르는 정도가 1.1:1밖에 안 된다 — **이 게임의 주인공이 배경에 묻힌다.**
+     * 테두리마저 크러스트색이면 윤곽도 안 잡힌다(1.25:1).
+     *
+     * 조각판과 조립판은 이미 이렇게 하고 있었다(reveal.ts, slice-view.ts).
+     * 그리는 캔버스만 빠져 있었다.
+     */
+    ctx.strokeStyle = isLight() ? '#a8977c' : '#d9c9a8';
     ctx.stroke();
 
     // 그리는 중인 획도 고른 색 그대로 나가야 한다. 기본색으로 그렸다가 손을 떼는 순간

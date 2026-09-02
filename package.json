@@ -23,7 +23,8 @@
     "start": "node --import tsx src/server/index.ts",
     "shots": "node scripts/shot-bots.mjs",
     "public": "node scripts/public.mjs",
-    "public:local": "node scripts/public.mjs --no-tunnel"
+    "public:local": "node scripts/public.mjs --no-tunnel",
+    "shoot": "node scripts/shoot.mjs"
   },
   "dependencies": {
     "ws": "^8.21.2"
