@@ -21,7 +21,9 @@
     "icons": "node scripts/make-icons.mjs",
     "preview": "vite preview --port 4173",
     "start": "node --import tsx src/server/index.ts",
-    "shots": "node scripts/shot-bots.mjs"
+    "shots": "node scripts/shot-bots.mjs",
+    "public": "node scripts/public.mjs",
+    "public:local": "node scripts/public.mjs --no-tunnel"
   },
   "dependencies": {
     "ws": "^8.21.2"

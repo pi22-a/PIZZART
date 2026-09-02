@@ -31,12 +31,40 @@ TWA는 최상위 하나에만 묶는다. 스테이징을 서브도메인으로 �
 **`https://pizzagame.app`이 살아 있다.** 다만 아직 서버가 아니라 **이 컴퓨터**를 가리킨다 —
 Cloudflare 이름 붙인 터널로 이어둔 것이라 **컴퓨터가 꺼지면 같이 내려간다.**
 
+| | 어디서 | 포트 | 무엇을 |
+|---|---|---|---|
+| **공개** | `PIZZA-play` (태그에 고정) | **8090** | `pizzagame.app`이 가리키는 것 |
+| **개발** | `PIZZA` (`v1.7` 브랜치) | 5173 / 8080 | 고치고 시험하는 곳 |
+
+**공개는 개발 저장소에서 돌리지 않는다.** 한동안 그렇게 돌렸는데, 그러면 개발 브랜치를
+빌드한 것이 그대로 사용자에게 나간다 — `main`이 프로덕션이라는 규율이 무너진다.
+`PIZZA-play` 워크트리를 **태그에 고정해 두고 거기서 빌드해 돌린다.** 그래서 개발 쪽을
+아무리 고쳐도 공개 중인 판은 흔들리지 않는다.
+
+포트를 8080이 아니라 8090으로 둔 이유도 그것이다. 개발 서버가 8080을 쓰므로,
+같이 쓰면 개발하는 순간 공개가 죽는다.
+
+### 띄우는 법
+
+```bash
+# 공개 (pizzagame.app) — 터미널 둘
+cd ~/pi22a/PIZZA-play && git checkout v1.6.1 && npm run build && PORT=8090 npm start
+cloudflared tunnel run pizza
+
+# 개발 — 공개와 아무 상관 없이 돈다
+cd ~/pi22a/PIZZA && npm run dev
 ```
-개발      localhost:5173 / 8080      npm run dev
-놀이판    localhost:5174 / 8081      npm run play:all   (git worktree, 특정 태그에 고정)
-공개      pizzagame.app → localhost:8080
-          npm run build && npm start   +   cloudflared tunnel run pizza
+
+### 새 버전을 공개에 올리는 법
+
+```bash
+cd ~/pi22a/PIZZA-play
+git fetch && git checkout <새태그>   # 예: v1.6.2
+npm run build
+# PORT=8090 npm start 를 다시 띄운다 (Ctrl+C 후 재실행)
 ```
+
+**사람이 없을 때 올린다.** 방 상태가 메모리에만 있어서 재시작하면 돌던 판이 날아간다.
 
 ### 이름 붙인 터널 만든 방법 (한 번만 하면 된다)
 
@@ -62,6 +90,123 @@ cloudflared tunnel ingress validate            # OK 나와야 한다
 `PIZZA-play`는 `.git`을 공유하는 워크트리다. 개발하면서 동시에 안정된 판을 띄우려고
 만들었다. **이 구조가 그대로 스테이징이 된다** — 서버로 옮겨도 하는 일은 같다:
 "이 태그를 배포한다".
+
+---
+
+## 서버로 옮기기 (AWS Lightsail)
+
+지금은 `pizzagame.app`이 노트북을 가리킨다. 24시간 열어두려면 서버가 필요하다 —
+Play의 12명 테스트도 그게 있어야 시작할 수 있다.
+
+### 앞단은 Caddy가 아니라 터널로 간다
+
+처음엔 Caddy를 적어뒀지만, 서버로 옮기는 지금은 **터널을 그대로 서버에 옮기는 쪽이
+낫다.** 이유는 셋이다.
+
+1. **이미 되는 것을 옮기기만 하면 된다.** 노트북에서 검증이 끝났다.
+2. **열어둘 포트가 없다.** 터널은 서버가 밖으로 나가서 붙는다. Lightsail 방화벽에서
+   SSH만 남기고 전부 닫아도 된다. 서버 IP가 노출되지 않는다.
+3. **인증서를 다룰 일이 없다.** TLS는 Cloudflare가 맡는다. Let's Encrypt 갱신,
+   Cloudflare 프록시와 인증서 발급이 부딪히는 문제 같은 것이 아예 안 생긴다.
+
+Caddy 설정은 아래에 남겨두지만, 터널을 쓰면 필요 없다.
+
+### ⚠️ 터널을 두 곳에서 돌리지 말 것
+
+**가장 조심할 것이다.** 같은 터널을 노트북과 서버에서 동시에 돌리면 Cloudflare가 둘로
+**나눠 보낸다.** 이 게임은 방 상태가 각 서버 메모리에만 있으므로, 친구는 A 서버 방에
+있고 나는 B 서버 방에 들어가 **같은 방 코드인데 서로 안 보이는** 일이 벌어진다.
+원인을 찾기가 아주 어려운 종류다.
+
+서버에서 켜기 전에 **노트북 쪽을 반드시 끈다.**
+
+### 한 대만 돌린다
+
+같은 이유로 서버를 여러 대로 늘리지 못한다. 방이 메모리에 있어서다. 4~9명짜리 방
+수십 개는 512MB 한 대로 충분하다.
+
+### 순서
+
+**1. 인스턴스 만들기** (Lightsail 콘솔)
+
+| | |
+|---|---|
+| 리전 | **서울 (ap-northeast-2)** — 노는 사람이 한국에 있다 |
+| 이미지 | Linux/Unix → **Ubuntu 24.04 LTS** |
+| 요금제 | $5 (512MB)로 충분하다. 빌드가 빠듯하면 스왑이 받쳐준다(스크립트가 만든다) |
+| 키 | SSH 키를 새로 만들어 받아둔다 → `../PIZZA-release/keys/` |
+
+**2. 방화벽 조이기** — Networking 탭에서 **SSH(22)만 남기고 HTTP/HTTPS 규칙을 지운다.**
+터널은 나가는 연결만 쓰므로 들어오는 문을 열 필요가 없다.
+
+**3. 배포 키 등록** — 저장소가 비공개라 서버가 그냥 못 받아온다.
+
+```bash
+ssh -i <키> ubuntu@<서버IP>
+ssh-keygen -t ed25519 -C "pizza-deploy" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub
+```
+
+나온 값을 GitHub → 저장소 → Settings → Deploy keys → **Add deploy key**(쓰기 권한 없이)에 넣는다.
+
+**4. 세팅 스크립트**
+
+```bash
+curl -O https://raw.githubusercontent.com/... # 또는 scp로 deploy/setup-server.sh 전송
+bash setup-server.sh
+```
+
+스왑 → Node → 저장소(최신 태그) → 빌드 → 서비스 등록까지 한다. 끝나면 확인:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8090/    # 200 이어야 한다
+```
+
+**5. 터널을 서버로 옮기기**
+
+노트북의 자격 증명을 서버로 복사한다. 터널을 새로 만들 필요가 없다 — 같은 터널이다.
+
+```bash
+# 노트북에서
+scp -i <키> ~/.cloudflared/<터널UUID>.json ubuntu@<서버IP>:~/
+scp -i <키> ~/.cloudflared/config.yml ubuntu@<서버IP>:~/
+
+# 서버에서
+sudo mkdir -p /etc/cloudflared
+sudo mv ~/<터널UUID>.json ~/config.yml /etc/cloudflared/
+sudo sed -i 's|/Users/imiyeon/.cloudflared|/etc/cloudflared|' /etc/cloudflared/config.yml
+# cloudflared 설치 (arm64 인스턴스면 arm64로 받는다)
+curl -L -o cf.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cf.deb
+sudo cloudflared service install
+sudo systemctl status cloudflared
+```
+
+**6. 노트북 터널 끄기** — 위 경고 참조. 이걸 안 하면 방이 갈린다.
+
+**7. 확인**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://pizzagame.app/
+```
+
+### 새 버전 올리기
+
+```bash
+ssh ubuntu@<서버IP>
+cd ~/PIZZA && git fetch --tags && git checkout <새태그>
+npm ci && npm run build
+sudo systemctl restart pizza
+```
+
+**사람이 없을 때 한다.** 재시작하면 돌던 판이 전부 날아간다.
+
+### 되돌리기
+
+```bash
+cd ~/PIZZA && git checkout <이전태그> && npm ci && npm run build
+sudo systemctl restart pizza
+```
 
 ---
 
