@@ -26,14 +26,38 @@ TWA는 최상위 하나에만 묶는다. 스테이징을 서브도메인으로 �
 
 ---
 
-## 지금 상태 (2026-08-31)
+## 지금 상태 (2026-09-02)
 
-아직 **배포 전**이다. 노트북에서 임시 터널로 지인들과 논다.
+**`https://pizzagame.app`이 살아 있다.** 다만 아직 서버가 아니라 **이 컴퓨터**를 가리킨다 —
+Cloudflare 이름 붙인 터널로 이어둔 것이라 **컴퓨터가 꺼지면 같이 내려간다.**
 
 ```
 개발      localhost:5173 / 8080      npm run dev
 놀이판    localhost:5174 / 8081      npm run play:all   (git worktree, 특정 태그에 고정)
+공개      pizzagame.app → localhost:8080
+          npm run build && npm start   +   cloudflared tunnel run pizza
 ```
+
+### 이름 붙인 터널 만든 방법 (한 번만 하면 된다)
+
+```bash
+cloudflared tunnel login                       # 브라우저에서 pizzagame.app 승인
+cloudflared tunnel create pizza                # ~/.cloudflared/<UUID>.json 이 생긴다
+cloudflared tunnel route dns pizza pizzagame.app   # CNAME 자동 생성
+# ~/.cloudflared/config.yml 작성 → deploy/tunnel-config.example.yml 참조
+cloudflared tunnel ingress validate            # OK 나와야 한다
+```
+
+`login`은 **브라우저 승인이 끝날 때까지 그 프로세스가 살아 있어야 한다.** 중간에 죽으면
+승인은 되었는데 인증서를 받아 적을 곳이 없어 `cert.pem`이 안 생긴다(실제로 겪었다).
+
+임시 터널(`--tunnel`, `trycloudflare.com`)과 달리 **주소가 안 바뀐다.** 친구에게 한 번
+보낸 주소가 계속 유효하고, PWA를 설치해 둬도 그대로 열린다.
+
+### 서버로 옮길 때
+
+바꿀 것은 앞단뿐이다. `npm run build && npm start`는 서버에서도 똑같고, 터널을 서버에서
+돌리거나 Caddy로 바꾸면 된다. **애플리케이션 쪽은 손댈 것이 없다.**
 
 `PIZZA-play`는 `.git`을 공유하는 워크트리다. 개발하면서 동시에 안정된 판을 띄우려고
 만들었다. **이 구조가 그대로 스테이징이 된다** — 서버로 옮겨도 하는 일은 같다:
