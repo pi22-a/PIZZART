@@ -46,6 +46,8 @@
 
 ## 문서
 
+- [`docs/PLAY-CHECKLIST.md`](docs/PLAY-CHECKLIST.md) — **구글 플레이 출시 체크리스트.**
+  무엇이 끝났고 무엇이 남았는지, 그리고 순서를 그렇게 잡은 이유.
 - [`docs/RELEASE.md`](docs/RELEASE.md) — **배포와 릴리스.** 브랜치 규율, 프로덕션 빌드,
   서버 구성, 배포 전 점검, 구글 플레이 출시(TWA) 절차.
 - [`docs/UNITY-PORT.md`](docs/UNITY-PORT.md) — **유니티 이식 인수인계.** 확정된 규칙 수치,
