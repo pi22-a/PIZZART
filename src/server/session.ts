@@ -10,6 +10,7 @@ import { DEFAULT_COLOR, PALETTE, safeColor } from '../shared/palette';
 import { loadRules, loadTopics, pickWord, type Rules, type Topic } from './content';
 import { realScheduler, type Scheduler } from './scheduler';
 import { judge } from './judge';
+import { maskProfanity } from './profanity';
 import type { AnswerRow } from '../shared/protocol';
 
 interface Player {
@@ -828,7 +829,9 @@ export class Session {
     // String(text)를 그냥 부르지 않는다. JSON으로는 못 오는 값이지만, 바깥에서 온 것을
     // 문자열로 바꾸는 일 자체가 남의 코드를 부르는 일이다(toString). 글자면 글자만 받는다.
     if (typeof text !== 'string') return;
-    const clean = text.trim().slice(0, Session.CHAT_LEN);
+    // 채팅은 막지 않고 가린다. 한 줄 흘려보내자고 판을 세울 이유가 없고,
+    // 무슨 말을 했는지는 남되 그 글자만 안 보이면 된다.
+    const clean = maskProfanity(text.trim().slice(0, Session.CHAT_LEN));
     if (clean.length === 0) return;
 
     const line: ChatLine = {

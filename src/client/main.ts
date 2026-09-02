@@ -929,7 +929,18 @@ function onMsg(m: ServerMsg): void {
     setTag('galleryNote', '');
     return;
   }
-  if (m.t === 'error') { alert(m.msg); return; }
+  if (m.t === 'error') {
+    // 이름이 막혔으면 알림창만 띄우고 끝낼 수 없다. 저장된 이름으로 자동 입장하는
+    // 사람은 방에도 못 들어간 채 빈 화면에 갇힌다 — 고칠 수 있는 자리로 되돌린다.
+    if (m.kind === 'name') {
+      enterName.value = '';
+      setTag('enterHint', m.msg);
+      show('enter');
+      return;
+    }
+    alert(m.msg);
+    return;
+  }
 }
 
 /**

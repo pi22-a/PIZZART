@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { normalizeRoomCode } from '../shared/room';
+import { hasProfanity } from './profanity';
 import { serveStatic } from './static';
 import { Session } from './session';
 import { saveDrawing } from './gallery';
@@ -245,9 +246,15 @@ wss.on('connection', (socket, req) => {
         return;
       }
       if (msg.t !== 'createRoom') return;
+      // 방 제목은 목록에 걸려 아무 상관 없는 사람 눈에까지 든다. 가리지 않고 되돌린다.
+      const wanted = String(msg.name ?? '').trim().slice(0, 20);
+      if (hasProfanity(wanted)) {
+        socket.send(JSON.stringify({ t: 'error', msg: '방 제목에 쓸 수 없는 말이 있습니다', kind: 'roomName' } satisfies ServerMsg));
+        return;
+      }
       const code = newRoomCode();
       const s = sessionFor(code);
-      s.name = String(msg.name ?? '').trim().slice(0, 20) || '새 방';
+      s.name = wanted || '새 방';
       socket.send(JSON.stringify({ t: 'roomCreated', room: code } satisfies ServerMsg));
       notifyLobby();
     });
@@ -292,7 +299,14 @@ wss.on('connection', (socket, req) => {
         seats.set(seatKey, conn.actorId);
       }
       actors.set(conn.actorId, conn);
-      const name = String(msg.name ?? '').trim().slice(0, 12) || '손님';
+      const wantedName = String(msg.name ?? '').trim().slice(0, 12);
+      // 이름은 판이 끝날 때까지 결과 화면과 이야기판에 계속 남는다. 별표로 가려두면
+      // 그 별표가 판 내내 따라다니므로, 아예 안 받고 이유를 알려준다.
+      if (hasProfanity(wantedName)) {
+        socket.send(JSON.stringify({ t: 'error', msg: '이름에 쓸 수 없는 말이 있습니다', kind: 'name' } satisfies ServerMsg));
+        return;
+      }
+      const name = wantedName || '손님';
       session.join(conn.actorId, name);
       notifyLobby();
       return;

@@ -296,4 +296,8 @@ export type ServerMsg =
   | { t: 'roomCreated'; room: string }
   /** 이 방에서 나가라는 뜻. 로비로 돌려보낸다. */
   | { t: 'kicked'; msg: string }
-  | { t: 'error'; msg: string };
+  /**
+   * kind는 화면이 어디로 돌아가야 하는지를 말한다. 이름이 거부되면 알림창만 띄워서는
+   * 안 된다 — 저장된 이름으로 자동 입장하는 사람은 그 자리에서 갇힌다.
+   */
+  | { t: 'error'; msg: string; kind?: 'name' | 'roomName' };

@@ -1552,6 +1552,22 @@ describe('이야기 — 결과·최종 화면에서만', () => {
     expect(chats().length).toBe(0);
   });
 
+  it('욕설은 별표로 가려서 내보낸다 — 막지는 않는다', () => {
+    toRoundEnd();
+    sent = [];
+    s.chat('p2', '와 시발 이걸 맞추네');
+    const line = (chats().at(-1) as Extract<ServerMsg, { t: 'chat' }>).line;
+    expect(line.text).toBe('와 ** 이걸 맞추네');
+  });
+
+  it('멀쩡한 말은 그대로 나간다 — 이 게임은 대화가 곧 게임이다', () => {
+    toRoundEnd();
+    sent = [];
+    s.chat('p2', '고양이 새끼인 줄 알았네');
+    const line = (chats().at(-1) as Extract<ServerMsg, { t: 'chat' }>).line;
+    expect(line.text).toBe('고양이 새끼인 줄 알았네');
+  });
+
   it('결과 화면에서는 받아서 전원에게 보낸다', () => {
     toRoundEnd();
     sent = [];
