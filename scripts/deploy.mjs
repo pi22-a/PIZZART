@@ -76,7 +76,9 @@ if (rooms === null) {
 
 // ── 3. 올린다 ──
 console.log(c.dim('\n  서버에서 받아 빌드하는 중…'));
-ssh('cd ~/PIZZART && git fetch --tags -q && git checkout -q main && git pull -q --ff-only && npm ci --silent && npm run build');
+// --force로 받는다. 태그를 옮긴 적이 있으면(옮기지 말아야 하지만) 평범한 fetch는
+// "would clobber existing tag"로 거부하고, 그러면 배포가 통째로 멈춘다.
+ssh('cd ~/PIZZART && git fetch --tags --force -q && git checkout -q main && git pull -q --ff-only && npm ci --silent && npm run build');
 console.log(c.dim('  재시작…'));
 ssh('sudo systemctl restart pizzart');
 
