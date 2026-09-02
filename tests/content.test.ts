@@ -4,7 +4,7 @@ import { loadRules, loadTopics, pickWord } from '../src/server/content';
 describe('loadRules', () => {
   it('숫자 손잡이를 파일에서 읽는다', () => {
     const r = loadRules();
-    expect(r.minPlayers).toBe(4);
+    expect(r.minPlayers).toBe(3);
     expect(r.maxPlayers).toBe(9);
     expect(r.sliceCountMin).toBe(8);
     expect(r.maxAttempts).toBeGreaterThanOrEqual(2);

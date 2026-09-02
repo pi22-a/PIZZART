@@ -57,6 +57,8 @@ export type ClientMsg =
   | { t: 'start' }
   /** 로비에서 방장이 주제를 고정한다. null이면 라운드마다 무작위. */
   | { t: 'setTopics'; topics: string[] }
+  /** 방장이 방 정원을 정한다. 지금 있는 사람 수 아래로는 못 내려간다. */
+  | { t: 'setCapacity'; max: number }
   /**
    * 관전으로 돌리거나 참여로 돌아온다. 로비에서만, 본인만.
    *
@@ -175,6 +177,10 @@ export type ServerMsg =
       now: number;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
+      /** 이 방의 정원. 방장이 줄일 수 있다 */
+      maxPlayers: number;
+      /** 방장이 정원을 올릴 수 있는 한계 (규칙이 정한 상한) */
+      capacityMax: number;
       /**
        * 흑백판인가 컬러판인가.
        *

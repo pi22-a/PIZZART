@@ -8,6 +8,7 @@ import {
   renderTopics,
   syncClock,
   renderWatch, countdown, stopSpinHint, renderLobbyNote, renderSkipTally, renderRoundDots, renderChat,
+  renderCapacity,
   flashHost, toast, scrollChatToBottom,
 } from './screens';
 import { DoodleBoard, COLORS as DOODLE_COLORS } from './doodle';
@@ -503,6 +504,29 @@ $('lateNameBtn').addEventListener('click', saveLateName);
 lateNameInput.addEventListener('keydown', (e: KeyboardEvent) => { if (enterSent(e)) saveLateName(); });
 
 $('rerollBtn').addEventListener('click', () => net.send({ t: 'reroll' }));
+/** 지금 방 정원과 그 한계. 스테퍼가 다음 값을 계산하는 데 쓴다. */
+let capacityNow = 9;
+let capacityFloor = 3;
+let capacityCeil = 9;
+
+/**
+ * 스테퍼를 한 칸 옮긴다.
+ *
+ * 서버가 값을 돌려줄 때까지 기다리지 않고 먼저 옮긴다. 기다리면 연타가 통째로
+ * 먹히지 않는다 — 응답이 오기 전의 클릭은 전부 같은 값을 보내게 되어, 여덟 번을
+ * 눌러도 한 칸만 움직인다. 서버가 판정을 다시 하고 그 결과가 곧 화면을 덮으므로,
+ * 여기서 앞서 나가도 어긋난 채로 남지 않는다.
+ */
+function stepCapacity(delta: number): void {
+  const next = Math.min(capacityCeil, Math.max(capacityFloor, capacityNow + delta));
+  if (next === capacityNow) return;
+  capacityNow = next;
+  setTag('capValue', `${next}명`);
+  net.send({ t: 'setCapacity', max: next });
+}
+$('capMinusBtn').addEventListener('click', () => stepCapacity(-1));
+$('capPlusBtn').addEventListener('click', () => stepCapacity(1));
+
 $('startBtn').addEventListener('click', () => net.send({ t: 'start' }));
 $('doneBtn').addEventListener('click', () => net.send({ t: 'drawDone' }));
 $('undoBtn').addEventListener('click', () => net.send({ t: 'undo' }));
@@ -726,6 +750,11 @@ function onMsg(m: ServerMsg): void {
       ? ''
       : `${names.get(hostId) ?? '방장'} 님이 눌러야 새 판이 시작됩니다`;
     renderLobbyNote(m.players, youId, hostId, m.minPlayers);
+    capacityNow = m.maxPlayers;
+    capacityCeil = m.capacityMax;
+    // 서버와 같은 바닥을 쓴다: 최소 인원과 지금 있는 사람 수 중 큰 쪽.
+    capacityFloor = Math.max(m.minPlayers, m.players.filter((p) => p.connected).length);
+    renderCapacity(m.players, youId, hostId, m.maxPlayers, m.minPlayers, m.capacityMax);
 
     roomLocked = m.locked;
     roomLabel = `${m.roomName || '방'} · ${m.roomCode}`;

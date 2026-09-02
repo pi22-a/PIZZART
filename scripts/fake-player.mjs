@@ -71,7 +71,10 @@ ws.on('message', (raw) => {
       startSent = false;
     }
 
-    if (m.phase === 'lobby' && has('--host') && youId === m.hostId && m.players.length >= 4 && !startSent) {
+    // 인원 조건은 서버가 알려준 값을 쓴다. 숫자를 박아두면 최소 인원을 바꿀 때마다
+    // 봇이 조용히 시작을 안 해서, 규칙이 아니라 도구 때문에 판이 안 도는 일이 생긴다.
+    if (m.phase === 'lobby' && has('--host') && youId === m.hostId
+        && m.players.length >= (m.minPlayers ?? 4) && !startSent) {
       startSent = true;
       setTimeout(() => send({ t: 'start' }), 500);
     }

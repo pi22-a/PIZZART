@@ -66,8 +66,8 @@ const PLAYERS = [
 function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg {
   return {
     t: 'room', phase: 'guessing', players: PLAYERS, hostId: 'd',
-    round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
-    roomName: '테스트 방', roomCode: 'TEST', locked: false,
+    round: 0, totalRounds: 3, topic: '동물', attempt: 1, maxAttempts: 3, deadline: null, minPlayers: 3, topics: ['동물', '음식', '물건'], selectedTopics: [],
+    roomName: '테스트 방', roomCode: 'TEST', locked: false, maxPlayers: 9, capacityMax: 9,
     ...over,
   } as ServerMsg;
 }
@@ -234,6 +234,49 @@ describe('결과 화면이 새로고침 뒤에도 답을 보여준다 (수정 4)
     deliver(end());
     const items = [...$('revealAnswers').querySelectorAll('li')].map((li) => li.textContent ?? '');
     expect(items.find((t) => t.startsWith('출제자'))).toContain('+1점');
+  });
+});
+
+describe('방 정원 스테퍼', () => {
+  // 사람은 셋(PLAYERS)이고 최소 인원은 3, 상한은 9다.
+  const lobby = (over = {}) => room({ phase: 'lobby', hostId: 'me', ...over });
+
+  it('방장은 정원을 움직일 수 있고 지금 값이 보인다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ maxPlayers: 6 }));
+    expect($('capValue').textContent).toBe('6명');
+    expect($<HTMLButtonElement>('capMinusBtn').disabled).toBe(false);
+    expect($<HTMLButtonElement>('capPlusBtn').disabled).toBe(false);
+
+    $('capMinusBtn').click();
+    expect(live.out.filter((m) => m.t === 'setCapacity')).toEqual([{ t: 'setCapacity', max: 5 }]);
+  });
+
+  it('방장이 아니면 숫자만 읽는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(room({ phase: 'lobby', hostId: 'd', maxPlayers: 6 }));
+    expect($<HTMLButtonElement>('capMinusBtn').disabled).toBe(true);
+    expect($<HTMLButtonElement>('capPlusBtn').disabled).toBe(true);
+    expect($('capacityNote').textContent).toContain('방장');
+  });
+
+  it('상한에서는 더 올릴 수 없다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    deliver(lobby({ maxPlayers: 9 }));
+    expect($<HTMLButtonElement>('capPlusBtn').disabled).toBe(true);
+  });
+
+  it('지금 있는 사람 수까지 내려오면 멈추고 이유를 알려준다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    // PLAYERS는 셋인데 최소 인원도 3이라, 넷째가 있어야 "사람 때문에 멈췄다"가 된다
+    const four = [...PLAYERS, { ...PLAYERS[2], id: 'y', name: '넷째' }];
+    deliver(lobby({ players: four, maxPlayers: 4 }));
+    expect($<HTMLButtonElement>('capMinusBtn').disabled).toBe(true);
+    expect($('capacityNote').textContent).toContain('4명이 있어');
   });
 });
 

@@ -193,6 +193,12 @@
   .lobby-topic button { padding:8px 16px; background:var(--panel); color:var(--fg); border:1px solid var(--line); }
   .lobby-topic button.on { background:var(--sauce); color:#181818; border-color:var(--sauce); }
   .lobby-name label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--crust); }
+  /* 정원 스테퍼. 3~9를 버튼 일곱 개로 늘어놓으면 로비가 버튼밭이 된다 —
+     지금 값 하나만 크게 보여주고 양옆에서 하나씩 옮긴다. */
+  .stepper { display:flex; align-items:center; gap:10px; }
+  .stepper button { width:44px; padding:8px 0; font-size:18px; line-height:1;
+                    background:var(--panel); color:var(--fg); border:1px solid var(--line); }
+  .stepper .value { min-width:64px; text-align:center; font-size:20px; font-weight:700; }
   .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
   .lobby-start button { font-size:18px; padding:14px 28px; }
   /* 현황판: 맞히는 사람마다 한 줄, 그 줄에 그 사람이 보고 있는 조각들. */
@@ -353,6 +359,18 @@
         <button id="colorModeBtn" class="ghost"><span id="colorModeLabel">흑백</span></button>
       </div>
       <p class="muted" id="colorModeNote"></p>
+    </div>
+
+    <!-- 방 정원. 방장만 움직이고 나머지는 숫자만 읽는다.
+         버튼을 3부터 9까지 늘어놓지 않는 이유는 로비가 버튼밭이 되기 때문이다. -->
+    <div class="lobby-topic" id="capacityPick">
+      <label>정원</label>
+      <div class="stepper">
+        <button id="capMinusBtn" class="ghost" title="정원 줄이기">−</button>
+        <span class="value" id="capValue">9명</span>
+        <button id="capPlusBtn" class="ghost" title="정원 늘리기">+</button>
+      </div>
+      <p class="muted" id="capacityNote"></p>
     </div>
 
     <!-- 관전은 여기서만 고른다. 시작 뒤에는 못 바꾸고, 도중에 들어온 사람은

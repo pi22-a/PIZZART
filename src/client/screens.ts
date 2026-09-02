@@ -95,6 +95,39 @@ export function renderLobbyNote(
 }
 
 /**
+ * 방 정원 스테퍼.
+ *
+ * 방장이 아니면 숫자만 읽는다. 방장이어도 지금 있는 사람 수 아래로는 못 내리고
+ * (내리면 정원보다 사람이 많은 방이 된다) 규칙의 상한 위로는 못 올린다.
+ * 서버가 같은 판정을 다시 하므로 여기서 잠그는 것은 안내일 뿐이다.
+ */
+export function renderCapacity(
+  players: PlayerInfo[],
+  youId: string,
+  hostId: string,
+  max: number,
+  minPlayers: number,
+  capacityMax: number,
+): void {
+  const here = players.filter((p) => p.connected).length;
+  const floor = Math.max(minPlayers, here);
+  const isHost = youId === hostId;
+
+  setTag('capValue', `${max}명`);
+  ($('capMinusBtn') as HTMLButtonElement).disabled = !isHost || max <= floor;
+  ($('capPlusBtn') as HTMLButtonElement).disabled = !isHost || max >= capacityMax;
+
+  if (!isHost) {
+    setTag('capacityNote', '방장이 정합니다');
+  } else if (max <= floor && here > minPlayers) {
+    // 왜 더 안 줄어드는지 말해주지 않으면 버튼이 고장 난 것처럼 보인다.
+    setTag('capacityNote', `지금 ${here}명이 있어 더 줄일 수 없습니다`);
+  } else {
+    setTag('capacityNote', `${minPlayers}~${capacityMax}명. 줄이면 그 위로는 새로 못 들어옵니다`);
+  }
+}
+
+/**
  * 이번 회차를 몇 명이 마쳤는지와, 내가 스킵을 눌렀는지를 버튼 자체에 반영한다.
  *
  * 프로토콜에 새 필드를 추가하지 않는다 — room이 이미 실어 보내는 PlayerInfo만으로 계산된다.

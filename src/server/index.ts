@@ -79,7 +79,7 @@ function roomList(): RoomInfo[] {
       // 보이는 이름과 목록의 이름이 어긋난다.
       name: s.name || '방',
       count: s.connectedCount,
-      max: s.rules.maxPlayers,
+      max: s.capacity,
       phase: s.phase,
       round: s.roundNow,
       totalRounds: s.totalRounds,

@@ -72,18 +72,82 @@ function drawStar(playerId: string) {
 
 beforeEach(() => newSession());
 
+describe('방 정원', () => {
+  // 기본 세션은 p1~p4 넷이 들어와 있다(newSession).
+  const capOf = () => msgsOfType('room').at(-1)!.maxPlayers;
+
+  it('처음에는 규칙의 상한이 그대로 정원이다', () => {
+    expect(capOf()).toBe(TEST_RULES.maxPlayers);
+    expect(msgsOfType('room').at(-1)!.capacityMax).toBe(TEST_RULES.maxPlayers);
+  });
+
+  it('방장이 정원을 줄이면 그 위로는 못 들어온다', () => {
+    s.setCapacity('p1', 4);
+    expect(capOf()).toBe(4);
+    sent = [];
+    s.join('p5', 'p5');
+    // 거절된 입장은 방 상태를 다시 뿌리지 않는다 — 바뀐 것이 없다. 자리가 안 생겼다는
+    // 것은 인원수로 확인한다.
+    expect(msgsTo('p5').some((m) => m.t === 'error')).toBe(true);
+    expect(s.connectedCount).toBe(4);
+  });
+
+  it('지금 있는 사람 수 아래로는 못 내린다 — 정원보다 사람이 많은 방이 된다', () => {
+    s.setCapacity('p1', 3);
+    expect(capOf()).toBe(4);   // 넷이 앉아 있으므로 4에서 멈춘다
+  });
+
+  it('규칙의 상한 위로는 못 올린다', () => {
+    s.setCapacity('p1', 99);
+    expect(capOf()).toBe(TEST_RULES.maxPlayers);
+  });
+
+  it('방장이 아니면 못 바꾼다', () => {
+    s.setCapacity('p2', 5);
+    expect(capOf()).toBe(TEST_RULES.maxPlayers);
+  });
+
+  it('판이 도는 중에는 못 바꾼다 — 로비에서만 만지는 손잡이다', () => {
+    s.start('p1');
+    s.setCapacity('p1', 5);
+    expect(capOf()).toBe(TEST_RULES.maxPlayers);
+  });
+
+  it('정수가 아니면 무시한다', () => {
+    s.setCapacity('p1', 4.5);
+    expect(capOf()).toBe(TEST_RULES.maxPlayers);
+  });
+
+  it('줄였다가 다시 늘릴 수 있다', () => {
+    s.setCapacity('p1', 4);
+    s.setCapacity('p1', 6);
+    expect(capOf()).toBe(6);
+    sent = [];
+    s.join('p5', 'p5');
+    expect(msgsOfType('room').at(-1)!.players.some((p) => p.id === 'p5')).toBe(true);
+  });
+});
+
 describe('로비', () => {
   it('첫 입장자가 방장이 된다', () => {
     expect(msgsOfType('room').at(-1)!.hostId).toBe('p1');
   });
 
-  it('4명 미만이면 시작할 수 없다', () => {
+  it('최소 인원(3명) 미만이면 시작할 수 없다', () => {
     const small = new Session(() => {}, { scheduler: new ManualScheduler() });
     small.join('a', 'A');
     small.join('b', 'B');
-    small.join('c', 'C');
     small.start('a');
     expect(small.phase).toBe('lobby');
+  });
+
+  it('세 명이면 시작할 수 있다 — 출제자 하나에 맞히는 사람 둘', () => {
+    const three = new Session(() => {}, { scheduler: new ManualScheduler() });
+    three.join('a', 'A');
+    three.join('b', 'B');
+    three.join('c', 'C');
+    three.start('a');
+    expect(three.phase).toBe('drawing');
   });
 
   it('방장이 아니면 시작할 수 없다', () => {

@@ -122,6 +122,19 @@ export class Session {
    */
   locked = false;
 
+  /**
+   * 방장이 줄인 정원. null이면 규칙의 상한(maxPlayers)을 그대로 쓴다.
+   *
+   * 값 대신 null을 두는 것은 필드 초기화 시점에 rules가 아직 없기 때문이기도 하고,
+   * "손대지 않았다"와 "우연히 상한과 같은 값을 골랐다"를 구별하기 위해서다.
+   */
+  private capacityOverride: number | null = null;
+
+  /** 지금 이 방의 정원. 방 목록과 입장 판정이 함께 본다. */
+  get capacity(): number {
+    return this.capacityOverride ?? this.rules.maxPlayers;
+  }
+
   /** 만들어진 시각. 만든 사람이 도착하기 전에 빈 방으로 지워지는 것을 막는다. */
   readonly bornAt = Date.now();
 
@@ -233,7 +246,7 @@ export class Session {
     } else {
       // 끊긴 사람은 정원에 세지 않는다. 유령까지 세면 세 명 있는 방이
       // 진짜 사람에게 "방이 가득 찼습니다"를 돌려준다.
-      if (this.connectedCount >= this.rules.maxPlayers) {
+      if (this.connectedCount >= this.capacity) {
         this.send(id, { t: 'error', msg: '방이 가득 찼습니다' });
         return;
       }
@@ -317,6 +330,28 @@ export class Session {
     if (mode !== 'mono' && mode !== 'color') return;
     if (this.colorMode === mode) return;
     this.colorMode = mode;
+    this.broadcastRoom();
+  }
+
+  /**
+   * 방장이 정원을 줄이거나 늘린다. 로비에서, 방장만.
+   *
+   * 지금 있는 사람 수 아래로는 못 내린다. 내릴 수 있게 하면 "정원 4명"이라고 적힌
+   * 방에 여섯 명이 앉아 있게 되고, 그렇다고 남는 사람을 자동으로 내보내면 방장이
+   * 누른 적 없는 강퇴가 일어난다 — 내보내는 것은 강퇴 버튼이 할 일이다.
+   *
+   * 위로는 규칙의 상한(maxPlayers)까지다. 상한은 조각 나누기와 라운드 수가 감당하는
+   * 범위라 방장이 넘길 수 있는 값이 아니다.
+   */
+  setCapacity(playerId: string, max: number): void {
+    if (playerId !== this.hostId) return;
+    if (this.phase !== 'lobby') return;
+    if (!Number.isInteger(max)) return;
+
+    const floor = Math.max(this.rules.minPlayers, this.connectedCount);
+    const next = Math.min(this.rules.maxPlayers, Math.max(floor, max));
+    if (next === this.capacity) return;
+    this.capacityOverride = next;
     this.broadcastRoom();
   }
 
@@ -1136,6 +1171,7 @@ export class Session {
       case 'join': return this.join(playerId, msg.name);
       case 'start': return this.start(playerId);
       case 'setTopics': return this.setTopics(playerId, msg.topics);
+      case 'setCapacity': return this.setCapacity(playerId, msg.max);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'setLock': return this.setLock(playerId, msg.on);
       case 'setColorMode': return this.setColorMode(playerId, msg.mode);
@@ -1367,6 +1403,9 @@ export class Session {
       deadline: this.deadline,
       now: Date.now(),
       minPlayers: this.rules.minPlayers,
+      maxPlayers: this.capacity,
+      /** 방장이 정원을 올릴 수 있는 한계. 스테퍼의 위쪽 끝이다. */
+      capacityMax: this.rules.maxPlayers,
       topics: this.topics.map((t) => t.topic),
       selectedTopics: this.selectedTopics,
       roomName: this.name,
