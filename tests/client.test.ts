@@ -1438,6 +1438,81 @@ describe('판이 끝나면 그림을 모아 보여준다', () => {
   });
 });
 
+describe('테마는 고르기 전까지 기기 설정을 따라간다', () => {
+  /** matchMedia를 갈아 끼운다. jsdom에는 없어서 안 끼우면 아예 못 부른다. */
+  function withSystem(light: boolean) {
+    const listeners: Array<(e: { matches: boolean }) => void> = [];
+    const mql = {
+      matches: light,
+      addEventListener: (_t: string, fn: (e: { matches: boolean }) => void) => { listeners.push(fn); },
+      removeEventListener: () => {},
+    };
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (q: string) => (q.includes('light') ? mql : { matches: false, addEventListener() {}, removeEventListener() {} }),
+    });
+    return { fire: (m: boolean) => listeners.forEach((f) => f({ matches: m })) };
+  }
+  const theme = () => document.documentElement.dataset.theme;
+
+  it('기기가 밝은 모드면 밝게 뜬다', async () => {
+    withSystem(true);
+    await boot();
+    expect(theme()).toBe('light');
+  });
+
+  it('기기가 어두운 모드면 어둡게 뜬다', async () => {
+    withSystem(false);
+    await boot();
+    expect(theme()).toBe('dark');
+  });
+
+  it('한 번 고르면 기기 설정보다 그게 이긴다', async () => {
+    // 기기와 다르게 쓰고 싶은 사람의 뜻이 더 분명하다.
+    withSystem(true);
+    await boot();
+    expect(theme()).toBe('light');
+    $('themeBtn').click();
+    expect(theme()).toBe('dark');
+
+    await boot();                    // 다시 들어와도
+    expect(theme()).toBe('dark');    // 고른 값을 지킨다
+  });
+
+  it('고르기 전이면 기기 설정이 바뀔 때 따라간다', async () => {
+    const sys = withSystem(false);
+    await boot();
+    expect(theme()).toBe('dark');
+    sys.fire(true);
+    expect(theme()).toBe('light');
+  });
+
+  it('고른 뒤에는 기기 설정이 바뀌어도 안 흔들린다', async () => {
+    const sys = withSystem(false);
+    await boot();
+    $('themeBtn').click();           // 밝게로 고정
+    expect(theme()).toBe('light');
+    sys.fire(false);                 // 기기가 어두운 모드로 바뀌어도
+    expect(theme()).toBe('light');   // 내가 고른 것이 남는다
+  });
+
+  it('저장소를 못 쓰는 브라우저에서도 게임이 뜬다', async () => {
+    // 사생활 보호 모드에서는 읽기만 해도 예외가 난다. 기억은 편의지 게임의 조건이 아니다.
+    const real = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: { getItem() { throw new Error('막힘'); }, setItem() { throw new Error('막힘'); }, clear() {} },
+    });
+    try {
+      withSystem(true);
+      await expect(boot()).resolves.not.toThrow();
+      expect(theme()).toBe('light');
+    } finally {
+      if (real) Object.defineProperty(window, 'localStorage', real);
+    }
+  });
+});
+
 describe('판이 도는 동안 화면을 붙잡아 둔다', () => {
   /** navigator.wakeLock을 가짜로 끼우고 요청·해제를 센다. */
   function spyWakeLock() {

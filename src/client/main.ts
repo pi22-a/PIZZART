@@ -20,20 +20,55 @@ import { keepAwake } from './wake';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /**
- * 밝게/어둡게. 고른 값은 이 브라우저에 남는다.
- * 피자 캔버스는 어느 쪽에서도 종이처럼 읽히므로 배경과 글자색만 바꾼다.
+ * 브라우저에 남기는 값. 전부 이걸로 다룬다.
+ *
+ * localStorage는 사생활 보호 모드나 사이트 데이터 차단 설정에서 **읽기만 해도 예외를
+ * 던진다.** 예전에는 테마만 raw로 읽었는데, 그 줄이 모듈 맨 위에 있어서 예외가 나면
+ * 게임이 통째로 안 떴다. 기억은 편의지 게임의 조건이 아니다.
  */
+const keep = {
+  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* 무시 */ } },
+};
+
+/**
+ * 밝게/어둡게.
+ *
+ * **고른 적이 없으면 기기 설정을 따라간다.** 폰을 밝은 모드로 쓰는 사람에게 어두운
+ * 화면을 들이밀 이유가 없다. 한 번 누르면 그때부터는 고른 값이 이긴다 — 기기 설정과
+ * 다르게 쓰고 싶은 사람의 뜻이 더 분명하기 때문이다.
+ *
+ * 피자 원판은 어느 쪽에서도 종이처럼 읽히므로 배경과 글자색만 바꾼다. 다만 밝은
+ * 모드에서는 배경과 반죽이 거의 같은 크림색이라, 원판 테두리는 따로 진하게 한다
+ * (canvas.ts, screens.ts).
+ */
+const THEME_KEY = 'pizzart-theme';
 const themeBtn = $('themeBtn') as HTMLButtonElement;
+/** 기기가 밝은 모드인가. 지원하지 않는 브라우저면 어두운 쪽으로 본다. */
+const systemLight = () => window.matchMedia?.('(prefers-color-scheme: light)');
+
 function applyTheme(light: boolean): void {
   document.documentElement.dataset.theme = light ? 'light' : 'dark';
   themeBtn.textContent = light ? '☀️' : '🌙';
   themeBtn.title = light ? '어둡게 보기' : '밝게 보기';
 }
-applyTheme(localStorage.getItem('pizzart-theme') === 'light');
+
+function wantLight(): boolean {
+  const saved = keep.get(THEME_KEY);
+  if (saved) return saved === 'light';
+  return systemLight()?.matches === true;
+}
+applyTheme(wantLight());
+
 themeBtn.addEventListener('click', () => {
   const light = document.documentElement.dataset.theme !== 'light';
-  localStorage.setItem('pizzart-theme', light ? 'light' : 'dark');
+  keep.set(THEME_KEY, light ? 'light' : 'dark');
   applyTheme(light);
+});
+
+// 아직 고른 적이 없는 사람은 기기 설정이 바뀌면 따라간다. 고른 뒤에는 안 흔들린다.
+systemLight()?.addEventListener?.('change', (e) => {
+  if (!keep.get(THEME_KEY)) applyTheme(e.matches);
 });
 
 const params = new URLSearchParams(location.search);
@@ -66,10 +101,6 @@ const seat = isLocal ? (params.get('seat') ?? '') : '';
 const CID_KEY = seat ? `pizzart-cid:${seat}` : 'pizzart-cid';
 const NAME_KEY = seat ? `pizzart-name:${seat}` : 'pizzart-name';
 /** 사생활 모드에서는 저장이 막힌다. 그렇다고 판이 멈추면 안 된다. */
-const keep = {
-  get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
-  set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* 무시 */ } },
-};
 let cid = keep.get(CID_KEY);
 if (!cid) { cid = crypto.randomUUID(); keep.set(CID_KEY, cid); }
 
