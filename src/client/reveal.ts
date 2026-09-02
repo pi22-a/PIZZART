@@ -25,12 +25,9 @@ export function revealRound(
   el: HTMLCanvasElement,
   drawing: Stroke[],
   sliceCount: number,
-  owners: Array<{ sliceIndex: number; playerId: string | null }>,
-  youId: string,
 ): void {
   const ctx = el.getContext('2d')!;
   const pieces = slice(drawing, sliceCount);
-  const mine = owners.find((o) => o.playerId === youId)?.sliceIndex ?? -1;
   const step = (Math.PI * 2) / sliceCount;
   const start = performance.now();
 
@@ -63,8 +60,11 @@ export function revealRound(
       ctx.moveTo(CENTER[0], CENTER[1]);
       ctx.arc(CENTER[0], CENTER[1], RADIUS - 2, -Math.PI / 2 - step / 2, -Math.PI / 2 + step / 2);
       ctx.closePath();
-      ctx.strokeStyle = p.index === mine ? '#e0803a' : (isLight() ? '#a8977c' : '#d9c9a8');
-      ctx.lineWidth = p.index === mine ? 6 : 2;
+      // 조각선은 전부 같은 굵기·같은 색이다. 예전에는 내가 받았던 조각 하나만 주황으로
+      // 굵게 칠했는데, 이 화면의 주인공은 완성된 그림이지 누가 어느 조각을 봤느냐가 아니다.
+      // 굵은 주황 부채꼴이 그림 위에 얹히면 그림보다 그 선이 먼저 읽힌다.
+      ctx.strokeStyle = isLight() ? '#a8977c' : '#d9c9a8';
+      ctx.lineWidth = 2;
       ctx.stroke();
 
       ctx.save();

@@ -686,13 +686,21 @@ function onMsg(m: ServerMsg): void {
     if (m.phase === 'drawing') renderDoodleColors(m.players);
     renderRoundDots(m.round, m.phase === 'lobby' ? 0 : m.totalRounds);
     // 주제는 상단이 아니라 조각 옆에 있다. 시선이 이미 가 있는 자리라야 읽힌다.
-    setTag('guessTopic', m.topic);
+    setTag('guessTopic', m.topic ? `주제 : ${m.topic}` : '');
     // 그리는 화면에도 준다. 출제자도 관전자도 그동안 주제를 볼 데가 없었다.
-    setTag('drawTopic', m.topic ? `주제 ${m.topic}` : '');
+    setTag('drawTopic', m.topic ? `주제 : ${m.topic}` : '');
     // 소리는 시간이 도는 단계에서만 낸다. 결과 화면처럼 마감이 없는 곳은 조용하다.
+    const 그리는중 = m.phase === 'drawing';
     countdown(m.deadline, (left) => {
       if (m.phase === 'drawing' || m.phase === 'guessing') timeTick(left);
+      // 그리는 동안에는 양쪽 화면에 같은 숫자를 적는다. 그리는 사람은 손을 서두를지,
+      // 기다리는 사람은 낙서를 접을지 정하려면 둘 다 남은 시간을 알아야 한다.
+      const 남음 = 그리는중 ? `${left}초` : '';
+      setTag('drawTime', 남음);
+      setTag('waitTime', 남음);
     });
+    // 마감이 없는 단계(결과 화면 등)에서는 콜백이 아예 안 불린다. 지난 숫자가 남지 않게 지운다.
+    if (!그리는중) { setTag('drawTime', ''); setTag('waitTime', ''); }
 
     const me = m.players.find((p) => p.id === youId);
     iSolved = me?.solved === true;
@@ -793,9 +801,11 @@ function onMsg(m: ServerMsg): void {
     if (m.phase === 'guessing') {
       const last = m.attempt >= m.maxAttempts;
       const skipped = me?.skipped === true;
+      // 숫자만 적는다. "지금 맞히면"은 매 회차 같은 자리에서 반복되는 말이라,
+      // 몇 번 보고 나면 읽히지 않으면서 줄만 길게 만든다. 바뀌는 것은 숫자뿐이다.
       $('scoreTag').textContent = iSolved
         ? '맞혔습니다 — 점수 확정'
-        : `지금 맞히면 ${me?.pendingScore ?? 0}점`;
+        : `${me?.pendingScore ?? 0}점`;
       $('solvedWrap').style.display = iSolved ? '' : 'none';
 
       iSkipped = skipped;
@@ -905,7 +915,7 @@ function onMsg(m: ServerMsg): void {
           : '(무응답)';
       return { playerId: s.playerId, text, correct: m.correct.includes(s.playerId) };
     }), names);
-    revealRound($('revealCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount, m.owners, youId);
+    revealRound($('revealCanvas') as HTMLCanvasElement, m.drawing, m.sliceCount);
 
     return;
   }
@@ -965,7 +975,7 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
       $('doodleCanvas').classList.add('watching');
       return paintSpecView(phase);
     }
-    $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
+    $('waitTopic').textContent = topic ? `주제 : ${topic}` : '';
     $('waitWho').textContent = '관전 중 — 모두가 이 그림을 맞히는 중입니다';
     $('boardWrap').style.display = '';
     return show('wait');
@@ -988,7 +998,7 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
       return show('draw');
     }
     const drawer = players.find((p) => p.isDrawer);
-    $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
+    $('waitTopic').textContent = topic ? `주제 : ${topic}` : '';
     $('waitWho').textContent = `${drawer?.name ?? '누군가'} 님이 그리는 중입니다`;
     $('boardWrap').style.display = 'none';
     // 판을 먼저 띄우고 나서 비운다. 반대로 하면 아직 숨겨진 캔버스에 그려
@@ -1002,7 +1012,7 @@ function onPhase(phase: string, iDraw: boolean, players: PlayerInfo[], topic: st
   if (phase === 'guessing') {
     $('doodleWrap').style.display = 'none';
     if (iDraw) {
-      $('waitTopic').textContent = topic ? `주제 ${topic}` : '';
+      $('waitTopic').textContent = topic ? `주제 : ${topic}` : '';
       $('waitWho').textContent = '모두가 당신의 그림을 맞히는 중입니다';
       $('boardWrap').style.display = '';
       return show('wait');

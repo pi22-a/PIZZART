@@ -253,6 +253,36 @@ describe('긴 방 이름·코드가 상단 줄을 부풀리지 않는다', () =>
   });
 });
 
+describe('그리는 동안 남은 시간', () => {
+  it('그리는 사람과 기다리는 사람 화면에 같은 숫자가 뜬다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const now = Date.now();
+    deliver(room({ phase: 'drawing', deadline: now + 120_000, now }));
+    expect($('drawTime').textContent).toBe('120초');
+    expect($('waitTime').textContent).toBe('120초');
+  });
+
+  it('1초씩 줄어든다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const now = Date.now();
+    deliver(room({ phase: 'drawing', deadline: now + 120_000, now }));
+    vi.advanceTimersByTime(2000);
+    expect($('drawTime').textContent).toBe('118초');
+  });
+
+  it('그리는 단계가 아니면 지난 숫자가 남지 않는다', async () => {
+    await boot();
+    deliver({ t: 'joined', youId: 'me' });
+    const now = Date.now();
+    deliver(room({ phase: 'drawing', deadline: now + 120_000, now }));
+    deliver(room({ phase: 'roundEnd', deadline: null, now }));
+    expect($('drawTime').textContent).toBe('');
+    expect($('waitTime').textContent).toBe('');
+  });
+});
+
 describe('흑백/컬러 버튼', () => {
   it('컬러판이면 버튼이 켜진 색이 된다 — 다른 켜진 버튼과 같은 규칙이다', async () => {
     await boot();
@@ -854,7 +884,7 @@ describe('상단바는 조용해야 한다', () => {
 
   it('주제는 상단이 아니라 맞히는 화면에 있다', async () => {
     await guessing();
-    expect($('guessTopic').textContent).toBe('동물');
+    expect($('guessTopic').textContent).toBe('주제 : 동물');
   });
 });
 
@@ -1142,7 +1172,7 @@ describe('그리는 화면에도 주제가 있다', () => {
     await boot();
     deliver({ t: 'joined', youId: 'me' });
     deliver(room({ phase: 'drawing', topic: '동물' }));
-    expect($('drawTopic').textContent).toBe('주제 동물');
+    expect($('drawTopic').textContent).toBe('주제 : 동물');
   });
 });
 

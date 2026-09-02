@@ -39,6 +39,11 @@
   .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; font-size:14px; }
   .pill { background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 12px; }
   .pill.big { font-size:20px; padding:8px 18px; }
+  /* 점수는 <p>라 줄 전체로 늘어나 있었다. 두세 글자짜리 값 하나에 화면 폭을 다 쓸
+     이유가 없다 — 글자만큼만 차지하게 한다. */
+  #scoreTag { display:inline-block; }
+  /* 남은 시간. 숫자가 줄어드는 것이 보여야 하는 자리라 자간을 고정해 흔들리지 않게 한다. */
+  .pill.time { font-weight:700; font-variant-numeric:tabular-nums; }
   .pill.word { background:var(--sauce); color:#181818; font-weight:700; }
   button { font:inherit; padding:10px 18px; border-radius:10px; border:0;
            background:var(--sauce); color:#181818; font-weight:700; cursor:pointer; }
@@ -112,7 +117,10 @@
 
   /* 주제 — 화면에서 유일한 주황 알약이라 찾을 필요 없이 보인다. */
   .ask { margin-bottom:8px; }
-  .pill.topic { background:var(--sauce); color:#181818; font-weight:700; font-size:17px; padding:5px 15px; }
+  /* 주제는 답을 좁히는 유일한 단서다. 조각을 노려보다 고개를 들었을 때 한눈에
+     들어와야 해서, 옆의 안내 문구보다 확실히 크게 둔다. */
+  .pill.topic { background:var(--sauce); color:#181818; font-weight:800; font-size:24px;
+                padding:7px 20px; letter-spacing:.02em; }
 
   /* 관전 중에는 캔버스가 구경거리지 그리는 곳이 아니다. */
   #drawCanvas.watching, #doodleCanvas.watching { pointer-events:none; }
@@ -437,6 +445,9 @@
       <!-- 주제는 그리는 사람에게도 필요하다. 상단바를 걷어내면서 여기 넣는 걸 빠뜨려
            출제자와 관전자 둘 다 주제를 못 보고 있었다. -->
       <span class="pill" id="drawTopic"></span>
+      <!-- 그리는 사람도 남은 시간을 봐야 손을 서두를지 정한다. 예전에는 상단바에만
+           있었고, 상단바를 걷어내면서 시간이 통째로 사라져 있었다. -->
+      <span class="pill time" id="drawTime"></span>
       <span class="pill big word" id="wordTag"></span>
       <button id="doneBtn">다 그렸다</button>
       <button id="undoBtn">되돌리기</button>
@@ -455,7 +466,11 @@
 
   <section class="screen" id="s-wait">
     <h1 id="waitTopic"></h1>
-    <p class="muted" id="waitWho"></p>
+    <!-- 기다리는 쪽도 언제 끝나는지 알아야 낙서를 접고 조각 받을 준비를 한다. -->
+    <div class="bar">
+      <span class="pill big time" id="waitTime"></span>
+      <span class="muted" id="waitWho"></span>
+    </div>
 
     <!-- 기다리는 사람들이 같이 갈기는 판. 점수와도 제시어와도 아무 상관이 없다 —
          빈 화면을 90초 보고 있는 것이 문제였을 뿐이다. 출제자에게는 안 보인다. -->
@@ -496,7 +511,6 @@
              답을 치기 직전에 지나가는 자리라야 실제로 읽힌다. -->
         <div class="bar ask">
           <span class="pill topic" id="guessTopic"></span>
-          <span class="muted" id="guessLabel">무엇을 그린 걸까요</span>
         </div>
         <p class="pill big" id="scoreTag"></p>
         <div class="bar">
