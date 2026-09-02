@@ -30,7 +30,7 @@
 **appid 480(Spacewar)로 스팀 P2P를 그냥 테스트할 수 있다.** 돈 내기 전에 되는지부터 본다.
 
 - 유니티 버전: **6000.0.76f1 LTS** (개발 기간이 길어질 것이라 LTS를 쓴다)
-- 프로젝트 위치: `/Users/imiyeon/pi22a/PIZZA-unity`
+- 프로젝트 위치: `/Users/imiyeon/pi22a/PIZZART-unity`
 
 ---
 
@@ -45,7 +45,7 @@
 
 | | 웹판 | 유니티판 |
 |---|---|---|
-| 저장소 | 지금 `PIZZA` 그대로 | 별도 프로젝트 (`PIZZA-unity`) |
+| 저장소 | 지금 `PIZZART` 그대로 | 별도 프로젝트 (`PIZZART-unity`) |
 | 성격 | 링크 하나로 들어오는 판 | 설치해서 하는 판 |
 | 낼 곳 | **구글 플레이 (웹앱/TWA)** | **스팀** |
 | 상태 | 배포 준비 중 → `docs/RELEASE.md` | 별도 진행 |
@@ -58,7 +58,7 @@
 고치면 다른 쪽에 복사한다. 파일 몇 개라 손으로 옮겨도 부담이 없고, 자동화가 필요해질 만큼
 자주 바뀌면 그때 서브모듈을 생각한다.
 
-유니티에 바로 넣기 좋게 **한 파일로 합쳐둔 `content/pizza-content.json`** 을 같이 만들어뒀다.
+유니티에 바로 넣기 좋게 **한 파일로 합쳐둔 `content/pizzart-content.json`** 을 같이 만들어뒀다.
 `Resources/` 나 `StreamingAssets/` 에 그대로 떨구면 된다.
 
 ---
@@ -364,9 +364,9 @@ Mirror는 트랜스포트를 갈아 끼울 수 있어 구조적으로는 가능�
 
 **가져간다**
 
-- `content/pizza-content.json` — 규칙 + 제시어 450개를 한 파일로 합친 것
+- `content/pizzart-content.json` — 규칙 + 제시어 450개를 한 파일로 합친 것
 - 이 문서
-- `docs/superpowers/specs/2026-08-10-pizza-design.md` — 최초 설계 문서. 지금과 다른 부분이
+- `docs/superpowers/specs/2026-08-10-pizzart-design.md` — 최초 설계 문서. 지금과 다른 부분이
   있지만 "왜 이렇게 정했나"의 원본이다
 - `CHANGELOG.md` — 버전마다 무엇을 왜 바꿨는지. 같은 실수를 되풀이하지 않으려면 이게 제일 유용하다
 

@@ -3,7 +3,7 @@
 웹이 메인 제품이 되면서 필요해진 문서다. **지금 서버에 떠 있는 것이 무엇인지**를
 언제나 알 수 있어야 하고, 문제가 생겼을 때 되돌릴 방법이 있어야 한다.
 
-관련 문서 — 서명 키와 스토어 자산은 저장소 밖 금고에 있다 → `../PIZZA-release/README.md`
+관련 문서 — 서명 키와 스토어 자산은 저장소 밖 금고에 있다 → `../PIZZART-release/README.md`
 
 ## 도메인 — `pizzagame.app` (2026-08-31 확정)
 
@@ -17,7 +17,7 @@
 | 주소 | 쓰임 |
 |---|---|
 | `pizzagame.app` | **프로덕션.** TWA가 묶이는 곳. 사용자가 쓰는 판 |
-| `staging.pizzagame.app` | 배포 전 확인용. 지금 `PIZZA-play` 워크트리가 하던 일 |
+| `staging.pizzagame.app` | 배포 전 확인용. 지금 `PIZZART-play` 워크트리가 하던 일 |
 
 TWA는 최상위 하나에만 묶는다. 스테이징을 서브도메인으로 두면 앱이 그쪽으로 끌려가지
 않는다 — assetlinks를 프로덕션에만 두기 때문이다.
@@ -34,16 +34,16 @@ Cloudflare 이름 붙인 터널로 이어둔 것이라 **컴퓨터가 꺼지면 
 | | 어디서 | 포트 | 무엇을 |
 |---|---|---|---|
 | **공개** | **AWS Lightsail** (`3.35.168.66`, 태그에 고정) | 8090 | `pizzagame.app` — 24시간 |
-| **개발** | `PIZZA` (`v1.7` 브랜치) | 5173 / 8080 | 고치고 시험하는 곳 |
-| 예비 | `PIZZA-play` 워크트리 | 8090 | 서버가 죽었을 때 노트북에서 임시로 |
+| **개발** | `PIZZART` (`v1.7` 브랜치) | 5173 / 8080 | 고치고 시험하는 곳 |
+| 예비 | `PIZZART-play` 워크트리 | 8090 | 서버가 죽었을 때 노트북에서 임시로 |
 
 **2026-09-02, 서버로 옮겼다.** 이제 노트북을 꺼도 `pizzagame.app`이 열려 있다.
-`PIZZA-play`에서 `npm run public`을 돌리는 것은 **서버가 죽었을 때의 예비 수단**으로만
+`PIZZART-play`에서 `npm run public`을 돌리는 것은 **서버가 죽었을 때의 예비 수단**으로만
 쓴다 — 그때도 서버의 cloudflared를 먼저 멈춰야 한다(방이 갈린다).
 
 **공개는 개발 저장소에서 돌리지 않는다.** 한동안 그렇게 돌렸는데, 그러면 개발 브랜치를
 빌드한 것이 그대로 사용자에게 나간다 — `main`이 프로덕션이라는 규율이 무너진다.
-`PIZZA-play` 워크트리를 **태그에 고정해 두고 거기서 빌드해 돌린다.** 그래서 개발 쪽을
+`PIZZART-play` 워크트리를 **태그에 고정해 두고 거기서 빌드해 돌린다.** 그래서 개발 쪽을
 아무리 고쳐도 공개 중인 판은 흔들리지 않는다.
 
 포트를 8080이 아니라 8090으로 둔 이유도 그것이다. 개발 서버가 8080을 쓰므로,
@@ -53,17 +53,17 @@ Cloudflare 이름 붙인 터널로 이어둔 것이라 **컴퓨터가 꺼지면 
 
 ```bash
 # 공개 (pizzagame.app) — 터미널 둘
-cd ~/pi22a/PIZZA-play && git checkout v1.6.1 && npm run build && PORT=8090 npm start
-cloudflared tunnel run pizza
+cd ~/pi22a/PIZZART-play && git checkout v1.6.1 && npm run build && PORT=8090 npm start
+cloudflared tunnel run pizzart
 
 # 개발 — 공개와 아무 상관 없이 돈다
-cd ~/pi22a/PIZZA && npm run dev
+cd ~/pi22a/PIZZART && npm run dev
 ```
 
 ### 새 버전을 공개에 올리는 법
 
 ```bash
-cd ~/pi22a/PIZZA-play
+cd ~/pi22a/PIZZART-play
 git fetch && git checkout <새태그>   # 예: v1.6.2
 npm run build
 # PORT=8090 npm start 를 다시 띄운다 (Ctrl+C 후 재실행)
@@ -75,8 +75,8 @@ npm run build
 
 ```bash
 cloudflared tunnel login                       # 브라우저에서 pizzagame.app 승인
-cloudflared tunnel create pizza                # ~/.cloudflared/<UUID>.json 이 생긴다
-cloudflared tunnel route dns pizza pizzagame.app   # CNAME 자동 생성
+cloudflared tunnel create pizzart                # ~/.cloudflared/<UUID>.json 이 생긴다
+cloudflared tunnel route dns pizzart pizzagame.app   # CNAME 자동 생성
 # ~/.cloudflared/config.yml 작성 → deploy/tunnel-config.example.yml 참조
 cloudflared tunnel ingress validate            # OK 나와야 한다
 ```
@@ -92,7 +92,7 @@ cloudflared tunnel ingress validate            # OK 나와야 한다
 바꿀 것은 앞단뿐이다. `npm run build && npm start`는 서버에서도 똑같고, 터널을 서버에서
 돌리거나 Caddy로 바꾸면 된다. **애플리케이션 쪽은 손댈 것이 없다.**
 
-`PIZZA-play`는 `.git`을 공유하는 워크트리다. 개발하면서 동시에 안정된 판을 띄우려고
+`PIZZART-play`는 `.git`을 공유하는 워크트리다. 개발하면서 동시에 안정된 판을 띄우려고
 만들었다. **이 구조가 그대로 스테이징이 된다** — 서버로 옮겨도 하는 일은 같다:
 "이 태그를 배포한다".
 
@@ -156,7 +156,7 @@ pgrep -fl "cloudflared tunnel"     # 아무것도 안 나와야 한다
 | 리전 | **서울 (ap-northeast-2)** — 노는 사람이 한국에 있다 |
 | 이미지 | Linux/Unix → **Ubuntu 24.04 LTS** |
 | 요금제 | $5 (512MB)로 충분하다. 빌드가 빠듯하면 스왑이 받쳐준다(스크립트가 만든다) |
-| 키 | SSH 키를 새로 만들어 받아둔다 → `../PIZZA-release/keys/` |
+| 키 | SSH 키를 새로 만들어 받아둔다 → `../PIZZART-release/keys/` |
 
 **2. 방화벽 조이기** — Networking 탭에서 **SSH(22)만 남기고 HTTP/HTTPS 규칙을 지운다.**
 터널은 나가는 연결만 쓰므로 들어오는 문을 열 필요가 없다.
@@ -165,7 +165,7 @@ pgrep -fl "cloudflared tunnel"     # 아무것도 안 나와야 한다
 
 ```bash
 ssh -i <키> ubuntu@<서버IP>
-ssh-keygen -t ed25519 -C "pizza-deploy" -f ~/.ssh/id_ed25519 -N ""
+ssh-keygen -t ed25519 -C "pizzart-deploy" -f ~/.ssh/id_ed25519 -N ""
 cat ~/.ssh/id_ed25519.pub
 ```
 
@@ -216,9 +216,9 @@ curl -s -o /dev/null -w '%{http_code}\n' https://pizzagame.app/
 
 ```bash
 ssh ubuntu@<서버IP>
-cd ~/PIZZA && git fetch --tags && git checkout <새태그>
+cd ~/PIZZART && git fetch --tags && git checkout <새태그>
 npm ci && npm run build
-sudo systemctl restart pizza
+sudo systemctl restart pizzart
 ```
 
 **사람이 없을 때 한다.** 재시작하면 돌던 판이 전부 날아간다.
@@ -226,8 +226,8 @@ sudo systemctl restart pizza
 ### 되돌리기
 
 ```bash
-cd ~/PIZZA && git checkout <이전태그> && npm ci && npm run build
-sudo systemctl restart pizza
+cd ~/PIZZART && git checkout <이전태그> && npm ci && npm run build
+sudo systemctl restart pizzart
 ```
 
 ---
@@ -314,20 +314,20 @@ pizzagame.app {
     reverse_proxy /ws* localhost:8080
 
     # 나머지는 빌드 결과물
-    root * /srv/pizza/dist
+    root * /srv/pizzart/dist
     file_server
 
     # TWA가 주소창을 감추려면 이 파일이 있어야 한다. 도메인이 앱을 인정한다는 증명서다.
     # Caddy는 점으로 시작하는 폴더를 기본으로 숨기므로 명시해 준다.
     handle /.well-known/assetlinks.json {
-        root * /srv/pizza/well-known
+        root * /srv/pizzart/well-known
         file_server
     }
 }
 
 staging.pizzagame.app {
     reverse_proxy /ws* localhost:8081
-    root * /srv/pizza-staging/dist
+    root * /srv/pizzart-staging/dist
     file_server
     # assetlinks를 두지 않는다. 앱이 스테이징으로 끌려가면 안 된다.
     basic_auth {
@@ -395,7 +395,7 @@ npx vite build
 2. **PWA 요건** — `manifest.webmanifest`, 아이콘 192·512, 서비스 워커
 3. **`/.well-known/assetlinks.json`** — 도메인이 이 앱을 인정한다는 증명서.
    빠뜨리면 앱 안에 주소창이 남는다. 안에 들어가는 지문(SHA-256)은 **서명 키**에서
-   나오므로, 키를 만든 뒤에야 이 파일을 만들 수 있다 → `../PIZZA-release/keys/`
+   나오므로, 키를 만든 뒤에야 이 파일을 만들 수 있다 → `../PIZZART-release/keys/`
 
    ```
    https://pizzagame.app/.well-known/assetlinks.json

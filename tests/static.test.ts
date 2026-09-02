@@ -15,7 +15,7 @@ let server: Server;
 let base: string;
 
 beforeAll(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'pizza-static-'));
+  dir = mkdtempSync(join(tmpdir(), 'pizzart-static-'));
   writeFileSync(join(dir, 'index.html'), '<!doctype html><title>화면</title>');
   mkdirSync(join(dir, 'assets'));
   writeFileSync(join(dir, 'assets', 'index-abc123.js'), 'console.log(1)');

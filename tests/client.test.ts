@@ -455,11 +455,11 @@ describe('초읽기 소리', () => {
     expect(btn.textContent).toBe('🔊');
     btn.click();
     expect(btn.textContent).toBe('🔇');
-    expect(localStorage.getItem('pizza-muted')).toBe('1');
+    expect(localStorage.getItem('pizzart-muted')).toBe('1');
   });
 
   it('껐던 설정은 새로고침해도 유지된다', async () => {
-    localStorage.setItem('pizza-muted', '1');
+    localStorage.setItem('pizzart-muted', '1');
     await boot();
     expect($<HTMLButtonElement>('muteBtn').textContent).toBe('🔇');
   });
@@ -1111,13 +1111,13 @@ describe('도중에 들어온 사람 이름칸', () => {
 });
 
 describe('방 대기 화면은 방에 대한 것만 보여준다', () => {
-  it('PIZZA 제목과 소개문은 이름 화면에만 있다', async () => {
+  it('PIZZART 제목과 소개문은 이름 화면에만 있다', async () => {
     // 로비로 들어올 때 이미 읽은 것이다. 방 안에서 또 나오면 주제와 시작 버튼이
     // 그만큼 아래로 밀린다.
     await boot();
     const lobby = $('s-lobby');
     expect(lobby.querySelector('h1')).toBeNull();
-    expect($('s-enter').querySelector('h1')?.textContent).toContain('P I Z Z A');
+    expect($('s-enter').querySelector('h1')?.textContent).toContain('PIZZART');
   });
 
   it('주제와 시작이 게임 방법보다 먼저 온다', async () => {
@@ -1532,7 +1532,7 @@ describe('공유는 한 번에 한 장만 나간다', () => {
   }
 
   it('한 번 누르면 공유도 한 번, 파일도 한 장이다', async () => {
-    // 카카오톡 전송창에 pizza.png가 두 장 떴다는 제보. 눌린 횟수와 실린 장수를 센다.
+    // 카카오톡 전송창에 pizzart.png가 두 장 떴다는 제보. 눌린 횟수와 실린 장수를 센다.
     const spy = spyShare();
     try {
       await boot();

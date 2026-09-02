@@ -148,7 +148,7 @@ export function drawGalleryCard(
   ctx.fillStyle = FG;
   ctx.globalAlpha = 0.35;
   ctx.font = `22px ${FONT}`;
-  ctx.fillText('P I Z Z A', PAD, H - PAD + 4);
+  ctx.fillText('PIZZART', PAD, H - PAD + 4);
   ctx.globalAlpha = 1;
 }
 
@@ -190,7 +190,7 @@ export async function shareCard(canvas: HTMLCanvasElement, _caption?: string): P
   const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
   if (!blob) return '그림을 만들지 못했습니다';
 
-  const file = new File([blob], 'pizza.png', { type: 'image/png' });
+  const file = new File([blob], 'pizzart.png', { type: 'image/png' });
   const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
   // 물어보는 것과 보내는 것이 **정확히 같은 꾸러미**여야 한다.
   const payload = { files: [file] };

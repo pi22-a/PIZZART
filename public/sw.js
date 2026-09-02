@@ -19,7 +19,7 @@
  * 찾기가 아주 어렵다. 온라인일 때는 언제나 서버 것을 쓰고, 캐시는 오직 끊겼을 때의
  * 대비책으로만 둔다.
  */
-const CACHE = 'pizza-v2';
+const CACHE = 'pizzart-v2';
 const OFFLINE = 'offline.html';
 
 self.addEventListener('install', (e) => {

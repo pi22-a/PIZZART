@@ -395,6 +395,6 @@ function clamp(v: number, lo: number, hi: number): number {
 
 console.log(
   existsSync(join(dist, 'index.html'))
-    ? `PIZZA 서버가 http://localhost:${PORT} 에서 화면과 게임을 함께 냅니다`
-    : `PIZZA 서버가 ws://localhost:${PORT} 에서 대기 중 (화면은 Vite가 맡습니다)`,
+    ? `PIZZART 서버가 http://localhost:${PORT} 에서 화면과 게임을 함께 냅니다`
+    : `PIZZART 서버가 ws://localhost:${PORT} 에서 대기 중 (화면은 Vite가 맡습니다)`,
 );

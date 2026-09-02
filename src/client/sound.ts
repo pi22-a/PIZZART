@@ -12,7 +12,7 @@ type Ctor = typeof AudioContext;
 let ctx: AudioContext | null = null;
 let muted = false;
 
-const KEY = 'pizza-muted';
+const KEY = 'pizzart-muted';
 
 /** 테스트 환경(jsdom)에는 AudioContext가 없다. 없으면 이 모듈은 통째로 무음이다. */
 function audioCtor(): Ctor | null {

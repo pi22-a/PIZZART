@@ -1,27 +1,27 @@
-# 게임 서버를 서비스로 돌린다. /etc/systemd/system/pizza.service 에 둔다.
+# 게임 서버를 서비스로 돌린다. /etc/systemd/system/pizzart.service 에 둔다.
 #
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now pizza
-#   sudo systemctl status pizza
-#   journalctl -u pizza -f          # 로그 보기
+#   sudo systemctl enable --now pizzart
+#   sudo systemctl status pizzart
+#   journalctl -u pizzart -f          # 로그 보기
 #
 # Restart=always 인 이유: 방 상태가 메모리에만 있어서 죽으면 돌던 판이 날아간다.
 # 되살아나도 그 판은 못 살리지만, 다음 판은 바로 할 수 있다.
 
 [Unit]
-Description=PIZZA 게임 서버
+Description=PIZZART 게임 서버
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/PIZZA
+WorkingDirectory=/home/ubuntu/PIZZART
 Environment=NODE_ENV=production
 # 8090을 쓰는 이유는 개발 서버(8080)와 습관을 맞추기 위해서다. 터널만 이 포트를 본다.
 Environment=PORT=8090
 # 그림 기록이 쌓이는 자리를 먼저 만든다. data/는 .gitignore라 새로 clone한 서버에는 없다.
-ExecStartPre=/bin/mkdir -p /home/ubuntu/PIZZA/data
+ExecStartPre=/bin/mkdir -p /home/ubuntu/PIZZART/data
 ExecStart=/usr/bin/node --import tsx src/server/index.ts
 Restart=always
 RestartSec=3

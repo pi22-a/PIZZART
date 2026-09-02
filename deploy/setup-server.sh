@@ -30,10 +30,10 @@ node --version
 
 echo "== 3/5 저장소 =="
 # 비공개 저장소다. 배포 키(읽기 전용)를 먼저 GitHub에 등록해 두어야 한다.
-if [ ! -d "$HOME/PIZZA" ]; then
-  git clone git@github.com:pi22-a/PIZZA.git "$HOME/PIZZA"
+if [ ! -d "$HOME/PIZZART" ]; then
+  git clone git@github.com:pi22-a/PIZZART.git "$HOME/PIZZART"
 fi
-cd "$HOME/PIZZA"
+cd "$HOME/PIZZART"
 git fetch --tags
 # 공개에는 언제나 태그를 쓴다. 브랜치를 쓰면 개발 중인 것이 사용자에게 나간다.
 LATEST=$(git tag --sort=-v:refname | head -1)
@@ -45,11 +45,11 @@ npm ci
 npm run build
 
 echo "== 5/5 서비스 =="
-sudo cp deploy/pizza.service /etc/systemd/system/pizza.service
+sudo cp deploy/pizzart.service /etc/systemd/system/pizzart.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now pizza
+sudo systemctl enable --now pizzart
 sleep 2
-sudo systemctl --no-pager status pizza | head -5
+sudo systemctl --no-pager status pizzart | head -5
 
 echo
 echo "완료. 확인: curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8090/"

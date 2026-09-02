@@ -96,7 +96,7 @@ run('서버', '36', bin('tsx'),
 run('화면', '35', bin('vite'), ['--port', String(web), '--strictPort'], {
   // 화면 서버가 /ws 를 어느 게임 서버로 넘길지. 두 쌍이 서로 남의 판에
   // 끼어들지 않으려면 이 짝이 맞아야 한다.
-  env: { PIZZA_SERVER: `ws://localhost:${game}` },
+  env: { PIZZART_SERVER: `ws://localhost:${game}` },
 });
 
 if (wantTunnel) {

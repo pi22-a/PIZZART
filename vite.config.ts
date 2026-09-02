@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-const GAME_SERVER = process.env.PIZZA_SERVER ?? 'ws://localhost:8080';
+const GAME_SERVER = process.env.PIZZART_SERVER ?? 'ws://localhost:8080';
 
 export default defineConfig({
   server: {
@@ -19,7 +19,7 @@ export default defineConfig({
       '.ngrok-free.app',
       '.ngrok.io',
       '.loca.lt',
-      ...(process.env.PIZZA_HOST ? [process.env.PIZZA_HOST] : []),
+      ...(process.env.PIZZART_HOST ? [process.env.PIZZART_HOST] : []),
     ],
   },
   test: { globals: true, environment: 'node' },

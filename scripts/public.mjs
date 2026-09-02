@@ -106,7 +106,7 @@ run('서버', '36', process.execPath, ['--import', 'tsx', 'src/server/index.ts']
 
 if (wantTunnel) {
   // 이름 붙인 터널이라 주소가 고정이다. cloudflared는 따로 깔아 쓰는 것이라 PATH에서 찾는다.
-  run('터널', '33', 'cloudflared', ['tunnel', 'run', 'pizza'], { optional: true });
+  run('터널', '33', 'cloudflared', ['tunnel', 'run', 'pizzart'], { optional: true });
 }
 
 console.log(`\n  공개  ${wantTunnel ? 'https://pizzagame.app' : '(터널 없음)'}   내 컴퓨터  http://localhost:${PORT}`);

@@ -38,11 +38,11 @@ https://play.google.com/console
 TWA를 만들려면 먼저 있어야 한다.
 
 ```bash
-keytool -genkeypair -v -keystore pizza-release.keystore \
-  -alias pizza -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkeypair -v -keystore pizzart-release.keystore \
+  -alias pizzart -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-- **`../PIZZA-release/keys/`에 넣는다.** 저장소에 절대 넣지 않는다
+- **`../PIZZART-release/keys/`에 넣는다.** 저장소에 절대 넣지 않는다
 - **잃어버리면 앱을 영영 업데이트할 수 없다.** 구글도 복구해 주지 않는다
 - 만들자마자 이 컴퓨터 밖에 백업한다(비밀번호 관리자 등). 비밀번호도 같이
 
@@ -83,7 +83,7 @@ https://pizzagame.app/.well-known/assetlinks.json
 
 ### [ ] 스크린샷 촬영 (폰 기준 2~8장)
 
-찍는 법과 여섯 화면 목록은 `../PIZZA-release/store/listing-ko.md` 참조.
+찍는 법과 여섯 화면 목록은 `../PIZZART-release/store/listing-ko.md` 참조.
 
 ```bash
 npm run build && npm start          # 터미널 1
@@ -98,7 +98,7 @@ ROOM=SHOT npm run shots             # 터미널 2
 
 ### [ ] 스토어 등록 정보 다듬기
 
-초안은 `../PIZZA-release/store/listing-ko.md` 에 있다. 앱 이름·짧은 설명·자세한 설명 완성.
+초안은 `../PIZZART-release/store/listing-ko.md` 에 있다. 앱 이름·짧은 설명·자세한 설명 완성.
 
 ### [ ] 콘텐츠 등급 설문
 
