@@ -31,12 +31,40 @@ TWA는 최상위 하나에만 묶는다. 스테이징을 서브도메인으로 �
 **`https://pizzagame.app`이 살아 있다.** 다만 아직 서버가 아니라 **이 컴퓨터**를 가리킨다 —
 Cloudflare 이름 붙인 터널로 이어둔 것이라 **컴퓨터가 꺼지면 같이 내려간다.**
 
+| | 어디서 | 포트 | 무엇을 |
+|---|---|---|---|
+| **공개** | `PIZZA-play` (태그에 고정) | **8090** | `pizzagame.app`이 가리키는 것 |
+| **개발** | `PIZZA` (`v1.7` 브랜치) | 5173 / 8080 | 고치고 시험하는 곳 |
+
+**공개는 개발 저장소에서 돌리지 않는다.** 한동안 그렇게 돌렸는데, 그러면 개발 브랜치를
+빌드한 것이 그대로 사용자에게 나간다 — `main`이 프로덕션이라는 규율이 무너진다.
+`PIZZA-play` 워크트리를 **태그에 고정해 두고 거기서 빌드해 돌린다.** 그래서 개발 쪽을
+아무리 고쳐도 공개 중인 판은 흔들리지 않는다.
+
+포트를 8080이 아니라 8090으로 둔 이유도 그것이다. 개발 서버가 8080을 쓰므로,
+같이 쓰면 개발하는 순간 공개가 죽는다.
+
+### 띄우는 법
+
+```bash
+# 공개 (pizzagame.app) — 터미널 둘
+cd ~/pi22a/PIZZA-play && git checkout v1.6.1 && npm run build && PORT=8090 npm start
+cloudflared tunnel run pizza
+
+# 개발 — 공개와 아무 상관 없이 돈다
+cd ~/pi22a/PIZZA && npm run dev
 ```
-개발      localhost:5173 / 8080      npm run dev
-놀이판    localhost:5174 / 8081      npm run play:all   (git worktree, 특정 태그에 고정)
-공개      pizzagame.app → localhost:8080
-          npm run build && npm start   +   cloudflared tunnel run pizza
+
+### 새 버전을 공개에 올리는 법
+
+```bash
+cd ~/pi22a/PIZZA-play
+git fetch && git checkout <새태그>   # 예: v1.6.2
+npm run build
+# PORT=8090 npm start 를 다시 띄운다 (Ctrl+C 후 재실행)
 ```
+
+**사람이 없을 때 올린다.** 방 상태가 메모리에만 있어서 재시작하면 돌던 판이 날아간다.
 
 ### 이름 붙인 터널 만든 방법 (한 번만 하면 된다)
 
