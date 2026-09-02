@@ -26,6 +26,6 @@ const out = {
   rules,
   topics,
 };
-writeFileSync(join(root, 'content', 'pizza-content.json'), JSON.stringify(out, null, 2) + '\n');
-console.log(`주제 ${topics.length}개 · 제시어 ${total}개 → content/pizza-content.json`);
+writeFileSync(join(root, 'content', 'pizzart-content.json'), JSON.stringify(out, null, 2) + '\n');
+console.log(`주제 ${topics.length}개 · 제시어 ${total}개 → content/pizzart-content.json`);
 for (const t of topics) console.log(`  ${t.topic} ${t.words.length}개`);

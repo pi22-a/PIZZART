@@ -34,6 +34,17 @@ interface Player {
 }
 
 /** 한 라운드가 끝날 때 남기는 기록. 나중에 '지난 그림 보기' 모드의 재료가 된다. */
+/**
+ * 좌표 한 점이 제 모양인가.
+ *
+ * 바깥에서 온 값은 배열이기만 하고 안은 아무것이나 들어 있을 수 있다. [null] 같은 것을
+ * 그대로 계산에 넣으면 null[0]을 읽다가 프로세스가 내려간다 — 이 게임에서는 그때
+ * 돌던 판이 전부 날아간다.
+ */
+function wellFormed(p: unknown): p is Point {
+  return Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]);
+}
+
 export interface DrawingRecord {
   at: string;
   topic: string;
@@ -498,7 +509,13 @@ export class Session {
   addStroke(playerId: string, points: Point[], color?: string): void {
     if (this.phase !== 'drawing') return;
     if (playerId !== this.drawerId) return;
-    const clean = points.filter(insideCircle);
+    // 부르는 쪽이 걸러줬으리라 믿지 않는다. 지금은 index.ts가 검사하지만, 그 검사를
+    // 안 거치는 길이 하나라도 생기면 여기서 예외가 나고 프로세스가 통째로 내려간다.
+    //
+    // 점의 생김새까지 본다. [null] 처럼 배열이긴 한데 안이 이상한 것을 그대로 넘기면
+    // insideCircle이 null[0]을 읽다 터진다.
+    if (!Array.isArray(points)) return;
+    const clean = points.filter((p) => wellFormed(p) && insideCircle(p));
     if (clean.length < 2) return;
     // 색은 팔레트에 있는 것만 받는다. 아무 값이나 믿으면 배경과 같은 색으로 그어
     // "안 보이는 그림"을 만들 수 있고, 그러면 아무도 못 맞힌다.
@@ -523,7 +540,11 @@ export class Session {
   eraseInk(playerId: string, path: Point[]): void {
     if (this.phase !== 'drawing') return;
     if (playerId !== this.drawerId) return;
-    if (path.length === 0) return;
+    // 배열이기만 하고 안이 이상한 것([null] 등)이 들어올 수 있다. 걸러내지 않으면
+    // 아래에서 null[0]을 읽다 프로세스가 내려간다.
+    const clean = Array.isArray(path) ? path.filter(wellFormed) : [];
+    if (clean.length === 0) return;
+    path = clean;
 
     let strokes = this.strokes;
     let changed = false;
@@ -769,7 +790,10 @@ export class Session {
     if (this.phase !== 'roundEnd' && this.phase !== 'final') return;
     const p = this.players.find((x) => x.id === playerId);
     if (!p) return;
-    const clean = String(text).trim().slice(0, Session.CHAT_LEN);
+    // String(text)를 그냥 부르지 않는다. JSON으로는 못 오는 값이지만, 바깥에서 온 것을
+    // 문자열로 바꾸는 일 자체가 남의 코드를 부르는 일이다(toString). 글자면 글자만 받는다.
+    if (typeof text !== 'string') return;
+    const clean = text.trim().slice(0, Session.CHAT_LEN);
     if (clean.length === 0) return;
 
     const line: ChatLine = {
@@ -1098,6 +1122,15 @@ export class Session {
   }
 
   handle(playerId: string, msg: ClientMsg): void {
+    /*
+     * 세션은 스스로를 지킨다.
+     *
+     * 지금 유일한 부르는 쪽(index.ts)이 형태를 검사하고 넘겨주지만, **그 검사에
+     * 기대지 않는다.** 방 상태가 메모리에만 있어서 여기서 예외 하나가 나면 프로세스가
+     * 내려가고 돌던 판이 전부 날아간다. 값이 하나 이상한 것과 판이 끝나는 것은
+     * 치러야 할 대가가 너무 다르다.
+     */
+    if (!msg || typeof msg !== 'object' || typeof (msg as { t?: unknown }).t !== 'string') return;
     switch (msg.t) {
       case 'again': return this.again(playerId);
       case 'join': return this.join(playerId, msg.name);

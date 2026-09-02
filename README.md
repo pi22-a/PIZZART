@@ -1,4 +1,4 @@
-# PIZZA
+# PIZZART
 
 4~9명이 즐기는 웹 추리 게임.
 
@@ -46,12 +46,14 @@
 
 ## 문서
 
+- [`docs/PLAY-CHECKLIST.md`](docs/PLAY-CHECKLIST.md) — **구글 플레이 출시 체크리스트.**
+  무엇이 끝났고 무엇이 남았는지, 그리고 순서를 그렇게 잡은 이유.
 - [`docs/RELEASE.md`](docs/RELEASE.md) — **배포와 릴리스.** 브랜치 규율, 프로덕션 빌드,
   서버 구성, 배포 전 점검, 구글 플레이 출시(TWA) 절차.
 - [`docs/UNITY-PORT.md`](docs/UNITY-PORT.md) — **유니티 이식 인수인계.** 확정된 규칙 수치,
   부채꼴 클리핑 알고리즘, 50판에서 배운 설계 판단. 유니티판은 여기서 시작한다.
 - [`CHANGELOG.md`](CHANGELOG.md) — 버전마다 무엇을 **왜** 바꿨는지.
-- [`content/pizza-content.json`](content/pizza-content.json) — 규칙과 제시어 450개를 한 파일로
+- [`content/pizzart-content.json`](content/pizzart-content.json) — 규칙과 제시어 450개를 한 파일로
   합친 것. 유니티 쪽에 그대로 복사해 쓴다. `npm run content` 로 다시 만든다.
 
 ## 실행
@@ -115,8 +117,8 @@ http://localhost:5173/
 같은 `.git`을 나눠 쓰는 것이라 새로 받을 것이 없다.
 
 ```bash
-git worktree add ../PIZZA-play v1.3.0
-ln -s ../PIZZA/node_modules ../PIZZA-play/node_modules
+git worktree add ../PIZZART-play v1.3.0
+ln -s ../PIZZART/node_modules ../PIZZART-play/node_modules
 ```
 
 두 번째 줄은 패키지를 다시 받지 않으려는 것이다. 네이티브 컴파일이 없어서 그냥 이어도 된다.
@@ -126,8 +128,8 @@ ln -s ../PIZZA/node_modules ../PIZZA-play/node_modules
 
 | | 어디서 | 명령 | 주소 |
 |---|---|---|---|
-| **놀이판** | `../PIZZA-play` | `npm run play:all` | `localhost:5174` + 터널 |
-| **고치는 판** | `PIZZA` | `npm run dev` | `localhost:5173` |
+| **놀이판** | `../PIZZART-play` | `npm run play:all` | `localhost:5174` + 터널 |
+| **고치는 판** | `PIZZART` | `npm run dev` | `localhost:5173` |
 
 포트가 갈려 있어 **서로 아무 상관이 없다.** 고치는 쪽을 아무리 저장해도 놀이판은 안 흔들린다.
 친구에게 보낼 주소는 놀이판 터미널에 초록색으로 뜬다.
@@ -135,16 +137,16 @@ ln -s ../PIZZA/node_modules ../PIZZA-play/node_modules
 놀 버전을 바꾸려면 그 자리에서 갈아탄다.
 
 ```bash
-cd ../PIZZA-play && git checkout v1.4.0
+cd ../PIZZART-play && git checkout v1.4.0
 ```
 
 그림 기록(`data/drawings.jsonl`)은 판마다 따로 쌓인다. 놀이판에서 논 그림은
-`../PIZZA-play/data/`에 있다.
+`../PIZZART-play/data/`에 있다.
 
 다 놀았으면 치운다.
 
 ```bash
-git worktree remove ../PIZZA-play
+git worktree remove ../PIZZART-play
 ```
 
 ## 밖에서 접속하기
@@ -218,5 +220,5 @@ npm test
 
 ## 설계 문서
 
-- [설계](docs/superpowers/specs/2026-08-10-pizza-design.md)
-- [구현 계획](docs/superpowers/plans/2026-08-10-pizza-mvp.md)
+- [설계](docs/superpowers/specs/2026-08-10-pizzart-design.md)
+- [구현 계획](docs/superpowers/plans/2026-08-10-pizzart-mvp.md)

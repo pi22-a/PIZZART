@@ -29,10 +29,10 @@ function applyTheme(light: boolean): void {
   themeBtn.textContent = light ? '☀️' : '🌙';
   themeBtn.title = light ? '어둡게 보기' : '밝게 보기';
 }
-applyTheme(localStorage.getItem('pizza-theme') === 'light');
+applyTheme(localStorage.getItem('pizzart-theme') === 'light');
 themeBtn.addEventListener('click', () => {
   const light = document.documentElement.dataset.theme !== 'light';
-  localStorage.setItem('pizza-theme', light ? 'light' : 'dark');
+  localStorage.setItem('pizzart-theme', light ? 'light' : 'dark');
   applyTheme(light);
 });
 
@@ -63,8 +63,8 @@ const inLobby = room === '';
  */
 const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const seat = isLocal ? (params.get('seat') ?? '') : '';
-const CID_KEY = seat ? `pizza-cid:${seat}` : 'pizza-cid';
-const NAME_KEY = seat ? `pizza-name:${seat}` : 'pizza-name';
+const CID_KEY = seat ? `pizzart-cid:${seat}` : 'pizzart-cid';
+const NAME_KEY = seat ? `pizzart-name:${seat}` : 'pizzart-name';
 /** 사생활 모드에서는 저장이 막힌다. 그렇다고 판이 멈추면 안 된다. */
 const keep = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -162,7 +162,7 @@ const drawCanvas = new CircleCanvas($('drawCanvas') as HTMLCanvasElement, { inte
  * 획은 다 그은 뒤에 통째로 보낸다.
  *
  * 예전에는 점이 찍힐 때마다 net에 넣고 50ms마다 모아 보냈다. 그 방식은 전원이 동시에
- * 그리며 서로의 선을 실시간으로 보던 이전 게임의 것이고, PIZZA는 출제자 혼자 그리며
+ * 그리며 서로의 선을 실시간으로 보던 이전 게임의 것이고, PIZZART는 출제자 혼자 그리며
  * 아무도 그 과정을 보지 않으므로 쪼개 보낼 이유가 없다.
  *
  * 게다가 쪼개면 실제로 망가졌다. 사람이 천천히 그으면 점 사이 간격이 50ms를 넘어

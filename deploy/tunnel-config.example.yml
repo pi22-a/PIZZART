@@ -1,4 +1,4 @@
-# PIZZA — 이름 붙인 Cloudflare 터널
+# PIZZART — 이름 붙인 Cloudflare 터널
 #
 # pizzagame.app 으로 들어온 요청을 이 컴퓨터의 8080 포트로 넘긴다.
 # 그 포트에서는 `npm start`가 화면(dist/)과 웹소켓을 함께 낸다 — 프로세스는 하나뿐이다.
@@ -6,7 +6,7 @@
 # TLS는 Cloudflare가 맡으므로 여기서 인증서를 다룰 일이 없다.
 # 저장소에 넣지 않는다. 자격 증명(*.json)은 이 컴퓨터 밖으로 나가면 안 된다.
 
-tunnel: pizza
+tunnel: pizzart
 credentials-file: /Users/<사용자>/.cloudflared/<터널UUID>.json
 
 ingress:

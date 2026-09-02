@@ -1,4 +1,4 @@
-# PIZZA MVP 구현 계획
+# PIZZART MVP 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -65,11 +65,11 @@
 
 ## Task 1: 뼈대 복사와 정리
 
-TAKBON을 복사해 PIZZA로 이름을 바꾸고, 게임 규칙에 딸린 것을 전부 걷어낸 뒤
+TAKBON을 복사해 PIZZART로 이름을 바꾸고, 게임 규칙에 딸린 것을 전부 걷어낸 뒤
 `npm run dev`와 `npm test`가 도는 상태를 만든다.
 
 **Files:**
-- Create: `/Users/imiyeon/pi22a/PIZZA/` 아래 TAKBON 전체 (`.git` 제외)
+- Create: `/Users/imiyeon/pi22a/PIZZART/` 아래 TAKBON 전체 (`.git` 제외)
 - Delete: `src/server/fragmenter.ts`, `src/server/scorer.ts`, `src/server/content.ts`, `src/server/session.ts`, `src/client/fragment-view.ts`, `src/client/screens.ts`, `src/client/main.ts`, `src/client/canvas.ts`, `src/shared/glyph.ts`, `src/shared/geometry.ts`, `src/shared/protocol.ts`, `content/`, `tests/`
 - Modify: `package.json`, `vite.config.ts`
 
@@ -80,18 +80,18 @@ TAKBON을 복사해 PIZZA로 이름을 바꾸고, 게임 규칙에 딸린 것을
 
 ```bash
 cd /Users/imiyeon/pi22a
-rsync -a --exclude='.git' --exclude='node_modules' --exclude='dist' TAKBON/ PIZZA/
-cd PIZZA
+rsync -a --exclude='.git' --exclude='node_modules' --exclude='dist' TAKBON/ PIZZART/
+cd PIZZART
 ls
 ```
 
 기대: `src`, `content`, `tests`, `scripts`, `index.html`, `package.json`, `vite.config.ts`, `tsconfig.json`, `docs`가 보인다.
-`docs/superpowers/specs/2026-08-10-pizza-design.md`는 PIZZA에 이미 있던 것이므로 그대로 남아 있어야 한다.
+`docs/superpowers/specs/2026-08-10-pizzart-design.md`는 PIZZART에 이미 있던 것이므로 그대로 남아 있어야 한다.
 
 - [ ] **Step 2: 규칙에 딸린 파일을 지운다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA
+cd /Users/imiyeon/pi22a/PIZZART
 rm -f src/server/fragmenter.ts src/server/scorer.ts src/server/content.ts src/server/session.ts
 rm -f src/client/fragment-view.ts src/client/screens.ts src/client/main.ts src/client/canvas.ts
 rm -f src/shared/glyph.ts src/shared/geometry.ts src/shared/protocol.ts
@@ -103,13 +103,13 @@ ls src/server src/client src/shared
 
 기대: `src/server/index.ts`, `src/client/net.ts`만 남는다. `src/shared`는 비어 있다.
 
-`docs/research/`의 조사 문서 두 편은 TAKBON에 원본이 있으므로 PIZZA에서는 지운다.
+`docs/research/`의 조사 문서 두 편은 TAKBON에 원본이 있으므로 PIZZART에서는 지운다.
 
 - [ ] **Step 3: `package.json`의 이름과 스크립트를 바꾼다**
 
 ```json
 {
-  "name": "pizza",
+  "name": "pizzart",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -146,7 +146,7 @@ ls src/server src/client src/shared
 ```ts
 import { defineConfig } from 'vitest/config';
 
-const GAME_SERVER = process.env.PIZZA_SERVER ?? 'ws://localhost:8080';
+const GAME_SERVER = process.env.PIZZART_SERVER ?? 'ws://localhost:8080';
 
 export default defineConfig({
   server: {
@@ -165,7 +165,7 @@ export default defineConfig({
       '.ngrok-free.app',
       '.ngrok.io',
       '.loca.lt',
-      ...(process.env.PIZZA_HOST ? [process.env.PIZZA_HOST] : []),
+      ...(process.env.PIZZART_HOST ? [process.env.PIZZART_HOST] : []),
     ],
   },
   test: { globals: true, environment: 'node' },
@@ -175,7 +175,7 @@ export default defineConfig({
 - [ ] **Step 5: 의존성을 설치하고 테스트가 도는지 본다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA
+cd /Users/imiyeon/pi22a/PIZZART
 npm install
 npx tsc --noEmit
 ```
@@ -186,9 +186,9 @@ npx tsc --noEmit
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA
+cd /Users/imiyeon/pi22a/PIZZART
 git add -A
-git commit -m "chore: TAKBON을 복사해 PIZZA 뼈대를 만든다
+git commit -m "chore: TAKBON을 복사해 PIZZART 뼈대를 만든다
 
 규칙에 딸린 파일은 전부 걷어냈다. 남긴 것은 WS 서버와 전송 큐,
 vite 프록시 설정 — 게임이 뭐든 그대로 쓰는 것들이다."
@@ -301,7 +301,7 @@ describe('clipHalfPlane', () => {
 - [ ] **Step 3: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/geometry.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/geometry.test.ts
 ```
 
 기대: FAIL — `Failed to resolve import "../src/shared/geometry"`
@@ -386,7 +386,7 @@ export function rotate(points: Point[], center: Point, angle: number): Point[] {
 - [ ] **Step 5: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/geometry.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/geometry.test.ts
 ```
 
 기대: PASS, 7개
@@ -450,7 +450,7 @@ describe('rotate', () => {
 - [ ] **Step 2: 테스트를 돌린다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/geometry.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/geometry.test.ts
 ```
 
 기대: PASS, 10개. Task 2에서 이미 구현했으므로 바로 통과한다.
@@ -564,7 +564,7 @@ describe('slice', () => {
 - [ ] **Step 2: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/slicer.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/slicer.test.ts
 ```
 
 기대: FAIL — `Failed to resolve import "../src/shared/slicer"`
@@ -635,7 +635,7 @@ export function slice(drawing: Drawing, count: number): Slice[] {
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/slicer.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/slicer.test.ts
 ```
 
 기대: PASS, 8개 (sliceCount 2 + slice 6)
@@ -737,7 +737,7 @@ describe('drawerPoints', () => {
 - [ ] **Step 2: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/judge.test.ts tests/scorer.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/judge.test.ts tests/scorer.test.ts
 ```
 
 기대: FAIL — 두 모듈 모두 resolve 실패
@@ -784,7 +784,7 @@ export function drawerPoints(correctCount: number, perCorrect: number): number {
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/judge.test.ts tests/scorer.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/judge.test.ts tests/scorer.test.ts
 ```
 
 기대: PASS, 8개
@@ -871,7 +871,7 @@ describe('planHint', () => {
 - [ ] **Step 2: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/hint.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/hint.test.ts
 ```
 
 기대: FAIL — resolve 실패
@@ -921,7 +921,7 @@ export function planHint(
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/hint.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/hint.test.ts
 ```
 
 기대: PASS, 6개
@@ -1066,7 +1066,7 @@ describe('pickWord', () => {
 - [ ] **Step 3: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/content.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/content.test.ts
 ```
 
 기대: FAIL — resolve 실패
@@ -1125,7 +1125,7 @@ export function pickWord(topics: Topic[], pick: (n: number) => number): { topic:
 - [ ] **Step 5: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/content.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/content.test.ts
 ```
 
 기대: PASS, 5개
@@ -1480,7 +1480,7 @@ describe('정보 은닉', () => {
 - [ ] **Step 4: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/session.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/session.test.ts
 ```
 
 기대: FAIL — `src/server/session` resolve 실패
@@ -1828,13 +1828,13 @@ import type { Point } from '../shared/drawing';
 ```
 
 ```ts
-console.log(`PIZZA 서버가 ws://localhost:${PORT} 에서 대기 중`);
+console.log(`PIZZART 서버가 ws://localhost:${PORT} 에서 대기 중`);
 ```
 
 - [ ] **Step 7: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run && npx tsc --noEmit
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run && npx tsc --noEmit
 ```
 
 기대: 테스트 PASS (session 20개 포함 전체 64개), 타입 오류 없음
@@ -1982,13 +1982,13 @@ function scribble() {
 터미널 하나:
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npm run dev:server
+cd /Users/imiyeon/pi22a/PIZZART && npm run dev:server
 ```
 
 터미널 둘:
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA
+cd /Users/imiyeon/pi22a/PIZZART
 node scripts/fake-player.mjs T1 봇1 --draw &
 node scripts/fake-player.mjs T1 봇2 --answer=호랑이 &
 node scripts/fake-player.mjs T1 봇3 --answer=사자 &
@@ -2008,7 +2008,7 @@ kill %1 %2 %3 %4
 
 ```bash
 git add scripts/fake-player.mjs
-git commit -m "tools: 가짜 플레이어를 PIZZA 프로토콜에 맞춘다
+git commit -m "tools: 가짜 플레이어를 PIZZART 프로토콜에 맞춘다
 
 이게 없으면 검증이 지옥이다. 화면보다 먼저 만든다."
 ```
@@ -2176,7 +2176,7 @@ describe('힌트 폴백 — 숨은 조각이 없을 때', () => {
 - [ ] **Step 2: 테스트가 실패하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/session.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/session.test.ts
 ```
 
 기대: FAIL — `s.answer is not a function`, `Task 10에서 구현한다` 등
@@ -2323,7 +2323,7 @@ import type { AnswerRow } from '../shared/protocol';
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run && npx tsc --noEmit
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run && npx tsc --noEmit
 ```
 
 기대: 전체 PASS (session 32개 포함), 타입 오류 없음
@@ -2333,7 +2333,7 @@ cd /Users/imiyeon/pi22a/PIZZA && npx vitest run && npx tsc --noEmit
 터미널 하나에 서버(`npm run dev:server`), 터미널 둘에:
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA
+cd /Users/imiyeon/pi22a/PIZZART
 node scripts/fake-player.mjs T2 봇1 --draw --answer=피자 --skip --host --next &
 node scripts/fake-player.mjs T2 봇2 --draw --answer=피자 --skip &
 node scripts/fake-player.mjs T2 봇3 --draw --answer=사자 --skip &
@@ -2536,7 +2536,7 @@ export class CircleCanvas {
 `index.html`을 Task 13에서 완성하므로 여기서는 타입만 본다.
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx tsc --noEmit
+cd /Users/imiyeon/pi22a/PIZZART && npx tsc --noEmit
 ```
 
 기대: 오류 없음
@@ -2658,7 +2658,7 @@ export function startSpinHint(el: HTMLCanvasElement, sliceCount: number): () => 
 - [ ] **Step 2: 타입을 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx tsc --noEmit
+cd /Users/imiyeon/pi22a/PIZZART && npx tsc --noEmit
 ```
 
 기대: 오류 없음
@@ -2707,7 +2707,7 @@ import type { Point } from '../shared/drawing';
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>PIZZA</title>
+<title>PIZZART</title>
 <style>
   :root { --ink:#2b2118; --dough:#f6efe2; --crust:#d9c9a8; --sauce:#e0803a; }
   * { box-sizing: border-box; }
@@ -2755,7 +2755,7 @@ import type { Point } from '../shared/drawing';
   <div class="players" id="players"></div>
 
   <section class="screen on" id="s-lobby">
-    <h1>P I Z Z A</h1>
+    <h1>PIZZART</h1>
     <p class="muted">한 명이 그린 그림을 피자처럼 잘라 나눠 갖습니다. 조각은 전부 돌아가 있어서
       자기 조각이 어디였는지 아무도 모릅니다. 통화를 켜고 서로에게 설명하세요.</p>
     <div class="bar">
@@ -2928,8 +2928,8 @@ const room = (params.get('room') ?? 'LOBBY').toUpperCase();
 setTag('roomTag', `방 ${room}`);
 
 /** 새로고침해도 같은 자리로 돌아오게 하는 식별자 */
-let cid = sessionStorage.getItem('pizza-cid');
-if (!cid) { cid = crypto.randomUUID(); sessionStorage.setItem('pizza-cid', cid); }
+let cid = sessionStorage.getItem('pizzart-cid');
+if (!cid) { cid = crypto.randomUUID(); sessionStorage.setItem('pizzart-cid', cid); }
 
 let youId = '';
 let hostId = '';
@@ -3098,7 +3098,7 @@ export function revealRound(
 - [ ] **Step 6: 띄워서 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx tsc --noEmit && npm run dev
+cd /Users/imiyeon/pi22a/PIZZART && npx tsc --noEmit && npm run dev
 ```
 
 브라우저 창을 넷 열고 `http://localhost:5173/?room=A&name=하나` 부터 `넷`까지 접속한다.
@@ -3123,7 +3123,7 @@ git commit -m "feat: 화면 여섯 개 — 그리면 조각이 회전돼 흩어�
 터널을 열고 지인 셋을 부른다.
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npm run tunnel
+cd /Users/imiyeon/pi22a/PIZZART && npm run tunnel
 ```
 
 **여기서 보는 것은 딱 하나다: 조각을 받은 사람들이 서로에게 설명하기 시작하는가.**
@@ -3225,7 +3225,7 @@ export function revealRound(
 - [ ] **Step 2: 눈으로 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx tsc --noEmit && npm run dev
+cd /Users/imiyeon/pi22a/PIZZART && npx tsc --noEmit && npm run dev
 ```
 
 브라우저 넷을 띄워 한 라운드를 완주시킨다. 봇으로 채워도 된다.
@@ -3388,7 +3388,7 @@ describe('이탈과 재입장', () => {
 - [ ] **Step 2: 테스트를 돌려 무엇이 깨지는지 본다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/session.test.ts
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run tests/session.test.ts
 ```
 
 기대: Task 8에서 이미 `restore`와 `beginRound`의 건너뛰기를 넣었으므로 대부분 통과한다.
@@ -3469,7 +3469,7 @@ cd /Users/imiyeon/pi22a/PIZZA && npx vitest run tests/session.test.ts
 - [ ] **Step 4: 테스트가 전부 통과하는지 확인한다**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npx vitest run && npx tsc --noEmit
+cd /Users/imiyeon/pi22a/PIZZART && npx vitest run && npx tsc --noEmit
 ```
 
 기대: 전체 PASS
@@ -3501,7 +3501,7 @@ git commit -m "feat: 들어옴·나감·다시 들어옴
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "pizza-client",
+      "name": "pizzart-client",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite"],
       "port": 5173
@@ -3513,7 +3513,7 @@ git commit -m "feat: 들어옴·나감·다시 들어옴
 그리고 남은 것이 없는지 확인한다. 결과가 비어 있어야 한다.
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA
+cd /Users/imiyeon/pi22a/PIZZART
 grep -rn "TAKBON\|takbon" --exclude-dir=node_modules --exclude-dir=.git \
   --exclude=package-lock.json --exclude-dir=docs .
 ```
@@ -3523,7 +3523,7 @@ grep -rn "TAKBON\|takbon" --exclude-dir=node_modules --exclude-dir=.git \
 - [ ] **Step 1: README를 쓴다**
 
 ````markdown
-# PIZZA
+# PIZZART
 
 4~9명이 즐기는 웹 협동 추리 게임.
 
@@ -3591,14 +3591,14 @@ npm test
 
 ## 설계 문서
 
-- [설계](docs/superpowers/specs/2026-08-10-pizza-design.md)
-- [구현 계획](docs/superpowers/plans/2026-08-10-pizza-mvp.md)
+- [설계](docs/superpowers/specs/2026-08-10-pizzart-design.md)
+- [구현 계획](docs/superpowers/plans/2026-08-10-pizzart-mvp.md)
 ````
 
 - [ ] **Step 2: 전체 검증**
 
 ```bash
-cd /Users/imiyeon/pi22a/PIZZA && npm test && npx tsc --noEmit
+cd /Users/imiyeon/pi22a/PIZZART && npm test && npx tsc --noEmit
 ```
 
 기대: 전체 PASS, 타입 오류 없음
