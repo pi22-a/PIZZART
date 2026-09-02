@@ -93,6 +93,123 @@ cloudflared tunnel ingress validate            # OK 나와야 한다
 
 ---
 
+## 서버로 옮기기 (AWS Lightsail)
+
+지금은 `pizzagame.app`이 노트북을 가리킨다. 24시간 열어두려면 서버가 필요하다 —
+Play의 12명 테스트도 그게 있어야 시작할 수 있다.
+
+### 앞단은 Caddy가 아니라 터널로 간다
+
+처음엔 Caddy를 적어뒀지만, 서버로 옮기는 지금은 **터널을 그대로 서버에 옮기는 쪽이
+낫다.** 이유는 셋이다.
+
+1. **이미 되는 것을 옮기기만 하면 된다.** 노트북에서 검증이 끝났다.
+2. **열어둘 포트가 없다.** 터널은 서버가 밖으로 나가서 붙는다. Lightsail 방화벽에서
+   SSH만 남기고 전부 닫아도 된다. 서버 IP가 노출되지 않는다.
+3. **인증서를 다룰 일이 없다.** TLS는 Cloudflare가 맡는다. Let's Encrypt 갱신,
+   Cloudflare 프록시와 인증서 발급이 부딪히는 문제 같은 것이 아예 안 생긴다.
+
+Caddy 설정은 아래에 남겨두지만, 터널을 쓰면 필요 없다.
+
+### ⚠️ 터널을 두 곳에서 돌리지 말 것
+
+**가장 조심할 것이다.** 같은 터널을 노트북과 서버에서 동시에 돌리면 Cloudflare가 둘로
+**나눠 보낸다.** 이 게임은 방 상태가 각 서버 메모리에만 있으므로, 친구는 A 서버 방에
+있고 나는 B 서버 방에 들어가 **같은 방 코드인데 서로 안 보이는** 일이 벌어진다.
+원인을 찾기가 아주 어려운 종류다.
+
+서버에서 켜기 전에 **노트북 쪽을 반드시 끈다.**
+
+### 한 대만 돌린다
+
+같은 이유로 서버를 여러 대로 늘리지 못한다. 방이 메모리에 있어서다. 4~9명짜리 방
+수십 개는 512MB 한 대로 충분하다.
+
+### 순서
+
+**1. 인스턴스 만들기** (Lightsail 콘솔)
+
+| | |
+|---|---|
+| 리전 | **서울 (ap-northeast-2)** — 노는 사람이 한국에 있다 |
+| 이미지 | Linux/Unix → **Ubuntu 24.04 LTS** |
+| 요금제 | $5 (512MB)로 충분하다. 빌드가 빠듯하면 스왑이 받쳐준다(스크립트가 만든다) |
+| 키 | SSH 키를 새로 만들어 받아둔다 → `../PIZZA-release/keys/` |
+
+**2. 방화벽 조이기** — Networking 탭에서 **SSH(22)만 남기고 HTTP/HTTPS 규칙을 지운다.**
+터널은 나가는 연결만 쓰므로 들어오는 문을 열 필요가 없다.
+
+**3. 배포 키 등록** — 저장소가 비공개라 서버가 그냥 못 받아온다.
+
+```bash
+ssh -i <키> ubuntu@<서버IP>
+ssh-keygen -t ed25519 -C "pizza-deploy" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub
+```
+
+나온 값을 GitHub → 저장소 → Settings → Deploy keys → **Add deploy key**(쓰기 권한 없이)에 넣는다.
+
+**4. 세팅 스크립트**
+
+```bash
+curl -O https://raw.githubusercontent.com/... # 또는 scp로 deploy/setup-server.sh 전송
+bash setup-server.sh
+```
+
+스왑 → Node → 저장소(최신 태그) → 빌드 → 서비스 등록까지 한다. 끝나면 확인:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8090/    # 200 이어야 한다
+```
+
+**5. 터널을 서버로 옮기기**
+
+노트북의 자격 증명을 서버로 복사한다. 터널을 새로 만들 필요가 없다 — 같은 터널이다.
+
+```bash
+# 노트북에서
+scp -i <키> ~/.cloudflared/<터널UUID>.json ubuntu@<서버IP>:~/
+scp -i <키> ~/.cloudflared/config.yml ubuntu@<서버IP>:~/
+
+# 서버에서
+sudo mkdir -p /etc/cloudflared
+sudo mv ~/<터널UUID>.json ~/config.yml /etc/cloudflared/
+sudo sed -i 's|/Users/imiyeon/.cloudflared|/etc/cloudflared|' /etc/cloudflared/config.yml
+# cloudflared 설치 (arm64 인스턴스면 arm64로 받는다)
+curl -L -o cf.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cf.deb
+sudo cloudflared service install
+sudo systemctl status cloudflared
+```
+
+**6. 노트북 터널 끄기** — 위 경고 참조. 이걸 안 하면 방이 갈린다.
+
+**7. 확인**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://pizzagame.app/
+```
+
+### 새 버전 올리기
+
+```bash
+ssh ubuntu@<서버IP>
+cd ~/PIZZA && git fetch --tags && git checkout <새태그>
+npm ci && npm run build
+sudo systemctl restart pizza
+```
+
+**사람이 없을 때 한다.** 재시작하면 돌던 판이 전부 날아간다.
+
+### 되돌리기
+
+```bash
+cd ~/PIZZA && git checkout <이전태그> && npm ci && npm run build
+sudo systemctl restart pizza
+```
+
+---
+
 ## 브랜치와 태그
 
 지금까지는 개발 브랜치(`v1.6`)에서 계속 작업하고 `main`은 뒤처져 있었다. 지인 테스트만
