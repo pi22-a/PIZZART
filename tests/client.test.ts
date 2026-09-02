@@ -310,7 +310,7 @@ describe('인원 스테퍼', () => {
     await boot();
     deliver({ t: 'joined', youId: 'me' });
     deliver(lobby({ maxPlayers: 6 }));
-    expect($('capacityNote').textContent).toContain('최소 3명 / 최대 9명');
+    expect($('capacityNote').textContent).toBe('최소 3명 / 최대 9명');
   });
 
   it('지금 있는 사람 수까지 내려오면 멈추고 이유를 알려준다', async () => {
