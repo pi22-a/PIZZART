@@ -19,7 +19,8 @@
     "content": "node scripts/bundle-content.mjs",
     "build": "vite build",
     "icons": "node scripts/make-icons.mjs",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "start": "node --import tsx src/server/index.ts"
   },
   "dependencies": {
     "ws": "^8.21.2"

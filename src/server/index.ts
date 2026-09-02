@@ -1,5 +1,10 @@
 import { WebSocketServer, WebSocket } from 'ws';
+import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { serveStatic } from './static';
 import { Session } from './session';
 import { saveDrawing } from './gallery';
 import type { ClientMsg, RoomInfo, ServerMsg } from '../shared/protocol';
@@ -153,7 +158,37 @@ function sessionFor(room: string): Session {
   return s;
 }
 
-const wss = new WebSocketServer({ port: PORT });
+/*
+ * 화면과 웹소켓을 한 포트에서 같이 낸다.
+ *
+ * 개발 중에는 dist/가 없으므로 static이 아무 일도 안 하고, Vite가 화면을 맡아 /ws만
+ * 여기로 넘겨준다. 프로덕션에서는 빌드해 두면 이 한 프로세스가 전부 처리한다 —
+ * 앞에 웹서버를 따로 세울 필요가 없어 관리할 프로세스가 하나로 줄어든다.
+ */
+const dist = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist');
+const static_ = serveStatic(dist);
+
+const http = createServer((req, res) => {
+  /*
+   * 요청 하나가 서버를 내리지 못하게 한다.
+   *
+   * 노드는 요청 처리 중에 던져진 예외를 잡아주지 않는다 — 그대로 프로세스가 죽고,
+   * 이 게임은 방 상태가 메모리에만 있으므로 **돌던 판이 전부 날아간다.** 화면을 내주다
+   * 나는 실패는 그 대가를 치를 일이 아니다.
+   */
+  try {
+    if (static_(req, res)) return;
+    // dist가 없는 개발 중에 여기로 오는 것은 대개 /ws 오폭이다. 조용히 404를 준다.
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('없는 주소입니다');
+  } catch (e) {
+    console.error('[화면 서빙 실패]', req.url, e);
+    if (!res.headersSent) res.writeHead(500).end();
+    else res.end();
+  }
+});
+
+const wss = new WebSocketServer({ server: http });
+http.listen(PORT);
 
 // 스트로크 메시지 초당 상한을 매초 리필한다
 setInterval(() => {
@@ -358,4 +393,8 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-console.log(`PIZZA 서버가 ws://localhost:${PORT} 에서 대기 중`);
+console.log(
+  existsSync(join(dist, 'index.html'))
+    ? `PIZZA 서버가 http://localhost:${PORT} 에서 화면과 게임을 함께 냅니다`
+    : `PIZZA 서버가 ws://localhost:${PORT} 에서 대기 중 (화면은 Vite가 맡습니다)`,
+);
