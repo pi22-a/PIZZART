@@ -32,7 +32,7 @@ class ManualScheduler implements Scheduler {
 
 const RULES = {
   minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
-  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
+  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0, idleDrawSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
   startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1,
   drawerScore: 5, wordRerolls: 2,

@@ -135,6 +135,10 @@
   .roombar button.on { background:#7a2f24; color:#f6efe2; border-color:#a03c2d; }
 
   /* 방 목록 */
+  /* 바로 시작이 이 화면의 주인공이다. 나머지는 접어둔다. */
+  .quick { font-size:19px; padding:16px 34px; }
+  .rooms-more { margin:14px 0 4px; }
+  .rooms-more summary { cursor:pointer; font-size:14px; opacity:.7; padding:6px 0; }
   .rooms { list-style:none; padding:0; margin:12px 0 0; display:grid; gap:10px; }
   .rooms li { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
               background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
@@ -213,6 +217,10 @@
   .stepper .value { min-width:64px; text-align:center; font-size:20px; font-weight:700; }
   .lobby-start { margin-top:20px; padding-top:16px; border-top:1px solid var(--line); }
   .lobby-start button { font-size:18px; padding:14px 28px; }
+  /* 준비한 사람 수. 버튼 옆에 조용히 붙는다 — 숫자만 알면 되는 자리라 설명은 안 붙인다. */
+  .ready-count { margin-left:12px; font-size:16px; color:var(--muted, #a49c92); }
+  .ready-count.done { color:var(--sauce); font-weight:700; }
+  #readyBtn.on { background:var(--sauce); color:#181818; }
   /* 현황판: 맞히는 사람마다 한 줄, 그 줄에 그 사람이 보고 있는 조각들. */
   .watch-row { display:flex; align-items:center; gap:12px; padding:6px 0;
                border-bottom:1px solid var(--line); }
@@ -341,11 +349,21 @@
       <!-- 목록은 저절로 갱신되지만, 끊겼을 때 되살릴 길이 여기밖에 없다. -->
       <button id="refreshRoomsBtn" class="ghost">새로고침</button>
     </div>
+    <!-- 누르면 어딘가에 들어가 있다. "방을 만들까 말까"를 사람이 정하지 않게 한다 —
+         그 결정 앞에서 그냥 나가는 사람이 있다. -->
     <div class="bar">
-      <button id="makeRoomBtn">방 만들기</button>
-      <input id="newRoomName" placeholder="방 이름 (비우면 자동)" maxlength="20" />
+      <button id="quickBtn" class="quick">바로 시작</button>
     </div>
-    <p class="muted" id="roomsNote">방을 만들거나, 아래에서 골라 들어가세요. 목록은 저절로 바뀝니다.</p>
+    <p class="muted" id="quickNote">기다리는 방이 있으면 들어가고, 없으면 하나 만들어 드립니다.</p>
+
+    <details class="rooms-more" id="roomsMore">
+      <summary>방 직접 만들기 · 목록에서 고르기</summary>
+      <div class="bar">
+        <button id="makeRoomBtn" class="ghost">방 만들기</button>
+        <input id="newRoomName" placeholder="방 이름 (비우면 자동)" maxlength="20" />
+      </div>
+      <p class="muted" id="roomsNote">아래에서 골라 들어가셔도 됩니다. 목록은 저절로 바뀝니다.</p>
+    </details>
     <ul class="rooms" id="roomList"></ul>
   </section>
 
@@ -395,7 +413,11 @@
     <p class="muted" id="lobbyNote"></p>
 
     <div class="lobby-start">
+      <!-- 방장에게는 시작, 나머지에게는 준비. 같은 자리를 쓴다 — 누구에게나
+           "이제 내가 누를 차례"인 버튼이 거기 하나 있는 셈이다. -->
       <button id="startBtn">시작</button>
+      <button id="readyBtn">준비</button>
+      <span class="ready-count" id="readyCount"></span>
     </div>
 
     <!-- 처음 들어온 사람은 점수가 깎인다는 것도, 마지막에 조립판이 나온다는 것도

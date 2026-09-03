@@ -33,7 +33,7 @@ let s: Session;
  */
 const TEST_RULES = {
   minPlayers: 4, maxPlayers: 9, sliceCountMin: 8,
-  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
+  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0, idleDrawSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
   startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5, wordRerolls: 2,
 };
@@ -1969,6 +1969,154 @@ describe('색과 지우개', () => {
     s.eraseDoodleInk('p2', [[250, 100]]);
     const board = msgsTo('p2').filter((m) => m.t === 'doodleBoard').at(-1)!;
     expect(board.strokes.map((x) => x.by)).toEqual(['p2', 'p2', 'p3']);
+  });
+});
+
+describe('준비', () => {
+  const room = () => msgsOfType('room').at(-1)!;
+
+  it('방장은 처음부터 준비된 것으로 센다', () => {
+    // 방장에게는 준비 버튼 대신 시작 버튼이 있다. 그걸 누르는 것이 곧 준비의 표시다.
+    newSession();                      // p1이 방장, 넷이 참여
+    expect(room().ready).toBe(1);
+    expect(room().readyOf).toBe(4);
+  });
+
+  it('누르면 늘고 다시 누르면 준다', () => {
+    newSession();
+    s.setReady('p2', true);
+    expect(room().ready).toBe(2);
+    s.setReady('p3', true);
+    expect(room().ready).toBe(3);
+    s.setReady('p2', false);
+    expect(room().ready).toBe(2);
+  });
+
+  it('관전자는 세지 않는다', () => {
+    // 안 그리고 안 맞히는 사람을 기다릴 이유가 없다.
+    newSession(['p1', 'p2', 'p3', 'p4', 'p5']);
+    expect(room().readyOf).toBe(5);
+    s.setSpectator('p5', true);
+    expect(room().readyOf).toBe(4);
+  });
+
+  it('끊긴 사람도 세지 않는다', () => {
+    // 폰을 껐다 켠 유령 하나 때문에 시작이 영영 막히면 안 된다.
+    newSession();
+    s.disconnect('p4');
+    expect(room().readyOf).toBe(3);
+  });
+
+  it('방장 자신은 준비를 못 켠다', () => {
+    newSession();
+    s.setReady('p1', true);
+    expect(room().ready).toBe(1);       // 이미 1로 세고 있었으니 그대로
+  });
+
+  it('로비가 아니면 안 받는다', () => {
+    newSession();
+    s.start('p1');
+    s.setReady('p2', true);
+    expect(s.phase).toBe('drawing');    // 판이 도는 중에는 준비를 만질 일이 없다
+  });
+
+  it('나간 사람의 준비는 지워진다', () => {
+    newSession();
+    s.setReady('p2', true);
+    expect(room().ready).toBe(2);
+    s.kick('p1', 'p2');
+    expect(room().ready).toBe(1);
+    expect(room().readyOf).toBe(3);
+  });
+
+  it('한 판 더를 하면 준비를 새로 받는다', () => {
+    // 판이 끝나면 자리를 뜨는 사람이 있다. 지난 판의 준비를 그대로 두면
+    // 없는 사람을 준비된 것으로 세고 시작해버린다.
+    newSession();
+    s.setReady('p2', true);
+    s.setReady('p3', true);
+    s.start('p1');
+    while (msgsOfType('room').at(-1)!.phase !== 'final') {
+      if (s.phase === 'drawing') s.drawDone(s.drawerId);
+      for (let i = 0; i < TEST_RULES.maxAttempts; i++) clock.fire();
+      s.next('p1');
+    }
+    s.again('p1');
+    expect(room().ready).toBe(1);       // 방장만
+  });
+
+  it('사람마다 준비 여부가 실려 나간다', () => {
+    newSession();
+    s.setReady('p2', true);
+    const ps = room().players;
+    expect(ps.find((p) => p.id === 'p1')!.ready).toBe(true);   // 방장
+    expect(ps.find((p) => p.id === 'p2')!.ready).toBe(true);
+    expect(ps.find((p) => p.id === 'p3')!.ready).toBe(false);
+  });
+});
+
+describe('아무도 안 그리면 일찍 넘어간다', () => {
+  /** 이 시험만 놀고 있는지 보는 타이머를 켠다. 다른 시험은 0으로 꺼둔 채였다. */
+  function idleSession(): void {
+    sent = [];
+    clock = new ManualScheduler();
+    s = new Session((to, msg) => sent.push({ to, msg }), {
+      scheduler: clock, rules: { ...TEST_RULES, idleDrawSeconds: 30 },
+      pick: () => 0, shuffle: (xs) => xs,
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s.join(n, n);
+    s.start('p1');
+  }
+
+  it('한 획도 없으면 그리는 시간을 다 안 기다린다', () => {
+    // 폰을 내려놓고 가버리면 나머지가 120초를 빈 화면으로 본다.
+    idleSession();
+    expect(s.phase).toBe('drawing');
+    clock.fire();                       // 놀고 있는지 보는 타이머가 터진다
+    expect(s.phase).toBe('roundEnd');
+  });
+
+  it('한 획이라도 그었으면 라운드가 정상으로 흘러간다', () => {
+    // 느리게 그리는 사람을 쫓아내면 안 된다. 놀고 있는지 보는 타이머가 터져도
+    // 획이 있으면 아무 일도 안 하고, 그리는 시간이 다 되면 평소대로 조각이 나뉜다.
+    idleSession();
+    s.addStroke(s.drawerId, [[300, 200], [400, 300]], '#1f1b17');
+    clock.fire();
+    expect(s.phase).toBe('guessing');
+  });
+
+  /**
+   * "일찍" 접히는지는 단계만 봐서는 알 수 없다. ManualScheduler가 걸린 타이머를
+   * 한꺼번에 터뜨리기 때문이다. 몇 초짜리로 걸렸는지를 직접 본다.
+   */
+  it('그리는 시간보다 짧게 걸린다', () => {
+    const delays: number[] = [];
+    const clk = {
+      after(ms: number, fn: () => void) { delays.push(ms / 1000); return () => {}; },
+    };
+    const s2 = new Session(() => {}, {
+      scheduler: clk, rules: { ...TEST_RULES, idleDrawSeconds: 30 },
+      pick: () => 0, shuffle: (xs) => xs,
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s2.join(n, n);
+    delays.length = 0;
+    s2.start('p1');
+    expect(delays).toContain(TEST_RULES.drawSeconds);  // 화면에 보이는 제한시간
+    expect(delays).toContain(30);                       // 놀고 있는지 보는 타이머
+    expect(30).toBeLessThan(TEST_RULES.drawSeconds);
+  });
+
+  it('0으로 두면 그 타이머를 아예 안 건다', () => {
+    const delays: number[] = [];
+    const clk = { after(ms: number) { delays.push(ms / 1000); return () => {}; } };
+    const s2 = new Session(() => {}, {
+      scheduler: clk, rules: { ...TEST_RULES, idleDrawSeconds: 0 },
+      pick: () => 0, shuffle: (xs) => xs,
+    });
+    for (const n of ['p1', 'p2', 'p3', 'p4']) s2.join(n, n);
+    delays.length = 0;
+    s2.start('p1');
+    expect(delays).toEqual([TEST_RULES.drawSeconds]);   // 제한시간 하나뿐
   });
 });
 

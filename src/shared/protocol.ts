@@ -12,6 +12,13 @@ export interface PlayerInfo {
   answered: boolean;
   /** 이번 회차를 넘기겠다고 눌렀는가 */
   skipped: boolean;
+  /**
+   * 로비에서 준비를 눌렀는가.
+   *
+   * 방장은 언제나 true다 — 방장에게는 준비 버튼 대신 시작 버튼이 있고, 시작을 누르는
+   * 것이 곧 준비의 표시다.
+   */
+  ready: boolean;
   /** 이미 맞혀서 점수가 확정됐는가 */
   solved: boolean;
   /** 지금 몇 조각을 들고 있는가 */
@@ -95,6 +102,13 @@ export type ClientMsg =
   | { t: 'chat'; text: string }
   /** 제시어를 다시 뽑는다. 그리는 중에, 출제자만, 남은 횟수 안에서. */
   | { t: 'reroll' }
+  /**
+   * 아무 방에나 넣어달라고 한다.
+   *
+   * 기다리는 방이 있으면 거기로, 없으면 하나 만들어 준다. 어느 쪽이든 roomCreated로
+   * 방 코드를 돌려준다 — 부르는 쪽은 어디로 가는지 신경 쓸 것이 없다.
+   */
+  | { t: 'quickJoin' }
   /** 로비에서 방을 만든다. 서버가 코드를 발급해 roomCreated로 돌려준다. */
   | { t: 'createRoom'; name: string }
   /** 방 목록을 다시 달라고 한다. 목록은 원래 저절로 오지만 손으로 확인하고 싶을 때가 있다. */
@@ -103,6 +117,8 @@ export type ClientMsg =
   | { t: 'kick'; playerId: string }
   /** 방장이 새 사람의 입장을 막거나 푼다. 이미 자리가 있는 사람의 재접속은 통과한다. */
   | { t: 'setLock'; on: boolean }
+  /** 로비에서 준비를 켜고 끈다. 방장은 늘 준비된 것으로 본다 — 시작 버튼이 그 자리다. */
+  | { t: 'setReady'; on: boolean }
   /** 로비에서 방장이 흑백판/컬러판을 고른다. */
   | { t: 'setColorMode'; mode: 'mono' | 'color' }
   | { t: 'next' }
@@ -177,6 +193,14 @@ export type ServerMsg =
       now: number;
       /** 게임을 시작하는 데 필요한 최소 인원 */
       minPlayers: number;
+      /**
+       * 준비한 사람 수 / 준비해야 하는 사람 수.
+       *
+       * 세는 대상은 **붙어 있는 참여자**다. 관전자는 안 그리고 안 맞히므로 빼고,
+       * 끊긴 사람도 뺀다 — 유령 하나 때문에 시작이 영영 막히면 안 된다.
+       */
+      ready: number;
+      readyOf: number;
       /** 이 방의 정원. 방장이 줄일 수 있다 */
       maxPlayers: number;
       /** 방장이 정원을 올릴 수 있는 한계 (규칙이 정한 상한) */

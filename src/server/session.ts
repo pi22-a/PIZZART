@@ -156,6 +156,14 @@ export class Session {
   protected colorMode: 'mono' | 'color' = 'mono';
 
   /**
+   * 로비에서 준비를 누른 사람들.
+   *
+   * 방장은 여기 안 넣는다 — 방장에게는 준비 버튼 대신 시작 버튼이 있고, 시작을 누르는
+   * 것이 곧 준비의 표시다. 세는 자리(readyCount)에서 방장을 늘 더한다.
+   */
+  protected readySet = new Set<string>();
+
+  /**
    * 이 방에서 이미 나온 제시어.
    *
    * 판이 아니라 **방** 단위다. 예전에는 '한 판 더'를 누를 때마다 비웠는데, 테스터들이
@@ -387,6 +395,7 @@ export class Session {
     this.solved.delete(targetId);
     this.skippedThisAttempt.delete(targetId);
     this.answerLog.delete(targetId);
+    this.readySet.delete(targetId);
     this.doodleColors.delete(targetId);
     this.doodle = this.doodle.filter((d) => d.by !== targetId);
 
@@ -451,6 +460,17 @@ export class Session {
       });
       return;
     }
+    /*
+     * 준비 여부는 여기서 막지 않는다 — 화면에서 시작 버튼을 잠그는 것으로 충분하다.
+     *
+     * 색 팔레트는 서버가 막았는데 이건 왜 다른가. 색은 서버가 쥔 그림 데이터를
+     * 바꾸는 일이라 뚫리면 **남들이 보는 판**이 망가진다. 반면 시작은 원래 방장의
+     * 권한이고, 뚫어봐야 자기 방을 자기가 일찍 시작하는 것뿐이다. 지킬 것이 없다.
+     *
+     * 서버에서 막으면 대가가 컸다. 준비 안 한 사람이 하나라도 있으면 start가 조용히
+     * 실패하는데, 그러면 "판이 끝날 때까지" 도는 시험이 **실패가 아니라 무한 대기**가
+     * 된다. 앞으로 사람을 넣는 시험을 쓸 때마다 밟을 지뢰를 심는 셈이다.
+     */
     this.order = live.map((p) => p.id);
     this.round = 0;
     // 새 판이 시작되면 아무도 '늦게 온 사람'이 아니다. 이름은 로비에서 바꾼다.
@@ -503,6 +523,23 @@ export class Session {
 
     // 화면 전환을 먼저 보낸다. 반대로 하면 아직 숨겨진 캔버스에 그려 폭 0으로 뭉갠다.
     this.setDeadline(this.rules.drawSeconds, () => this.endDrawing());
+
+    /*
+     * 한 획도 안 그으면 일찍 접는다.
+     *
+     * 폰을 내려놓고 가버리는 일이 실제로 생기는데, 그러면 나머지 사람들이 아무것도
+     * 안 나오는 화면을 120초 내내 본다. 한 획이라도 그었으면 그리는 중이라고 보고
+     * 끝까지 기다린다 — 느리게 그리는 사람을 쫓아내면 안 된다.
+     */
+    const idle = this.rules.idleDrawSeconds;
+    if (idle > 0) {
+      this.cancelIdle = this.scheduler.after(idle * 1000, () => {
+        if (this.phase !== 'drawing' || this.strokes.length > 0) return;
+        // 따로 알리지 않는다. 결과 화면에 빈 원판이 뜨는 것이 그 자체로 설명이 된다.
+        this.endDrawing();
+      });
+    }
+
     this.broadcastRoom();
     this.send(this.drawerId, { t: 'word', word: this.word, rerollsLeft: this.rerollsLeft });
     // 관전자는 출제자와 같은 것을 본다. 빈 캔버스부터 같이 보게 지금 한 번 보낸다.
@@ -1096,6 +1133,9 @@ export class Session {
     this.round = 0;
     this.attempt = 1;
     this.answers.clear();
+    // 준비는 판마다 새로 받는다. 판이 끝나면 자리를 뜨는 사람이 있어서, 지난 판의
+    // 준비를 그대로 두면 없는 사람을 준비된 것으로 세고 시작해버린다.
+    this.readySet.clear();
     // usedWords는 여기서도 비우지 않는다 — 한 판 더는 '새 방'이 아니라 '이어서 한 판'이다.
     this.chatLog = [];
     this.recaps = [];
@@ -1177,6 +1217,7 @@ export class Session {
       case 'setCapacity': return this.setCapacity(playerId, msg.max);
       case 'setSpectator': return this.setSpectator(playerId, msg.on);
       case 'setLock': return this.setLock(playerId, msg.on);
+      case 'setReady': return this.setReady(playerId, msg.on);
       case 'setColorMode': return this.setColorMode(playerId, msg.mode);
       case 'stroke': return this.addStroke(playerId, msg.points, msg.color);
       case 'undo': return this.undo(playerId);
@@ -1196,6 +1237,39 @@ export class Session {
   }
 
   // ---------- 보조 ----------
+
+  /**
+   * 준비를 세는 대상 — 붙어 있는 참여자.
+   *
+   * 관전자는 안 그리고 안 맞히니 뺀다. 끊긴 사람도 뺀다 — 폰을 껐다 켠 유령 하나
+   * 때문에 시작이 영영 막히면 안 된다.
+   */
+  private readyPool(): Player[] {
+    return this.players.filter((p) => p.connected && !p.spectator);
+  }
+
+  /** 준비한 사람 수. 방장은 늘 준비된 것으로 센다. */
+  get readyCount(): number {
+    return this.readyPool().filter((p) => p.id === this.hostId || this.readySet.has(p.id)).length;
+  }
+
+  get readyOf(): number {
+    return this.readyPool().length;
+  }
+
+  /**
+   * 준비를 켜고 끈다. 로비에서만, 방장이 아닌 사람만.
+   *
+   * 방장이 부르면 아무 일도 안 한다. 방장의 의사 표시는 시작 버튼이다.
+   */
+  setReady(playerId: string, on: boolean): void {
+    if (this.phase !== 'lobby') return;
+    if (playerId === this.hostId) return;
+    const p = this.players.find((x) => x.id === playerId);
+    if (!p || p.spectator) return;
+    if (on) this.readySet.add(playerId); else this.readySet.delete(playerId);
+    this.broadcastRoom();
+  }
 
   /** 지금 이 방에 실제로 붙어 있는 사람 수. 정원·시작 인원 판정은 전부 이걸 쓴다. */
   get connectedCount(): number {
@@ -1283,6 +1357,19 @@ export class Session {
     return this.players.filter((p) => p.connected && !p.spectator).length;
   }
 
+  /**
+   * 그리는 사람이 아무것도 안 하고 있는지 보는 타이머.
+   *
+   * 화면에 보이는 제한시간(setDeadline)과 따로 둔다. 그걸 같이 쓰면 남은 시간 표시가
+   * 이 타이머에 맞춰 줄어들어서, 120초짜리 라운드가 30초처럼 보인다.
+   */
+  private cancelIdle: (() => void) | null = null;
+
+  private clearIdle(): void {
+    this.cancelIdle?.();
+    this.cancelIdle = null;
+  }
+
   protected setDeadline(seconds: number, fn: () => void): void {
     this.clearTimer();
     // 0 이하는 "자동으로 넘어가지 않는다"는 뜻이다. 결과 화면이 그렇다 —
@@ -1296,6 +1383,7 @@ export class Session {
     this.cancelTimer?.();
     this.cancelTimer = null;
     this.deadline = null;
+    this.clearIdle();
   }
 
   /** 그 사람이 볼 수 있는 조각 전부를 보낸다. 섹터 번호는 절대 실리지 않는다. */
@@ -1392,6 +1480,8 @@ export class Session {
       // 서버가 실제로 이름을 받아주는 조건과 같아야 한다(join 참조).
       // 어긋나면 화면에는 칸이 떠 있는데 저장이 조용히 무시된다.
       canRename: this.phase === 'lobby' || p.lateJoin,
+      // 방장은 늘 준비된 것으로 보인다 — 시작 버튼이 그 표시다.
+      ready: p.id === this.hostId || this.readySet.has(p.id),
     }));
     this.broadcast({
       t: 'room',
@@ -1406,6 +1496,8 @@ export class Session {
       deadline: this.deadline,
       now: Date.now(),
       minPlayers: this.rules.minPlayers,
+      ready: this.readyCount,
+      readyOf: this.readyOf,
       maxPlayers: this.capacity,
       /** 방장이 정원을 올릴 수 있는 한계. 스테퍼의 위쪽 끝이다. */
       capacityMax: this.rules.maxPlayers,

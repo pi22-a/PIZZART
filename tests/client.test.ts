@@ -58,9 +58,9 @@ function deliver(m: ServerMsg): void {
 }
 
 const PLAYERS = [
-  { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-  { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-  { id: 'x', name: '친구', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
+  { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+  { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+  { id: 'x', name: '친구', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
 ];
 
 function room(over: Partial<Extract<ServerMsg, { t: 'room' }>> = {}): ServerMsg {
@@ -474,7 +474,7 @@ describe('이름칸은 두 곳뿐이다', () => {
     deliver({ t: 'joined', youId: 'me' });
     deliver(room({
       phase: 'lobby',
-      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true } : p)),
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true, ready: false } : p)),
     }));
     expect($('renameBar').style.display).not.toBe('none');
     // 대기 중에는 굳이 설명을 붙이지 않는다 — 새로 온 사람에게만 하는 말이다.
@@ -489,8 +489,8 @@ describe('로비 카운트 라인', () => {
     deliver(room({
       phase: 'lobby',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
@@ -505,10 +505,10 @@ describe('로비 카운트 라인', () => {
       phase: 'lobby',
       hostId: 'me',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
@@ -523,10 +523,10 @@ describe('로비 카운트 라인', () => {
       phase: 'lobby',
       hostId: 'd',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'd', name: '방장', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p3', name: '친구3', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p4', name: '친구4', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
@@ -540,9 +540,9 @@ describe('로비 카운트 라인', () => {
     deliver(room({
       phase: 'lobby',
       players: [
-        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
+        { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p2', name: '친구2', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'p3', name: '친구3', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
       ],
       minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false,
@@ -626,9 +626,9 @@ describe('라운드 스킵 집계와 눌림 표시 (Fix 3)', () => {
     await guessing();
     deliver(room({
       players: [
- { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
-        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false },
+ { id: 'me', name: '나', connected: true, score: 0, isDrawer: false, answered: false, skipped: true, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'd', name: '출제자', connected: true, score: 0, isDrawer: true, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
+        { id: 'x', name: '친구', connected: false, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 1, pendingScore: 10, doodleColor: '', spectator: false, canRename: false, ready: false },
       ],
     }));
     expect($('skipTally').textContent).toBe('1/1명이 이번 회차를 마쳤습니다 — 스킵 1');
@@ -747,7 +747,7 @@ describe('그린 획이 서버까지 간다', () => {
 const TEST_RULES_CLIENT = {
   minPlayers: 4, topics: ['동물', '음식', '물건'], selectedTopics: [],
     roomName: '테스트 방', roomCode: 'TEST', locked: false, maxPlayers: 9, sliceCountMin: 8,
-  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0,
+  drawSeconds: 60, guessSeconds: 30, roundEndSeconds: 0, idleDrawSeconds: 0,
   maxAttempts: 6, maxSlices: 5,
   startScore: 10, wrongSubmitCost: 1, attemptCost: 1, finalAttemptScore: 1, drawerScore: 5, wordRerolls: 2,
 };
@@ -897,7 +897,7 @@ describe('로비 인원은 관전자를 빼고 센다', () => {
       phase: 'lobby', hostId: 'me', minPlayers: 4,
       players: [
         ...PLAYERS.map((p) => ({ ...p, isDrawer: false })),
-        { id: 'w', name: '구경꾼', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 0, pendingScore: 0, doodleColor: '', spectator: true, canRename: false },
+        { id: 'w', name: '구경꾼', connected: true, score: 0, isDrawer: false, answered: false, skipped: false, solved: false, sliceCount: 0, pendingScore: 0, doodleColor: '', spectator: true, canRename: false, ready: false },
       ],
     }));
     expect($('lobbyNote').textContent).toBe('참가자 3명 · 관전 1명 — 최소 4명이 모여야 시작할 수 있습니다 (1명 더)');
@@ -1207,7 +1207,7 @@ describe('도중에 들어온 사람 이름칸', () => {
 
     deliver(room({
       phase: 'drawing',
-      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true } : p)),
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true, ready: false } : p)),
     }));
     expect($('renameBar').style.display).not.toBe('none');
   });
@@ -1217,7 +1217,7 @@ describe('도중에 들어온 사람 이름칸', () => {
     deliver({ t: 'joined', youId: 'me' });
     deliver(room({
       phase: 'drawing',
-      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true } : p)),
+      players: PLAYERS.map((p) => (p.id === 'me' ? { ...p, canRename: true, ready: false } : p)),
     }));
     $<HTMLInputElement>('lateNameInput').value = '늦둥이';
     live.out = [];
@@ -1362,7 +1362,7 @@ describe('관전자는 명단 맨 뒤로', () => {
   const P = (id: string, over = {}) => ({
     id, name: id, connected: true, score: 0, isDrawer: false, answered: false,
     skipped: false, solved: false, sliceCount: 1, pendingScore: 10,
-    doodleColor: '', spectator: false, canRename: false, ...over,
+    doodleColor: '', spectator: false, canRename: false, ready: false, ...over,
   });
   const names = () => [...document.querySelectorAll('#players .p')]
     .map((e) => (e.textContent ?? '').replace(/[^가-힣A-Za-z0-9]/g, ''));

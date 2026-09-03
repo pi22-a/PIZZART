@@ -345,7 +345,7 @@ $('doodleClearBtn').addEventListener('click', () => {
 const enterSent = (e: KeyboardEvent) => e.key === 'Enter' && !e.isComposing;
 
 // ── 로비 ──
-const ROOMS_NOTE = '방을 만들거나, 아래에서 골라 들어가세요. 목록은 저절로 바뀝니다.';
+const ROOMS_NOTE = '아래에서 골라 들어가셔도 됩니다. 목록은 저절로 바뀝니다.';
 const enterName = $('enterName') as HTMLInputElement;
 const newRoomName = $('newRoomName') as HTMLInputElement;
 
@@ -395,6 +395,22 @@ $('refreshRoomsBtn').addEventListener('click', () => {
   setTimeout(() => setTag('roomsNote', ROOMS_NOTE), 1400);
 });
 
+/*
+ * 바로 시작 — 이 화면에서 사람이 내려야 할 결정을 0으로 만든다.
+ *
+ * 서버가 기다리는 방에 넣거나 하나 만들어 주고, 어느 쪽이든 roomCreated로 방 코드가
+ * 돌아온다. 받는 쪽 처리는 방 만들기와 똑같아서 따로 쓸 것이 없다.
+ */
+$('quickBtn').addEventListener('click', () => {
+  const btn = $('quickBtn') as HTMLButtonElement;
+  btn.disabled = true;
+  setTag('quickNote', '자리를 찾는 중…');
+  net.send({ t: 'quickJoin' });
+  // 응답이 안 오면 버튼이 영영 잠긴다. 몇 초 뒤 되살린다.
+  setTimeout(() => { btn.disabled = false; setTag('quickNote', QUICK_NOTE); }, 5000);
+});
+const QUICK_NOTE = '기다리는 방이 있으면 들어가고, 없으면 하나 만들어 드립니다.';
+
 $('makeRoomBtn').addEventListener('click', () => {
   net.send({ t: 'createRoom', name: newRoomName.value.trim() || `${myName}의 방` });
 });
@@ -443,6 +459,44 @@ $('copyLinkBtn').addEventListener('click', () => {
   setTimeout(paintRoomBar, 1500);
 });
 $('lockBtn').addEventListener('click', () => net.send({ t: 'setLock', on: !roomLocked }));
+
+/**
+ * 준비 버튼과 집계.
+ *
+ * 방장에게는 시작, 나머지에게는 준비를 같은 자리에 보인다. 옆에 몇 명이 준비했는지만
+ * 숫자로 붙인다 — 이 자리에서 알아야 할 것은 "다 모였나" 하나뿐이다.
+ */
+let iReady = false;
+/** 다 준비했는가. 시작 버튼을 잠그는 데 쓴다. */
+let allReady = true;
+$('readyBtn').addEventListener('click', () => net.send({ t: 'setReady', on: !iReady }));
+
+function paintReady(inLobby: boolean, ready: number, of: number, players: PlayerInfo[]): void {
+  const host = youId === hostId;
+  const me = players.find((p) => p.id === youId);
+  iReady = me?.ready === true;
+
+  // 관전자는 안 그리고 안 맞히니 준비할 것이 없다.
+  const 보인다 = inLobby && !host && me?.spectator !== true;
+  $('readyBtn').style.display = 보인다 ? '' : 'none';
+  $('startBtn').style.display = inLobby && (host || me?.spectator === true) ? '' : 'none';
+
+  const btn = $('readyBtn') as HTMLButtonElement;
+  btn.textContent = iReady ? '준비 취소' : '준비';
+  btn.classList.toggle('on', iReady);
+
+  allReady = ready >= of;
+
+  const tag = $('readyCount');
+  tag.textContent = inLobby && of > 0 ? `${ready}/${of}` : '';
+  tag.classList.toggle('done', allReady && of > 0);
+  tag.title = '준비한 사람 / 참여하는 사람 (관전자는 세지 않습니다)';
+
+  // 잠긴 버튼만 덩그러니 두면 "왜 안 눌리지"로 끝난다. 무엇을 기다리는지 적어준다.
+  const start = $('startBtn') as HTMLButtonElement;
+  start.title = !host ? '방장만 시작할 수 있습니다'
+    : allReady ? '' : `아직 준비하지 않은 사람이 있습니다 (${ready}/${of})`;
+}
 
 /**
  * 흑백판 / 컬러판.
@@ -752,7 +806,15 @@ function onMsg(m: ServerMsg): void {
         ? '관전 중입니다 — 그리지도 맞히지도 않고 정답을 보면서 구경합니다'
         : '관전을 고르면 정답을 보면서 구경만 합니다. 시작 뒤에는 바꿀 수 없습니다';
     }
-    ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId;
+    /*
+     * 같은 자리에 방장은 시작, 나머지는 준비.
+     *
+     * 누구에게나 "이제 내가 누를 차례"인 버튼이 거기 하나 있는 셈이라, 무엇을 해야
+     * 하는지 설명할 것이 없다. 방장은 준비 버튼을 볼 일이 없다 — 시작을 누르는
+     * 것이 곧 준비의 표시다.
+     */
+    paintReady(m.phase === 'lobby', m.ready, m.readyOf, m.players);
+    ($('startBtn') as HTMLButtonElement).disabled = youId !== hostId || !allReady;
     ($('nextBtn') as HTMLButtonElement).disabled = youId !== hostId;
     ($('againBtn') as HTMLButtonElement).disabled = youId !== hostId;
     // 잠긴 버튼만 덩그러니 두면 "왜 안 눌리지"로 끝난다. 누가 눌러야 하는지 적어준다.

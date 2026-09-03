@@ -12,5 +12,6 @@
   "attemptCost": 1,
   "finalAttemptScore": 1,
   "drawerScore": 5,
-  "wordRerolls": 2
+  "wordRerolls": 2,
+  "idleDrawSeconds": 30
 }

@@ -245,6 +245,31 @@ wss.on('connection', (socket, req) => {
         socket.send(JSON.stringify({ t: 'roomList', rooms: roomList() } satisfies ServerMsg));
         return;
       }
+      /*
+       * 바로 시작 — 방을 만들지 안 만들지를 사람이 정하지 않게 한다.
+       *
+       * "방 만들기 → 이름 짓기 → 사람 오길 기다리기"는 결정이 세 번이고, 그 앞에서
+       * 그냥 나가는 사람이 있다. 누르면 어딘가에 들어가 있게 만든다.
+       */
+      if (msg.t === 'quickJoin') {
+        // 기다리는 방 중 사람이 가장 많은 곳. 거의 다 찬 방부터 채워야 판이 빨리 선다.
+        const waiting = [...sessions.entries()]
+          .filter(([, x]) => x.phase === 'lobby' && !x.locked
+            && x.connectedCount > 0 && x.connectedCount < x.capacity)
+          .sort((a, b) => b[1].connectedCount - a[1].connectedCount);
+
+        const code = waiting.length ? waiting[0][0] : newRoomCode();
+        if (!waiting.length) {
+          const fresh = sessionFor(code);
+          // 이름은 첫 사람이 들어올 때 정해진다(session.join). 여기서 지어내면
+          // 방 안에서 보이는 이름과 목록의 이름이 어긋난다.
+          fresh.name = '';
+        }
+        socket.send(JSON.stringify({ t: 'roomCreated', room: code } satisfies ServerMsg));
+        notifyLobby();
+        return;
+      }
+
       if (msg.t !== 'createRoom') return;
       // 방 제목은 목록에 걸려 아무 상관 없는 사람 눈에까지 든다. 가리지 않고 되돌린다.
       const wanted = String(msg.name ?? '').trim().slice(0, 20);
