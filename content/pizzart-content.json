@@ -1,8 +1,8 @@
 {
   "note": "content/words/*.json 과 rules.json 에서 만들어진 파일이다. 직접 고치지 말 것 — scripts/bundle-content.mjs 를 돌린다.",
-  "builtAt": "2026-09-01",
+  "builtAt": "2026-09-07",
   "rules": {
-    "minPlayers": 4,
+    "minPlayers": 3,
     "maxPlayers": 9,
     "sliceCountMin": 8,
     "drawSeconds": 120,
@@ -15,7 +15,8 @@
     "attemptCost": 1,
     "finalAttemptScore": 1,
     "drawerScore": 5,
-    "wordRerolls": 2
+    "wordRerolls": 2,
+    "idleDrawSeconds": 30
   },
   "topics": [
     {
