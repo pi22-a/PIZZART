@@ -14,10 +14,17 @@
 import { execSync } from 'node:child_process';
 import WebSocket from 'ws';
 
-const HOST = process.env.PIZZART_HOST ?? 'ubuntu@3.35.168.66';
-const KEY = process.env.PIZZART_KEY ?? '/Users/imiyeon/pi22a/PIZZART-release/keys/pizza.pem';
+// 서버 주소와 키 경로는 저장소에 두지 않는다. 저장소가 공개라서다.
+// ~/.zshrc 등에 PIZZART_HOST=ubuntu@<서버IP>, PIZZART_KEY=<키 경로>를 넣어둔다.
+const HOST = process.env.PIZZART_HOST;
+const KEY = process.env.PIZZART_KEY;
 const SITE = process.env.PIZZART_SITE ?? 'pizzagame.app';
 const force = process.argv.includes('--force');
+
+if (!HOST || !KEY) {
+  console.error('\n  PIZZART_HOST 와 PIZZART_KEY 를 먼저 설정하세요.\n');
+  process.exit(1);
+}
 
 const c = { red: (s) => `\x1b[31m${s}\x1b[0m`, green: (s) => `\x1b[32m${s}\x1b[0m`,
             dim: (s) => `\x1b[2m${s}\x1b[0m`, bold: (s) => `\x1b[1m${s}\x1b[0m` };

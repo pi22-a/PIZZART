@@ -1,6 +1,11 @@
 # PIZZART
 
+**해보기 → [pizzagame.app](https://pizzagame.app)** · 설치 없이 브라우저에서 바로. 3~9명 필요.
+
 3~9명이 즐기는 웹 추리 게임.
+
+> TypeScript · Node.js(WebSocket) · Vite · Canvas · Vitest — 프레임워크 없이 만들었다.
+> 규칙은 네트워크를 모르는 순수 함수에 있고, 서버가 유일한 심판이다.
 
 한 명이 제시어를 보고 **원형 캔버스**에 그림을 그린다. 그 그림은 **피자처럼 부채꼴로 잘려**
 나머지에게 한 조각씩 흩어진다. 모든 조각은 **둥근 쪽이 위로 오게 회전되어** 있어서
@@ -226,3 +231,11 @@ npm test
 
 - [설계](docs/superpowers/specs/2026-08-10-pizzart-design.md)
 - [구현 계획](docs/superpowers/plans/2026-08-10-pizzart-mvp.md)
+
+## 저작권
+
+© 2026 PIZZART. All rights reserved.
+
+소스를 공개해 둔 것은 **읽으라고** 열어둔 것이지 가져다 쓰라고 열어둔 것이 아니다.
+라이선스를 따로 붙이지 않았으므로 복제·재배포·상업적 이용은 허락하지 않는다.
+일부를 인용하거나 참고하고 싶으면 먼저 물어봐 주면 된다.
