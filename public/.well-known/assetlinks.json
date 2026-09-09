@@ -5,6 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.pi22a.pizzart",
       "sha256_cert_fingerprints": [
+        "5F:AA:85:39:89:E1:07:DE:85:C2:D9:9B:F7:C1:D9:FD:FD:FC:66:90:28:86:29:46:32:F8:CF:A0:CD:7E:D9:DD",
+        "83:B6:2C:D6:39:28:E5:21:4B:29:06:D2:ED:33:B5:AD:32:52:A7:E9:41:AD:A4:98:55:37:2B:D5:11:7B:26:1D",
         "A9:25:58:30:31:D0:EA:B2:4C:0A:9E:69:95:96:95:33:1C:8B:A2:FB:5C:7F:96:02:68:C9:A8:CD:C5:4F:1C:D1"
       ]
     }
