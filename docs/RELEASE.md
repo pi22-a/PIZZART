@@ -5,6 +5,24 @@
 
 관련 문서 — 서명 키와 스토어 자산은 저장소 밖 금고에 있다 → `../PIZZART-release/README.md`
 
+## 폴더는 이렇게 놓여 있다
+
+2026-09-09에 흩어져 있던 피자르트 폴더들을 하나로 모았다.
+
+```
+pi22a/PIZZART/          ← 담는 폴더. 일부러 git 저장소가 아니다
+  game/                 ← 이 저장소 (공개)
+  play/                 ← 예비 워크트리. 서버가 죽었을 때 노트북에서 임시로 띄운다
+  release/              ← 금고. 서명 키와 스토어 자산. git에 절대 안 들어간다
+  unity/                ← 유니티판 (원격은 아직 pi22-a/PIZZA-unity)
+```
+
+**금고를 `game/` 안에 넣지 않은 이유**: 이 저장소는 공개다. 금고가 저장소 안에 있으면
+`git add -f` 한 번, 도구의 글롭 한 번에 서명 키가 공개된다. 형제 폴더로 두면 저장소가
+금고를 아예 볼 수 없다.
+
+---
+
 ## 도메인 — `pizzagame.app` (2026-08-31 확정, 2026-09-02 재확인)
 
 > **게임 이름을 PIZZART로 바꾼 뒤에도 도메인은 그대로 둔다.** 한 번 검토하고 내린
@@ -68,17 +86,17 @@ Cloudflare 이름 붙인 터널로 이어둔 것이라 **컴퓨터가 꺼지면 
 
 ```bash
 # 공개 (pizzagame.app) — 터미널 둘
-cd ~/pi22a/PIZZART-play && git checkout v1.6.1 && npm run build && PORT=8090 npm start
+cd ~/pi22a/PIZZART/play && git checkout v1.6.1 && npm run build && PORT=8090 npm start
 cloudflared tunnel run pizzart
 
 # 개발 — 공개와 아무 상관 없이 돈다
-cd ~/pi22a/PIZZART && npm run dev
+cd ~/pi22a/PIZZART/game && npm run dev
 ```
 
 ### 새 버전을 공개에 올리는 법
 
 ```bash
-cd ~/pi22a/PIZZART-play
+cd ~/pi22a/PIZZART/play
 git fetch && git checkout <새태그>   # 예: v1.6.2
 npm run build
 # PORT=8090 npm start 를 다시 띄운다 (Ctrl+C 후 재실행)

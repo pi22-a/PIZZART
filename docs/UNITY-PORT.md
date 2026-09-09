@@ -30,7 +30,7 @@
 **appid 480(Spacewar)로 스팀 P2P를 그냥 테스트할 수 있다.** 돈 내기 전에 되는지부터 본다.
 
 - 유니티 버전: **6000.0.76f1 LTS** (개발 기간이 길어질 것이라 LTS를 쓴다)
-- 프로젝트 위치: `/Users/imiyeon/pi22a/PIZZART-unity`
+- 프로젝트 위치: `/Users/imiyeon/pi22a/PIZZART/unity` (깃 원격은 아직 `PIZZA-unity`)
 
 ---
 
