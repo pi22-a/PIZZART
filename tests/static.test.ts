@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { serveStatic } from '../src/server/static';
@@ -21,6 +21,8 @@ beforeAll(async () => {
   writeFileSync(join(dir, 'assets', 'index-abc123.js'), 'console.log(1)');
   writeFileSync(join(dir, 'sw.js'), '// 워커');
   writeFileSync(join(dir, 'manifest.webmanifest'), '{}');
+  mkdirSync(join(dir, '.well-known'));
+  writeFileSync(join(dir, '.well-known', 'assetlinks.json'), '[]');
 
   const serve = serveStatic(dir);
   server = createServer((req, res) => {
@@ -89,5 +91,18 @@ describe('캐시 규칙', () => {
       const res = await fetch(`${base}${p}`);
       expect(res.headers.get('cache-control')).toBe('no-cache');
     }
+  });
+
+  it('점으로 시작하는 폴더도 내준다 — .well-known이 막히면 앱에 주소창이 남는다', async () => {
+    const r = await fetch(`${base}/.well-known/assetlinks.json`);
+    expect(r.status).toBe(200);
+  });
+
+  it('실제 assetlinks.json이 이 앱을 가리킨다', async () => {
+    const raw = readFileSync(join(__dirname, '..', 'public', '.well-known', 'assetlinks.json'), 'utf8');
+    const [statement] = JSON.parse(raw);
+    expect(statement.relation).toContain('delegate_permission/common.handle_all_urls');
+    expect(statement.target.package_name).toBe('com.pi22a.pizzart');
+    expect(statement.target.sha256_cert_fingerprints[0]).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
   });
 });

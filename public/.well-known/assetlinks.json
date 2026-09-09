@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.pi22a.pizzart",
+      "sha256_cert_fingerprints": [
+        "A9:25:58:30:31:D0:EA:B2:4C:0A:9E:69:95:96:95:33:1C:8B:A2:FB:5C:7F:96:02:68:C9:A8:CD:C5:4F:1C:D1"
+      ]
+    }
+  }
+]
