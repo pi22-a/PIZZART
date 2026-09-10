@@ -1,6 +1,8 @@
 # 구글 플레이 출시 체크리스트
 
-> 상태: **2026-09-02.** 24시간 서버까지 끝났고 여기서부터가 스토어 일이다.
+> 상태: **2026-09-10.** 기술적인 준비는 전부 끝났다. **남은 것은 테스터 12명뿐이다.**
+> 비공개 테스트가 게시됐고 앱은 주소창 없이 열린다. 14일 시계는 12명이 옵트인·설치를
+> 마친 날부터 돈다.
 
 ## 순서를 정하는 기준 — 14일 시계를 먼저 돌린다
 
@@ -34,14 +36,14 @@
 
 ## 1단계 — 시계를 돌리기 위한 최소한
 
-### [ ] 1. Play 개발자 등록 ($25, 일회성)
+### [x] 1. Play 개발자 등록 ($25, 일회성)
 
 https://play.google.com/console
 
 개인 계정은 **신원 확인**(신분증)이 필요하고 며칠 걸릴 수 있다. **가장 먼저 시작한다.**
 사업자로 등록하면 아래 12명 테스트가 면제되지만 서류가 더 필요하다.
 
-### [ ] 2. 서명 키(keystore) 만들기
+### [x] 2. 서명 키(keystore) 만들기
 
 TWA를 만들려면 먼저 있어야 한다.
 
@@ -54,7 +56,7 @@ keytool -genkeypair -v -keystore pizzart-release.keystore \
 - **잃어버리면 앱을 영영 업데이트할 수 없다.** 구글도 복구해 주지 않는다
 - 만들자마자 이 컴퓨터 밖에 백업한다(비밀번호 관리자 등). 비밀번호도 같이
 
-### [ ] 3. TWA 패키징
+### [x] 3. TWA 패키징
 
 https://www.pwabuilder.com 에 `https://pizzagame.app` 을 넣으면 AAB를 만들어 준다.
 (또는 `bubblewrap init --manifest https://pizzagame.app/manifest.webmanifest`)
@@ -62,21 +64,52 @@ https://www.pwabuilder.com 에 `https://pizzagame.app` 을 넣으면 AAB를 만�
 - 서명은 2번에서 만든 키로
 - 패키지 이름은 한 번 정하면 못 바꾼다 → `app.pizzagame.twa` 같은 형태
 
-### [ ] 4. `assetlinks.json` 올리기 ← **지금 404다**
-
-도메인이 이 앱을 인정한다는 증명서다. **없으면 앱 안에 주소창이 남는다.**
-
-안에 들어가는 SHA-256 지문은 **2번 서명 키에서 나온다.** 그래서 키가 먼저다.
-PWABuilder가 파일을 같이 만들어 준다.
+### [x] 4. `assetlinks.json` — **끝. 다만 여기서 사흘을 잡아먹었다**
 
 ```
 https://pizzagame.app/.well-known/assetlinks.json
 ```
 
-파일을 받으면 `public/.well-known/assetlinks.json` 에 넣고 배포하면 끝난다
-(정적 서빙이 이미 그 경로를 처리한다).
+**지문을 세 번 틀렸다. 다음에 또 이 자리에 서면 이것만 기억하면 된다 —
+화면에서 눈으로 옮겨 적지 말고 인증서 파일을 받아서 계산할 것.**
 
-### [ ] 5. 비공개 테스트 올리고 테스터 12명 모으기
+Play Console 앱 서명 화면(`.../app/<앱ID>/keymanagement`)에는 지문이 **복사 버튼으로
+두 개**만 보인다. 그런데 같은 화면의 "인증서 다운로드"로 받으면 파일이 **셋**이고,
+**기기에 실제로 배포될 때 쓰이는 `deployment_cert`는 화면에 값이 안 보인다.**
+
+```bash
+# 받은 인증서에서 직접 뽑는다
+for f in ~/Downloads/certificates/*.der; do
+  openssl x509 -inform DER -in "$f" -noout -sha256 -fingerprint
+done
+```
+
+넣은 지문 넷:
+
+| 지문 | 무엇 |
+|---|---|
+| `F2:EA:2D:…` | **deployment_cert** — 기기에 배포되는 서명. **이게 빠져서 안 됐다** |
+| `5F:AA:85:…` | hybrid_classical |
+| `83:B6:2C:…` | hybrid_pqc |
+| `A9:25:58:…` | 업로드 키 — Play를 안 거치고 APK를 직접 깔아 시험할 때 필요 |
+
+**증상 읽는 법**: 앱을 열었을 때 위에 `✕ 주소 ⇧ ⋮` 막대가 보이면 검증 실패다.
+헷갈리는 점은 **안드로이드 앱링크 검증과 크롬의 TWA 검증이 별개**라는 것이다.
+설정 → 애플리케이션 → PIZZART → 기본으로 설정에 `pizzagame.app`이 **켜져 있어도**
+크롬 쪽만 조용히 실패할 수 있다. 그 상태로는 원인을 못 찾는다.
+
+**확인은 구글에게 직접 묻는다** (캐시가 1시간이라 고친 직후에는 옛 값이 나온다):
+
+```bash
+curl -s "https://digitalassetlinks.googleapis.com/v1/statements:list\
+?source.web.site=https://pizzagame.app\
+&relation=delegate_permission/common.handle_all_urls"
+```
+
+여기 지문이 다 뜨면 준비된 것이고, 그 뒤에는 재설치도 필요 없었다 — 크롬이 알아서
+다시 검증하고 주소창이 사라졌다.
+
+### [~] 5. 비공개 테스트 — **게시 완료. 테스터 모으는 중**
 
 여기서 **14일 시계가 시작된다.**
 
@@ -89,7 +122,7 @@ https://pizzagame.app/.well-known/assetlinks.json
 
 ## 2단계 — 14일 기다리는 동안
 
-### [ ] 스크린샷 촬영 (폰 기준 2~8장)
+### [~] 스크린샷 — 2장 올렸다. 14일 동안 더 좋은 걸로 갈아끼운다
 
 찍는 법과 여섯 화면 목록은 `../PIZZART-release/store/listing-ko.md` 참조.
 
@@ -100,7 +133,7 @@ ROOM=SHOT npm run shots             # 터미널 2
 
 **봇보다 먼저 들어가야 방장이 된다.** 컬러판으로 바꾸고, 게임 방법은 접고 찍는다.
 
-### [ ] 대표 이미지(feature graphic) 1024×500
+### [x] 대표 이미지(feature graphic) 1024×500
 
 스토어 상단에 걸리는 가로 이미지. 필수다. 소재는 아이콘과 같은 **부채꼴로 잘린 원**.
 
